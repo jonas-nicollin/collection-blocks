@@ -75,13 +75,23 @@
     return Array.from(new Set(values));
   }
 
-  function addCustomClasses(element, classes) {
-    if (!element || !classes) return;
-    String(classes)
+  function normalizeClassList(classes) {
+    if (!classes) return [];
+    if (Array.isArray(classes)) {
+      return classes.flatMap(normalizeClassList);
+    }
+    if (typeof classes === 'object') {
+      return Object.values(classes).flatMap(normalizeClassList);
+    }
+    return String(classes)
       .split(/\s+/)
       .map(cls => cls.trim())
-      .filter(Boolean)
-      .forEach(cls => element.classList.add(cls));
+      .filter(Boolean);
+  }
+
+  function addCustomClasses(element, classes) {
+    if (!element || !classes) return;
+    normalizeClassList(classes).forEach(cls => element.classList.add(cls));
   }
 
   function capitalize(s) {
@@ -99,7 +109,8 @@
 
   function getMountKey(settings, targetSelector) {
     if (settings.key) return String(settings.key);
-    if (settings.customClass) return String(settings.customClass).trim();
+    const customClasses = normalizeClassList(settings.customClass);
+    if (customClasses.length) return customClasses.join(' ');
     if (Array.isArray(settings.blocksOrder) && settings.blocksOrder.length) {
       return settings.blocksOrder.join('-');
     }
@@ -109,7 +120,7 @@
   function findMetadataWrapper(target, mountKey) {
     if (!target || !mountKey) return null;
     return Array.from(target.children || []).find(child =>
-      child.classList?.contains('metadata-blocks-wrapper') &&
+      (child.classList?.contains('metadata-blocks-wrapper') || child.classList?.contains('mb-wrapper')) &&
       child.dataset.metadataKey === mountKey
     ) || null;
   }
@@ -466,11 +477,12 @@ async function fetchPageJson(settings) {
     let wrapper = findMetadataWrapper(finalTarget, mountKey);
     if (!wrapper && buildAutomatically) {
       wrapper = document.createElement('div');
-      wrapper.className = 'metadata-blocks-wrapper';
+      wrapper.className = 'metadata-blocks-wrapper mb-wrapper';
       wrapper.dataset.metadataKey = mountKey;
       wrapper.classList.add('metadata-blocks-wrapper--' + toSlug(mountKey));
+      wrapper.classList.add('mb-wrapper--' + toSlug(mountKey));
       const container = document.createElement('div');
-      container.className = 'metadata-blocks';
+      container.className = 'metadata-blocks mb-blocks';
       container.dataset.metadataKey = mountKey;
       if (settings.customClass) addCustomClasses(container, settings.customClass);
       wrapper.appendChild(container);
@@ -487,10 +499,10 @@ async function fetchPageJson(settings) {
       }
     }
 
-    const container = wrapper?.querySelector('.metadata-blocks');
+    const container = wrapper?.querySelector('.metadata-blocks, .mb-blocks');
     if (!container) return null;
     container.innerHTML = '';
-    container.className = 'metadata-blocks';
+    container.className = 'metadata-blocks mb-blocks';
     container.dataset.metadataKey = mountKey;
     if (settings.customClass) addCustomClasses(container, settings.customClass);
     return { wrapper, container };
@@ -641,7 +653,7 @@ async function fetchPageJson(settings) {
   function createMetadataValueElement(value, inline, options = {}) {
     const tag = inline ? 'span' : 'div';
     const el  = document.createElement(tag);
-    el.className = 'metadata-value';
+    el.className = 'metadata-value mb-value';
     if (options.href) {
       const link = document.createElement('a');
       link.href = options.href;
@@ -666,7 +678,7 @@ async function fetchPageJson(settings) {
       );
       if (block.displayInline && index < values.length - 1) {
         const separator = document.createElement('span');
-        separator.className = 'metadata-separator';
+        separator.className = 'metadata-separator mb-separator';
         separator.textContent = block.inlineSeparator || ',\u00A0';
         element.appendChild(separator);
       }
@@ -676,7 +688,7 @@ async function fetchPageJson(settings) {
 
   function createBlockEndSeparator(separatorText) {
     const separator = document.createElement('span');
-    separator.className = 'metadata-block-separator';
+    separator.className = 'metadata-block-separator mb-block-separator';
     separator.setAttribute('aria-hidden', 'true');
     separator.textContent = separatorText;
     return separator;
@@ -685,7 +697,7 @@ async function fetchPageJson(settings) {
   function createGroupSeparatorElement(separatorText, inline) {
     const tag = inline ? 'span' : 'div';
     const sep = document.createElement(tag);
-    sep.className = 'metadata-group-separator';
+    sep.className = 'metadata-group-separator mb-group-separator';
     sep.setAttribute('aria-hidden', 'true');
     sep.textContent = separatorText;
     return sep;
@@ -693,10 +705,10 @@ async function fetchPageJson(settings) {
 
   function createMetadataBlockWrapper(block, orderMap, valueCount) {
     const wrapper = document.createElement('div');
-    wrapper.className = `metadata-block metadata-block--${block.name}`;
-    if (block.displayInline) wrapper.classList.add('display-inline');
-    if (block.iconTitle)     wrapper.classList.add('metadata-icon-title');
-    if (block.showTitle === false) wrapper.classList.add('metadata-block--title-hidden');
+    wrapper.className = `metadata-block mb-block metadata-block--${block.name} mb-block--${block.name}`;
+    if (block.displayInline) wrapper.classList.add('display-inline', 'mb-display-inline');
+    if (block.iconTitle)     wrapper.classList.add('metadata-icon-title', 'mb-icon-title');
+    if (block.showTitle === false) wrapper.classList.add('metadata-block--title-hidden', 'mb-block--title-hidden');
 
     const order = block.order ?? orderMap[block.name] ?? 99;
     wrapper.style.order = order;
@@ -704,7 +716,7 @@ async function fetchPageJson(settings) {
     const blockTitle = getBlockTitle(block, valueCount);
     if (blockTitle) {
       const title = document.createElement('div');
-      title.className = 'metadata-title';
+      title.className = 'metadata-title mb-title';
       title.textContent = blockTitle;
       wrapper.appendChild(title);
     }
@@ -713,10 +725,10 @@ async function fetchPageJson(settings) {
 
   function appendSeparatorsInsideBlocks(container, settings) {
     if (!settings.blockSeparator) return;
-    const blocks = Array.from(container.querySelectorAll(':scope > .metadata-block'));
+    const blocks = Array.from(container.querySelectorAll(':scope > .metadata-block, :scope > .mb-block'));
     if (blocks.length < 2) return;
     blocks.forEach((block, index) => {
-      const old = block.querySelector(':scope > .metadata-block-separator');
+      const old = block.querySelector(':scope > .metadata-block-separator, :scope > .mb-block-separator');
       if (old) old.remove();
       if (index < blocks.length - 1) {
         block.appendChild(createBlockEndSeparator(settings.blockSeparator));
@@ -725,12 +737,18 @@ async function fetchPageJson(settings) {
   }
 
   function applyStateClasses(container, settings) {
-    const blocks = container.querySelectorAll('.metadata-block');
-    if (blocks.length === 1) container.classList.add('metadata-blocks--single');
-    if (blocks.length > 1)  container.classList.add('metadata-blocks--multiple');
-    if (container.querySelector('.metadata-excerpt'))  container.classList.add('metadata-blocks--has-excerpt');
-    if (container.querySelector('.display-inline'))    container.classList.add('metadata-blocks--has-inline');
-    if (settings.blockSeparator) container.classList.add('metadata-blocks--with-block-separator');
+    const blocks = container.querySelectorAll('.metadata-block, .mb-block');
+    if (blocks.length === 1) container.classList.add('metadata-blocks--single', 'mb-blocks--single');
+    if (blocks.length > 1)  container.classList.add('metadata-blocks--multiple', 'mb-blocks--multiple');
+    if (container.querySelector('.metadata-excerpt, .mb-excerpt')) {
+      container.classList.add('metadata-blocks--has-excerpt', 'mb-blocks--has-excerpt');
+    }
+    if (container.querySelector('.display-inline, .mb-display-inline')) {
+      container.classList.add('metadata-blocks--has-inline', 'mb-blocks--has-inline');
+    }
+    if (settings.blockSeparator) {
+      container.classList.add('metadata-blocks--with-block-separator', 'mb-blocks--with-block-separator');
+    }
   }
 
   /* ════════════════════════════════════
@@ -753,13 +771,13 @@ async function fetchPageJson(settings) {
       if (block.group) { pendingGroups.push(block); return; }
 
       const content = document.createElement('div');
-      content.className = 'metadata-elements';
+      content.className = 'metadata-elements mb-elements';
       let valueCount = 0;
 
       if (block.isExcerpt) {
         const excerptHtml = getExcerptHtml(itemData, block);
         if (!excerptHtml) return;
-        content.classList.add('metadata-excerpt');
+        content.classList.add('metadata-excerpt', 'mb-excerpt');
         content.innerHTML = excerptHtml;
         valueCount = 1;
       } else {
@@ -768,7 +786,7 @@ async function fetchPageJson(settings) {
         if (!values.length) {
           if (block.hideIfEmpty === false) {
             const wrapper = createMetadataBlockWrapper(block, orderMap, 0);
-            wrapper.classList.add('metadata-block--empty');
+            wrapper.classList.add('metadata-block--empty', 'mb-block--empty');
             wrapper.appendChild(content);
             container.appendChild(wrapper);
             blockWrappers[block.name] = wrapper;
@@ -788,7 +806,7 @@ async function fetchPageJson(settings) {
     // ── Blocs groupés — greffés sur un bloc parent existant ───────────────
     pendingGroups.forEach(block => {
       const parentWrapper = blockWrappers[block.group];
-      const targetContent = parentWrapper?.querySelector('.metadata-elements');
+      const targetContent = parentWrapper?.querySelector('.metadata-elements, .mb-elements');
       if (!targetContent) return;
 
       const rawValues = getRawValuesForBlock(block, itemData);
@@ -801,7 +819,7 @@ async function fetchPageJson(settings) {
 
       if (block.groupPosition === 'prepend') {
         // Séparateur entre les valeurs greffées et les valeurs existantes
-        const existingFirst = targetContent.querySelector('.metadata-value');
+        const existingFirst = targetContent.querySelector('.metadata-value, .mb-value');
         if (existingFirst && groupSep) {
           targetContent.insertBefore(
             createGroupSeparatorElement(groupSep, isInline),
@@ -817,7 +835,7 @@ async function fetchPageJson(settings) {
         });
       } else {
         // append (défaut) — séparateur entre les valeurs existantes et les nouvelles
-        const hasExisting = targetContent.querySelector('.metadata-value') !== null;
+        const hasExisting = targetContent.querySelector('.metadata-value, .mb-value') !== null;
         if (hasExisting && groupSep) {
           targetContent.appendChild(createGroupSeparatorElement(groupSep, isInline));
         }
@@ -828,7 +846,7 @@ async function fetchPageJson(settings) {
           // Séparateur inline entre les valeurs du groupe greffé elles-mêmes
           if (isInline && index < values.length - 1) {
             const sep = document.createElement('span');
-            sep.className = 'metadata-separator';
+            sep.className = 'metadata-separator mb-separator';
             sep.textContent = block.inlineSeparator || ',\u00A0';
             element.appendChild(sep);
           }
@@ -839,8 +857,8 @@ async function fetchPageJson(settings) {
       // Mettre à jour le titre du bloc parent (singulier / pluriel)
       const parentBlockConfig = allBlocks.find(item => item.name === block.group);
       if (parentBlockConfig) {
-        const allValues     = Array.from(targetContent.querySelectorAll('.metadata-value'));
-        const parentTitle   = parentWrapper.querySelector('.metadata-title');
+        const allValues     = Array.from(targetContent.querySelectorAll('.metadata-value, .mb-value'));
+        const parentTitle   = parentWrapper.querySelector('.metadata-title, .mb-title');
         const computedTitle = getBlockTitle(parentBlockConfig, allValues.length);
         if (parentTitle && computedTitle) parentTitle.textContent = computedTitle;
       }
@@ -867,7 +885,7 @@ async function fetchPageJson(settings) {
     if (!mount?.container) return;
 
     buildMetadataBlocks(settings, currentItem, mount.container);
-    if (!mount.container.querySelector('.metadata-block')) {
+    if (!mount.container.querySelector('.metadata-block, .mb-block')) {
       mount.wrapper?.remove();
     }
   }
@@ -879,7 +897,7 @@ async function fetchPageJson(settings) {
 
   if (
     MB_LAST_RUN_PATH === currentPath &&
-    document.querySelector('.metadata-blocks-wrapper .metadata-block')
+    document.querySelector('.metadata-blocks-wrapper .metadata-block, .mb-wrapper .mb-block')
   ) {
     return;
   }
