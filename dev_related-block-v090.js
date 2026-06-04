@@ -1287,69 +1287,26 @@
     function getOrCreateLightbox(section, CFG) {
         if (section.__rbLightbox) return section.__rbLightbox;
         const options = getLightboxOptions(CFG);
-        const root = document.createElement("div");
-        root.className = "cb-lightbox rb-lightbox";
-        root.setAttribute("aria-hidden", "true");
-        const backdrop = document.createElement("button");
-        backdrop.className = "cb-lightbox__backdrop rb-lightbox__backdrop";
-        backdrop.type = "button";
-        backdrop.tabIndex = -1;
-        backdrop.setAttribute("aria-label", options.closeLabel);
-        const panel = document.createElement("div");
-        panel.className = "cb-lightbox__panel rb-lightbox__panel";
-        panel.setAttribute("role", "dialog");
-        panel.setAttribute("aria-modal", "true");
-        panel.setAttribute("aria-label", CFG.heading || CFG.headingSingular || "Related content");
-        const close = document.createElement("button");
-        close.className = "cb-lightbox__close rb-lightbox__close";
-        close.type = "button";
-        close.setAttribute("aria-label", options.closeLabel);
-        const closeIcon = document.createElement("span");
-        closeIcon.className = "cb-icon rb-icon";
-        closeIcon.setAttribute("aria-hidden", "true");
-        closeIcon.textContent = "close";
-        close.appendChild(closeIcon);
-        const body = document.createElement("div");
-        body.className = "cb-lightbox__body rb-lightbox__body";
-        panel.appendChild(close);
-        panel.appendChild(body);
-        root.appendChild(backdrop);
-        root.appendChild(panel);
-        document.body.appendChild(root);
-        const state = {
-            root,
-            body,
-            close,
-            activeTrigger: null,
-            keydown: event => {
-                if (event.key === "Escape") closeLightbox(state);
-            }
-        };
-        backdrop.addEventListener("click", () => closeLightbox(state));
-        close.addEventListener("click", () => closeLightbox(state));
-        section.__rbLightbox = state;
-        return state;
+        const utils = getCollectionUtils();
+        if (!utils || typeof utils.createLightbox !== "function") return null;
+        section.__rbLightbox = utils.createLightbox({
+            prefix: "rb",
+            closeLabel: options.closeLabel,
+            ariaLabel: CFG.heading || CFG.headingSingular || "Related content"
+        });
+        return section.__rbLightbox;
     }
     function openLightbox(section, CFG, item, trigger) {
         const options = getLightboxOptions(CFG);
         if (!options) return;
-        const state = getOrCreateLightbox(section, CFG);
-        state.body.innerHTML = "";
-        state.body.appendChild(buildLightboxContent(item, CFG, options));
-        state.activeTrigger = trigger || null;
-        state.root.setAttribute("aria-hidden", "false");
-        addClasses(state.root, "cb-lightbox--open rb-lightbox--open");
-        addClasses(document.body, "cb-lightbox-open rb-lightbox-open");
-        document.addEventListener("keydown", state.keydown);
-        state.close.focus();
-    }
-    function closeLightbox(state) {
-        if (!state) return;
-        state.root.setAttribute("aria-hidden", "true");
-        state.root.classList.remove("cb-lightbox--open", "rb-lightbox--open");
-        document.body.classList.remove("cb-lightbox-open", "rb-lightbox-open");
-        document.removeEventListener("keydown", state.keydown);
-        if (state.activeTrigger && typeof state.activeTrigger.focus === "function") state.activeTrigger.focus();
+        const lightbox = getOrCreateLightbox(section, CFG);
+        if (!lightbox) return;
+        lightbox.open({
+            content: buildLightboxContent(item, CFG, options),
+            trigger: trigger,
+            closeLabel: options.closeLabel,
+            ariaLabel: item.title || CFG.heading || CFG.headingSingular || "Related content"
+        });
     }
     function setupLightbox(section, CFG, items) {
         const options = getLightboxOptions(CFG);
