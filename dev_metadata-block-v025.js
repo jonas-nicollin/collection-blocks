@@ -88,6 +88,32 @@
     return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
   }
 
+  function toSlug(value) {
+    return String(value || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9_-]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'metadata';
+  }
+
+  function getMountKey(settings, targetSelector) {
+    if (settings.key) return String(settings.key);
+    if (settings.customClass) return String(settings.customClass).trim();
+    if (Array.isArray(settings.blocksOrder) && settings.blocksOrder.length) {
+      return settings.blocksOrder.join('-');
+    }
+    return targetSelector || settings.moveToDestination || 'metadata';
+  }
+
+  function findMetadataWrapper(target, mountKey) {
+    if (!target || !mountKey) return null;
+    return Array.from(target.children || []).find(child =>
+      child.classList?.contains('metadata-blocks-wrapper') &&
+      child.dataset.metadataKey === mountKey
+    ) || null;
+  }
+
   function getCollectionDataApi() {
     const cb = window.CollectionBlocks;
     if (cb?.data && typeof cb.data.get === 'function') return cb.data;
@@ -424,6 +450,7 @@ async function fetchPageJson(settings) {
     const buildAutomatically = settings.buildAutomatically ?? true;
     const fallbackTarget = document.querySelector('.blog-item-top-wrapper');
     const targetSelector = settings.target || settings.moveToDestination;
+    const mountKey = getMountKey(settings, targetSelector);
     const explicitTarget = targetSelector
       ? document.querySelector(targetSelector)
       : null;
@@ -436,12 +463,15 @@ async function fetchPageJson(settings) {
     const finalTarget = anchorAfter?.parentElement || anchorBefore?.parentElement || explicitTarget || fallbackTarget;
     if (!finalTarget) return null;
 
-    let wrapper = finalTarget.querySelector(':scope > .metadata-blocks-wrapper');
+    let wrapper = findMetadataWrapper(finalTarget, mountKey);
     if (!wrapper && buildAutomatically) {
       wrapper = document.createElement('div');
       wrapper.className = 'metadata-blocks-wrapper';
+      wrapper.dataset.metadataKey = mountKey;
+      wrapper.classList.add('metadata-blocks-wrapper--' + toSlug(mountKey));
       const container = document.createElement('div');
       container.className = 'metadata-blocks';
+      container.dataset.metadataKey = mountKey;
       if (settings.customClass) addCustomClasses(container, settings.customClass);
       wrapper.appendChild(container);
       if (anchorAfter?.parentElement) {
@@ -461,6 +491,7 @@ async function fetchPageJson(settings) {
     if (!container) return null;
     container.innerHTML = '';
     container.className = 'metadata-blocks';
+    container.dataset.metadataKey = mountKey;
     if (settings.customClass) addCustomClasses(container, settings.customClass);
     return { wrapper, container };
   }
