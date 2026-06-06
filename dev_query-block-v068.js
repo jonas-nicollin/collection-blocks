@@ -469,6 +469,12 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
     return isFinite(n) ? n : null;
   }
 
+  function tryISODateValue(s) {
+    var raw = String(s || '').split('/')[0];
+    var parsed = parseISO(raw);
+    return parsed ? parsed.ts : null;
+  }
+
   function sortItems(items, sort) {
     if (!sort) return items;
 
@@ -485,9 +491,12 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
       if (typeof type === 'object' && type.tagPrefix) {
         var av = getTagValuesByPrefix(a, type.tagPrefix)[0] || '';
         var bv = getTagValuesByPrefix(b, type.tagPrefix)[0] || '';
+        var ad = tryISODateValue(av);
+        var bd = tryISODateValue(bv);
         var an = tryNum(av);
         var bn = tryNum(bv);
 
+        if (ad !== null && bd !== null) return (ad - bd) * dir;
         if (an !== null && bn !== null) return (an - bn) * dir;
         return norm(av).localeCompare(norm(bv)) * dir;
       }
@@ -917,6 +926,7 @@ var isPriority = priority === true || imgIndex < 3;
       showLink: raw.showLink !== false,
       linkLabel: raw.linkLabel || 'Voir la page',
       closeLabel: raw.closeLabel || 'Fermer',
+      className: [cfg && cfg.classes, raw.className],
     };
   }
 
@@ -1021,6 +1031,7 @@ var isPriority = priority === true || imgIndex < 3;
     target.__qbLightbox = utils.createLightbox({
       prefix: 'qb',
       closeLabel: options.closeLabel,
+      className: options.className,
       ariaLabel: (cfg && cfg.heading && cfg.heading.text) || (cfg && cfg.key) || 'Query content',
     });
 
@@ -1058,6 +1069,7 @@ var isPriority = priority === true || imgIndex < 3;
         content: buildLightboxGroups(item, cfg, options),
         trigger: card,
         closeLabel: options.closeLabel,
+        className: options.className,
         ariaLabel: item.title || (cfg && cfg.key) || 'Query content',
       });
     });
@@ -1436,10 +1448,11 @@ var isPriority = priority === true || imgIndex < 3;
     })();
 
     var gbCfg = cfg.display && cfg.display.groupBy;
+    var hasDateKeys = orderedKeys.some(isDateKey);
     var useSmartDate = gbCfg &&
       gbCfg.groupByDay &&
       gbCfg.highlightToday !== false &&
-      isDateKey(orderedKeys[0] || '');
+      hasDateKeys;
 
     var sortedKeys;
 
@@ -1453,6 +1466,13 @@ var isPriority = priority === true || imgIndex < 3;
       }).sort().reverse();
 
       sortedKeys = futureKeys.concat(pastKeys);
+    } else if (gbCfg && gbCfg.groupByDay && gbCfg.highlightToday === false && hasDateKeys) {
+      var dateKeys = orderedKeys.filter(isDateKey).sort();
+      var otherKeys = sortGroupKeys(orderedKeys.filter(function(k) {
+        return !isDateKey(k);
+      }), groupOrder);
+
+      sortedKeys = dateKeys.concat(otherKeys);
     } else {
       sortedKeys = sortGroupKeys(orderedKeys, groupOrder);
     }
