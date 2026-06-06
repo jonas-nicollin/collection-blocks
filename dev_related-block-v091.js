@@ -1209,7 +1209,8 @@
             showLocation: raw.showLocation ?? CFG.display?.showLocation ?? false,
             showLink: raw.showLink ?? true,
             linkLabel: raw.linkLabel || "Voir la page",
-            closeLabel: raw.closeLabel || "Fermer"
+            closeLabel: raw.closeLabel || "Fermer",
+            className: [ CFG.classes?.block || "", raw.className || "" ]
         };
     }
     function getLightboxItemKey(item, index) {
@@ -1292,6 +1293,7 @@
         section.__rbLightbox = utils.createLightbox({
             prefix: "rb",
             closeLabel: options.closeLabel,
+            className: options.className,
             ariaLabel: CFG.heading || CFG.headingSingular || "Related content"
         });
         return section.__rbLightbox;
@@ -1305,6 +1307,7 @@
             content: buildLightboxContent(item, CFG, options),
             trigger: trigger,
             closeLabel: options.closeLabel,
+            className: options.className,
             ariaLabel: item.title || CFG.heading || CFG.headingSingular || "Related content"
         });
     }
