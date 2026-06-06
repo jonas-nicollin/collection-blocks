@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.4';
+  var VERSION = '0.5';
   var STORE_KEY_PREFIX = 'collection-blocks::v0.4::';
 
   var memoryCache = new Map();
@@ -871,7 +871,16 @@
       if (!value) return;
       if (Array.isArray(value)) {
         value.forEach(function(item) {
-          if (item) out.push(item);
+          classNames(item).split(/\s+/).forEach(function(cls) {
+            if (cls && out.indexOf(cls) === -1) out.push(cls);
+          });
+        });
+      } else if (typeof value === 'object') {
+        Object.keys(value).forEach(function(key) {
+          if (!value[key]) return;
+          classNames(key).split(/\s+/).forEach(function(cls) {
+            if (cls && out.indexOf(cls) === -1) out.push(cls);
+          });
         });
       } else {
         String(value).split(/\s+/).forEach(function(cls) {
@@ -1271,10 +1280,12 @@
     var closeLabel = options.closeLabel || 'Fermer';
     var ariaLabel = options.ariaLabel || 'Contenu';
     var bodyOpenClass = classNames('cb-lightbox-open', prefix && prefix !== 'cb' ? prefix + '-lightbox-open' : '');
+    var baseClassName = classNames(options.className);
     var isOpen = false;
+    var dynamicClassName = '';
 
     var root = createEl('div', {
-      class: classNames(prefixedLightboxClasses(prefix, 'cb-lightbox'), options.className),
+      class: classNames(prefixedLightboxClasses(prefix, 'cb-lightbox'), baseClassName),
       'aria-hidden': 'true'
     });
 
@@ -1321,10 +1332,31 @@
       if (event.key === 'Escape') close();
     }
 
+    function setDynamicClasses(classes) {
+      classNames(dynamicClassName).split(/\s+/).forEach(function(cls) {
+        if (cls) root.classList.remove(cls);
+      });
+
+      dynamicClassName = classNames(classes);
+
+      classNames(dynamicClassName).split(/\s+/).forEach(function(cls) {
+        if (cls) root.classList.add(cls);
+      });
+
+      var mirroredClasses = classNames(baseClassName, dynamicClassName);
+
+      if (mirroredClasses) {
+        root.setAttribute('data-cb-classes', mirroredClasses);
+      } else {
+        root.removeAttribute('data-cb-classes');
+      }
+    }
+
     function open(payload) {
       payload = payload || {};
 
       if (!root.parentNode) document.body.appendChild(root);
+      setDynamicClasses(payload.className);
 
       if (payload.ariaLabel) panel.setAttribute('aria-label', payload.ariaLabel);
       if (payload.closeLabel) {
