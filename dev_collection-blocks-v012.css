@@ -1299,6 +1299,10 @@ body.sqs-edit-mode-active :where(.cb-block).lb-block {
   filter: drop-shadow(0 3px 10px rgba(0,0,0,.22)) drop-shadow(0 1px 3px rgba(0,0,0,.12));
   animation: locator-popup-in .15s ease;
 }
+
+:where(.cb-popup-wrap--active).lb-popup-wrap--active {
+  filter: var(--locator-popup-active-filter, none);
+}
 @keyframes locator-popup-in {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -1315,6 +1319,10 @@ body.sqs-edit-mode-active :where(.cb-block).lb-block {
   display: flex; flex-direction: column;
   width: 240px;   /* 240px desktop — safe */
   overflow: hidden; text-decoration: none; color: inherit;
+}
+
+:where(.cb-popup--active).lb-popup--active {
+  background: var(--locator-popup-active-background, rgba(0,0,0,.035));
 }
 
 .lb-popup-close {
