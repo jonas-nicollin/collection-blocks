@@ -1,3 +1,5 @@
+/* Ici, un commentaire */
+
 (function() {
   'use strict';
 
