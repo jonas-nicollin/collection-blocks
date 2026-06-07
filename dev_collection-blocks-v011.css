@@ -1418,7 +1418,7 @@ body.sqs-edit-mode-active :where(.cb-block).lb-block {
   right: 0;
   bottom: 0;
   z-index: 3;
-  height: min(var(--locator-sheet-expanded, 85vh), calc(100% - 1rem));
+  height: min(var(--locator-sheet-expanded, 100vh), calc(100% - 1rem));
   max-height: none;
   border-top: 1px solid var(--tweak-line-block-line-color, rgba(0,0,0,.1));
   border-right: 0;
@@ -1431,11 +1431,11 @@ body.sqs-edit-mode-active :where(.cb-block).lb-block {
 }
 
 :where(.cb-block--sheet-active).lb-block--sheet-active:where(.cb-block--sheet-mid).lb-block--sheet-mid :where(.cb-sidebar).lb-sidebar {
-  --lb-sheet-visible: var(--locator-sheet-mid, 50vh);
+  --lb-sheet-visible: var(--locator-sheet-mid, 40vh);
 }
 
 :where(.cb-block--sheet-active).lb-block--sheet-active:where(.cb-block--sheet-expanded).lb-block--sheet-expanded :where(.cb-sidebar).lb-sidebar {
-  --lb-sheet-visible: min(var(--locator-sheet-expanded, 85vh), calc(100% - 1rem));
+  --lb-sheet-visible: min(var(--locator-sheet-expanded, 100vh), calc(100% - 1rem));
 }
 
 :where(.cb-block--sheet-active).lb-block--sheet-active:where(.cb-block--sheet-dragging).lb-block--sheet-dragging :where(.cb-sidebar).lb-sidebar {
