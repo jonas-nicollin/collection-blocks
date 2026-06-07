@@ -90,11 +90,12 @@ var cfg=Object.assign({
 },rawConfig||{});
 
 cfg.mobileSheet=Object.assign({
-  enabled:false,
-  initial:'collapsed',
+  enabled:true,
+  breakpoint:1024,
+  initial:'mid',
   collapsedHeight:96,
-  midHeight:0.52,
-  expandedHeight:0.86
+  midHeight:0.5,
+  expandedHeight:0.85
 },cfg.mobileSheet||{});
 
 cfg.performance=Object.assign({
@@ -629,10 +630,11 @@ function buildSkeleton(){var s='';for(var i=0;i<4;i++)s+='<div class="'+escHtml(
 /* ── Instance ── */
 function createInstance(root,allItems,fetchMoreItems){
   var map,markers={},clusterer=null,activeId=null,activePopup=null,activeZone='';
+  var mapTouched=false;
   var currentItems=allItems,visibleCount=cfg.display.pageSize>0?cfg.display.pageSize:allItems.length;
 
   function setupMobileSheet(){
-    if(!cfg.mobileSheet||cfg.mobileSheet.enabled!==true)return;
+    if(!cfg.mobileSheet||cfg.mobileSheet.enabled===false)return;
 
     var inner=root.querySelector('.lb-block__inner');
     var sidebar=root.querySelector('.lb-sidebar');
@@ -641,6 +643,8 @@ function createInstance(root,allItems,fetchMoreItems){
     addClasses(root,'cb-block--sheet lb-block--sheet');
     addClasses(inner,'cb-sheet lb-sheet');
 
+    var breakpoint=Math.max(320,Number(cfg.mobileSheet.breakpoint||1024));
+    var mq=window.matchMedia?window.matchMedia('(max-width: '+(breakpoint-1)+'px)'):null;
     var handle=sidebar.querySelector('.lb-sheet-handle');
     if(!handle){
       handle=document.createElement('button');
@@ -653,16 +657,29 @@ function createInstance(root,allItems,fetchMoreItems){
 
     var states=['collapsed','mid','expanded'];
     var state=states.indexOf(cfg.mobileSheet.initial)!==-1?cfg.mobileSheet.initial:'collapsed';
+    var isActive=false;
+
+    function getViewportHeight(){
+      return (window.visualViewport&&window.visualViewport.height)||window.innerHeight||700;
+    }
+
+    function updateViewportVars(){
+      var viewportHeight=getViewportHeight();
+      root.style.setProperty('--locator-sheet-viewport-height',Math.round(viewportHeight)+'px');
+      root.style.setProperty('--locator-sheet-collapsed',Math.round(stateVisible('collapsed'))+'px');
+      root.style.setProperty('--locator-sheet-mid',Math.round(stateVisible('mid'))+'px');
+      root.style.setProperty('--locator-sheet-expanded',Math.round(stateVisible('expanded'))+'px');
+    }
 
     function getInnerHeight(){
       var rect=inner.getBoundingClientRect();
-      return rect.height||window.innerHeight||700;
+      return rect.height||getViewportHeight();
     }
 
     function stateVisible(targetState){
       var h=getInnerHeight();
-      if(targetState==='expanded')return Math.max(160,Math.min(h-16,h*Number(cfg.mobileSheet.expandedHeight||0.86)));
-      if(targetState==='mid')return Math.max(140,Math.min(h-16,h*Number(cfg.mobileSheet.midHeight||0.52)));
+      if(targetState==='expanded')return Math.max(160,Math.min(h-16,h*Number(cfg.mobileSheet.expandedHeight||0.85)));
+      if(targetState==='mid')return Math.max(140,Math.min(h-16,h*Number(cfg.mobileSheet.midHeight||0.5)));
       return Math.max(64,Number(cfg.mobileSheet.collapsedHeight||96));
     }
 
@@ -678,6 +695,7 @@ function createInstance(root,allItems,fetchMoreItems){
     function setState(nextState){
       if(states.indexOf(nextState)===-1)nextState='collapsed';
       state=nextState;
+      updateViewportVars();
       states.forEach(function(s){removeClasses(root,'cb-block--sheet-'+s+' lb-block--sheet-'+s);});
       addClasses(root,'cb-block--sheet-'+state+' lb-block--sheet-'+state);
       root.setAttribute('data-lb-sheet-state',state);
@@ -695,12 +713,15 @@ function createInstance(root,allItems,fetchMoreItems){
     }
 
     handle.addEventListener('click',function(){
+      if(!isActive)return;
       setState(state==='expanded'?'collapsed':'expanded');
     });
 
     handle.addEventListener('pointerdown',function(event){
+      if(!isActive)return;
       if(event.button!=null&&event.button!==0)return;
 
+      updateViewportVars();
       var startY=event.clientY;
       var startVisible=stateVisible(state);
       var maxVisible=stateVisible('expanded');
@@ -730,14 +751,45 @@ function createInstance(root,allItems,fetchMoreItems){
       window.addEventListener('pointercancel',end);
     });
 
-    setState(state);
+    function setActive(nextActive){
+      isActive=!!nextActive;
+      if(isActive){
+        addClasses(root,'cb-block--sheet-active lb-block--sheet-active');
+        setState(state);
+      }else{
+        removeClasses(root,'cb-block--sheet-active lb-block--sheet-active cb-block--sheet-dragging lb-block--sheet-dragging');
+        states.forEach(function(s){removeClasses(root,'cb-block--sheet-'+s+' lb-block--sheet-'+s);});
+        root.removeAttribute('data-lb-sheet-state');
+        sidebar.style.removeProperty('--lb-sheet-visible');
+        refreshMap();
+      }
+    }
+
+    function syncActive(){
+      updateViewportVars();
+      setActive(!mq||mq.matches);
+    }
+
+    if(mq){
+      if(typeof mq.addEventListener==='function')mq.addEventListener('change',syncActive);
+      else if(typeof mq.addListener==='function')mq.addListener(syncActive);
+    }
+    window.addEventListener('resize',syncActive);
+    if(window.visualViewport)window.visualViewport.addEventListener('resize',syncActive);
+    syncActive();
   }
 
   function buildMap(c){
     var o=Object.assign({center:cfg.mapCenter||{lat:48.8566,lng:2.3522},zoom:cfg.mapZoom||12,zoomControl:true,mapTypeControl:false,streetViewControl:false,fullscreenControl:true,clickableIcons:false},cfg.mapOptions||{});
     if(cfg.mapStyle)o.styles=cfg.mapStyle;
     map=new google.maps.Map(c,o);
-    map.addListener('click',function(){closePopup();});
+    map.addListener('click',function(){mapTouched=true;closePopup();});
+    map.addListener('dragstart',function(){mapTouched=true;});
+    if(c){
+      ['wheel','touchstart','pointerdown'].forEach(function(type){
+        c.addEventListener(type,function(){mapTouched=true;},{passive:true});
+      });
+    }
     /* updateListOnMapMove doit être dans map:{} dans la config, pas à la racine */
    if(cfg.map.updateListOnMapMove)map.addListener('idle',function(){
   var b=map.getBounds();
@@ -756,6 +808,20 @@ function createInstance(root,allItems,fetchMoreItems){
 });
   }
   function markerPosition(item){return{lat:item.markerLat||item.lat,lng:item.markerLng||item.lng};}
+  function fitItemsOnMap(items,force){
+    if(!map||!Array.isArray(items)||!items.length)return;
+    if(mapTouched&&!force)return;
+    if(cfg.mapCenter&&cfg.mapZoom){
+      if(force||!mapTouched){
+        map.setCenter(cfg.mapCenter);
+        map.setZoom(cfg.mapZoom);
+      }
+      return;
+    }
+    var bounds=new google.maps.LatLngBounds();
+    items.forEach(function(i){bounds.extend({lat:i.lat,lng:i.lng});});
+    map.fitBounds(bounds,{padding:60});
+  }
   function showPopup(item){if(!cfg.map.popup||!item)return;closePopup();defineCustomPopup();activePopup=new CustomPopup(new google.maps.LatLng(item.markerLat||item.lat,item.markerLng||item.lng),item);activePopup.setMap(map);}
   function closePopup(){if(activePopup){activePopup.setMap(null);activePopup=null;}}
   function createMarker(item){var icon=markerIcon(item.numero,false);var useCluster=cfg.map.clustering&&window.markerClusterer;var o={position:markerPosition(item),map:useCluster?null:map,title:item.title};if(icon!==null)o.icon=icon;var m=new google.maps.Marker(o);m.addListener('click',function(){activate(item.id,true);showPopup(item);});markers[item.id]={marker:m,item:item};return m;}
@@ -784,6 +850,7 @@ function createInstance(root,allItems,fetchMoreItems){
     var card=root.querySelector('.lb-card[data-item-id="'+id+'"]');
     if(card){card.classList.add('is-active');card.classList.add('cb-card--active');card.classList.add('lb-card--active');card.scrollIntoView({behavior:'smooth',block:'nearest'});}
     if(pan&&markers[id]){
+      mapTouched=true;
       map.panTo(markerPosition(markers[id].item));
       if(map.getZoom()<cfg.mapZoomOnSelect)map.setZoom(cfg.mapZoomOnSelect);
       /* Compenser la hauteur du popup (environ popup + marker + marge) */
@@ -857,6 +924,7 @@ function createInstance(root,allItems,fetchMoreItems){
     if(counter)counter.textContent=getI18n(cfg).itemCount(currentItems.length);
     syncVisibleMarkers();
     renderList(currentItems,visibleCount);
+    if(!activeZone)fitItemsOnMap(currentItems,false);
   }
 
   var zones=[];allItems.forEach(function(i){i.zones.forEach(function(z){if(zones.indexOf(z)===-1)zones.push(z);});});zones.sort();
@@ -871,7 +939,7 @@ function createInstance(root,allItems,fetchMoreItems){
   root.innerHTML='<div class="'+escHtml(CLS_INNER+lc)+cc+'"><div class="'+escHtml(CLS_SIDEBAR)+'">'+buildControls(zones,allItems.length)+'<div class="'+escHtml(CLS_LIST)+'"></div></div><div class="'+escHtml(CLS_MAP_WRAP)+'"><div class="'+escHtml(CLS_MAP)+'"></div></div></div>';
   setupMobileSheet();
   buildMap(root.querySelector('.lb-map'));addAllMarkers();
-  if(allItems.length){var bounds=new google.maps.LatLngBounds();allItems.forEach(function(i){bounds.extend({lat:i.lat,lng:i.lng});});if(cfg.mapCenter&&cfg.mapZoom){map.setCenter(cfg.mapCenter);map.setZoom(cfg.mapZoom);}else map.fitBounds(bounds,{padding:60});}
+  fitItemsOnMap(allItems,true);
   renderList(allItems,visibleCount);
   var sel=root.querySelector('.lb-filter-select');if(sel)sel.addEventListener('change',function(){applyFilter(sel.value);});
   root.querySelectorAll('.lb-filter-btn').forEach(function(btn){
