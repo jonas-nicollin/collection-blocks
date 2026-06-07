@@ -94,8 +94,8 @@ cfg.mobileSheet=Object.assign({
   breakpoint:1024,
   initial:'mid',
   collapsedHeight:96,
-  midHeight:0.5,
-  expandedHeight:0.85
+  midHeight:0.4,
+  expandedHeight:1
 },cfg.mobileSheet||{});
 
 cfg.performance=Object.assign({
@@ -633,6 +633,10 @@ function createInstance(root,allItems,fetchMoreItems){
   var mapTouched=false;
   var currentItems=allItems,visibleCount=cfg.display.pageSize>0?cfg.display.pageSize:allItems.length;
 
+  function isMobileSheetActive(){
+    return root.classList.contains('lb-block--sheet-active');
+  }
+
   function setupMobileSheet(){
     if(!cfg.mobileSheet||cfg.mobileSheet.enabled===false)return;
 
@@ -678,8 +682,8 @@ function createInstance(root,allItems,fetchMoreItems){
 
     function stateVisible(targetState){
       var h=getInnerHeight();
-      if(targetState==='expanded')return Math.max(160,Math.min(h-16,h*Number(cfg.mobileSheet.expandedHeight||0.85)));
-      if(targetState==='mid')return Math.max(140,Math.min(h-16,h*Number(cfg.mobileSheet.midHeight||0.5)));
+      if(targetState==='expanded')return Math.max(160,Math.min(h-16,h*Number(cfg.mobileSheet.expandedHeight||1)));
+      if(targetState==='mid')return Math.max(140,Math.min(h-16,h*Number(cfg.mobileSheet.midHeight||0.4)));
       return Math.max(64,Number(cfg.mobileSheet.collapsedHeight||96));
     }
 
@@ -824,7 +828,7 @@ function createInstance(root,allItems,fetchMoreItems){
   }
   function showPopup(item){if(!cfg.map.popup||!item)return;closePopup();defineCustomPopup();activePopup=new CustomPopup(new google.maps.LatLng(item.markerLat||item.lat,item.markerLng||item.lng),item);activePopup.setMap(map);}
   function closePopup(){if(activePopup){activePopup.setMap(null);activePopup=null;}}
-  function createMarker(item){var icon=markerIcon(item.numero,false);var useCluster=cfg.map.clustering&&window.markerClusterer;var o={position:markerPosition(item),map:useCluster?null:map,title:item.title};if(icon!==null)o.icon=icon;var m=new google.maps.Marker(o);m.addListener('click',function(){activate(item.id,true);showPopup(item);});markers[item.id]={marker:m,item:item};return m;}
+  function createMarker(item){var icon=markerIcon(item.numero,false);var useCluster=cfg.map.clustering&&window.markerClusterer;var o={position:markerPosition(item),map:useCluster?null:map,title:item.title};if(icon!==null)o.icon=icon;var m=new google.maps.Marker(o);m.addListener('click',function(){var sheetActive=isMobileSheetActive();activate(item.id,!sheetActive,{scrollCard:!sheetActive});showPopup(item);});markers[item.id]={marker:m,item:item};return m;}
   function addAllMarkers(){var ml=allItems.map(function(i){return createMarker(i);});if(cfg.map.clustering&&window.markerClusterer)clusterer=new markerClusterer.MarkerClusterer({map:map,markers:ml,algorithm:new markerClusterer.GridAlgorithm({maxDistance:40})});}
   function addMissingMarkers(items){
     var ml=[];
@@ -843,12 +847,13 @@ function createInstance(root,allItems,fetchMoreItems){
     });
   }
   function updateMarker(id,a){if(!markers[id])return;var icon=markerIcon(markers[id].item.numero,a);if(icon!==null)markers[id].marker.setIcon(icon);markers[id].marker.setZIndex(a?999:0);}
-  function activate(id,pan){
+  function activate(id,pan,opts){
+    opts=opts||{};
     if(activeId===id)return;
     if(activeId){updateMarker(activeId,false);var prev=root.querySelector('.lb-card[data-item-id="'+activeId+'"]');if(prev){prev.classList.remove('is-active');prev.classList.remove('cb-card--active');prev.classList.remove('lb-card--active');}}
     activeId=id;updateMarker(id,true);
     var card=root.querySelector('.lb-card[data-item-id="'+id+'"]');
-    if(card){card.classList.add('is-active');card.classList.add('cb-card--active');card.classList.add('lb-card--active');card.scrollIntoView({behavior:'smooth',block:'nearest'});}
+    if(card){card.classList.add('is-active');card.classList.add('cb-card--active');card.classList.add('lb-card--active');if(opts.scrollCard!==false)card.scrollIntoView({behavior:'smooth',block:'nearest'});}
     if(pan&&markers[id]){
       mapTouched=true;
       map.panTo(markerPosition(markers[id].item));
