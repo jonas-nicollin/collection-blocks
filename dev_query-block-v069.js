@@ -225,6 +225,7 @@
           showLabel: true,
           order: null,
           filterFormat: null,
+          filterGranularity: null,
         };
       }
       return {
@@ -233,6 +234,7 @@
         showLabel:    p.showLabel    !== false,
         order:        p.order        || null,
         filterFormat: p.filterFormat || null,
+        filterGranularity: p.filterGranularity || null,
       };
     });
   }
@@ -446,6 +448,12 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
     for (var prefix in tags) {
       if (!Object.prototype.hasOwnProperty.call(tags, prefix) || !tags[prefix]) continue;
       if (!getTagValuesByPrefix(item, prefix).some(function(v) {
+        var selectedDatePart = getISODatePart(tags[prefix]);
+        if (selectedDatePart) {
+          var valueDatePart = getISODatePart(v);
+          if (valueDatePart && valueDatePart === selectedDatePart) return true;
+        }
+
         return norm(v) === norm(tags[prefix]);
       })) return false;
     }
@@ -1595,6 +1603,41 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     });
   }
 
+  function isDatePrefix(prefix, datePrefix) {
+    return !!(datePrefix && norm(prefix) === norm(datePrefix));
+  }
+
+  function shouldCollapseDateFilter(pd, datePrefix, format) {
+    if (!pd || !isDatePrefix(pd.prefix, datePrefix)) return false;
+
+    var granularity = String(pd.filterGranularity || '').toLowerCase();
+    if (granularity === 'value' || granularity === 'exact' || granularity === 'time') return false;
+    if (granularity === 'day') return true;
+
+    var fmt = format || 'day';
+    return fmt === 'day' ||
+      fmt === 'date' ||
+      fmt === 'short' ||
+      fmt === 'numeric';
+  }
+
+  function collapseDateFilterValues(vals) {
+    var seen = {};
+    var out = [];
+
+    vals.forEach(function(value) {
+      var datePart = getISODatePart(value);
+      var key = datePart || value;
+      var seenKey = norm(key);
+
+      if (seen[seenKey]) return;
+      seen[seenKey] = true;
+      out.push(key);
+    });
+
+    return out;
+  }
+
   /* ════════════════════════════════════
    * 10. STICKY
    * ════════════════════════════════════ */
@@ -2044,11 +2087,13 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
           return a.concat(getTagValuesByPrefix(i, pd.prefix));
         }, []).filter(Boolean), norm);
 
+        var fmt = pd.filterFormat || (datePrefix && norm(pd.prefix) === norm(datePrefix) ? 'day' : null);
         var vals = sortTagValues(raw, pd.prefix, datePrefix);
+        var collapseByDay = shouldCollapseDateFilter(pd, datePrefix, fmt);
 
+        if (collapseByDay) vals = collapseDateFilterValues(vals);
         if (pd.order) vals = applyCustomOrder(vals, pd.order);
 
-        var fmt = pd.filterFormat || (datePrefix && norm(pd.prefix) === norm(datePrefix) ? 'day' : null);
         var displayVals = fmt ? vals.map(function(v) {
           return formatISOTag(v, fmt) || v;
         }) : vals;
