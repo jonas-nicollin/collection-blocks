@@ -138,6 +138,9 @@ cfg.map=Object.assign({
   markerLabel:'numero',markerStyle:'pill',
   markerFontSize:13,      /* px — taille du label dans le marqueur SVG */
   markerShadow:true,      /* ombre portée sous les marqueurs */
+  markerActiveBackground:'#f3f3f3',
+  markerActiveText:'#111',
+  markerActiveShadow:false,
   popup:true,popupShowImage:true,
   clustering:false,clusterMinCount:2,updateListOnMapMove:false,
   overlapStrategy:'spread',
@@ -506,9 +509,9 @@ function defineCustomPopup(){
     var d=cfg.display,item=this.item;
     var im=(cfg.map.popupShowImage&&d.showImage&&item.imageBase)?'<div class="lb-popup-media">'+imgTag(item.imageBase,item.title,'lb-popup-image','240px',item.focalPos,false)+'</div>':'';
     var b='';if(item.numero)b+='<div class="lb-popup-num">'+escHtml(item.numero)+'</div>';if(item.title)b+='<div class="lb-popup-title">'+escHtml(item.title)+'</div>';if(item.lieu)b+='<div class="lb-popup-lieu">'+escHtml(item.lieu)+'</div>';
-    this.container=document.createElement('div');this.container.className='lb-popup-wrap';
+    this.container=document.createElement('div');this.container.className='cb-popup-wrap lb-popup-wrap cb-popup-wrap--active lb-popup-wrap--active';
     var pt=cfg.display.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
-    this.container.innerHTML='<button class="lb-popup-close" type="button" aria-label="Fermer"><span class="ui-icon" aria-hidden="true">close</span></button><a class="lb-popup" href="'+escHtml(item.url)+'"'+pt+'>'+im+(b?'<div class="lb-popup-body">'+b+'</div>':'')+'</a>';
+    this.container.innerHTML='<button class="cb-popup-close lb-popup-close" type="button" aria-label="Fermer"><span class="ui-icon" aria-hidden="true">close</span></button><a class="cb-popup lb-popup cb-popup--active lb-popup--active" href="'+escHtml(item.url)+'"'+pt+'>'+im+(b?'<div class="cb-popup-body lb-popup-body">'+b+'</div>':'')+'</a>';
     var closeBtn=this.container.querySelector('.lb-popup-close');
     var popup=this;
     if(closeBtn)closeBtn.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();popup.setMap(null);});
@@ -520,7 +523,7 @@ function defineCustomPopup(){
 
 /* ── Marqueurs SVG ── */
 function getMC(a){var p=a?'--locator-marker-active':'--locator-marker-color';return getComputedStyle(document.documentElement).getPropertyValue(p).trim()||(a?'#000':'#333');}
-function pillSvg(bg,tc,label,border){
+function pillSvg(bg,tc,label,border,active){
   label=label?String(label):'';
   var fs=cfg.map.markerFontSize||13;
   var charW=fs*0.6;
@@ -528,11 +531,12 @@ function pillSvg(bg,tc,label,border){
   /* Dimensions du pill */
   var pw=Math.max(32,tW+pH*2),ph=Math.max(26,fs+14),rx=ph/2;
   /* Padding autour pour que l'ombre ne soit pas rognée par le viewBox */
-  var pad=cfg.map.markerShadow!==false?8:0;
+  var shadowEnabled=active?cfg.map.markerActiveShadow!==false:cfg.map.markerShadow!==false;
+  var pad=shadowEnabled?8:0;
   /* Dimensions totales SVG avec padding */
   var sw=pw+pad*2,sh=ph+pad*2;
   /* Ombre */
-  var shadowOp=cfg.map.markerShadow!==false?'0.28':'0';
+  var shadowOp=shadowEnabled?'0.28':'0';
   var sEl='<filter id="s" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="rgba(0,0,0,'+shadowOp+')"/></filter>';
   var fa=' filter="url(#s)"';
   /* Contour (état normal) */
@@ -553,10 +557,11 @@ function markerIcon(label,active){
   if(style==='dot'){var r=active?10:8;return{url:dotSvg(c),scaledSize:new google.maps.Size(r*2,r*2),anchor:new google.maps.Point(r,r)};}
   var fs=cfg.map.markerFontSize||13;
   var pH=lbl.length>2?10:8,pw=Math.max(32,lbl.length*(fs*0.6)+pH*2),ph=Math.max(26,fs+14);
-  var pad=cfg.map.markerShadow!==false?8:0;
+  var shadowEnabled=active?cfg.map.markerActiveShadow!==false:cfg.map.markerShadow!==false;
+  var pad=shadowEnabled?8:0;
   var sw=pw+pad*2,sh=ph+pad*2;
   /* anchor : pointe en bas au centre du pill (pas du SVG total avec padding) */
-  return{url:pillSvg(active?c:'#fff',active?'#fff':'#111',lbl,!active),scaledSize:new google.maps.Size(sw,sh),anchor:new google.maps.Point(sw/2,ph+pad)};
+  return{url:pillSvg(active?(cfg.map.markerActiveBackground||c):'#fff',active?(cfg.map.markerActiveText||'#111'):'#111',lbl,!active,active),scaledSize:new google.maps.Size(sw,sh),anchor:new google.maps.Point(sw/2,ph+pad)};
 }
 
 /* ── API Maps + clusterer ── */
@@ -564,18 +569,18 @@ function loadMapsAPI(){if(window.google&&window.google.maps)return Promise.resol
 function loadClusterer(){if(window.markerClusterer)return Promise.resolve();if(clustererPromise)return clustererPromise;clustererPromise=new Promise(function(resolve){var s=document.createElement('script');s.src='https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js';s.onload=function(){resolve();};s.onerror=function(){clustererPromise=null;resolve();};document.head.appendChild(s);});return clustererPromise;}
 
 /* ── Contrôles + skeleton ── */
-function buildControls(zones,total){
+function buildControls(zones,total,activeZone){
   var f='';
   if(cfg.showZoneFilter&&zones.length){
     if(cfg.filterMode==='buttons'){
       /* Boutons pill — même apparence que Query Block (qb-filter-btn) */
       var btns='';
-      zones.forEach(function(z){btns+='<button class="'+escHtml(CLS_FILTER_BTN)+'" data-zone="'+escHtml(z)+'" type="button">'+escHtml(z)+'</button>';});
+      zones.forEach(function(z){var active=z===activeZone?' '+CLS_FILTER_BTN_ACTIVE:'';btns+='<button class="'+escHtml(CLS_FILTER_BTN+active)+'" data-zone="'+escHtml(z)+'" type="button">'+escHtml(z)+'</button>';});
       f='<div class="'+escHtml(CLS_FILTER_GROUP+' '+CLS_FILTER_BUTTONS)+'">'+btns+'</div>';
     }else{
       /* Dropdown (défaut) */
       var opts=['<option value="">Toutes les zones</option>']
-        .concat(zones.map(function(z){return'<option value="'+escHtml(z)+'">'+escHtml(z)+'</option>';})).join('');
+        .concat(zones.map(function(z){return'<option value="'+escHtml(z)+'"'+(z===activeZone?' selected':'')+'>'+escHtml(z)+'</option>';})).join('');
       f='<div class="'+escHtml(CLS_FILTER_GROUP+' '+CLS_FILTER_WRAP)+'">'
         +'<select class="'+escHtml(CLS_FILTER_SELECT)+'" aria-label="Filtrer par zone">'+opts+'</select>'
         +'<span class="'+escHtml(CLS_FILTER_ICON)+'" aria-hidden="true">expand_more</span>'
@@ -632,9 +637,44 @@ function createInstance(root,allItems,fetchMoreItems){
   var map,markers={},clusterer=null,activeId=null,activePopup=null,activeZone='';
   var mapTouched=false;
   var currentItems=allItems,visibleCount=cfg.display.pageSize>0?cfg.display.pageSize:allItems.length;
+  var zones=collectZones(allItems);
 
   function isMobileSheetActive(){
     return root.classList.contains('lb-block--sheet-active');
+  }
+
+  function collectZones(items){
+    var out=[];
+    (items||[]).forEach(function(i){(i.zones||[]).forEach(function(z){if(out.indexOf(z)===-1)out.push(z);});});
+    out.sort();
+    return out;
+  }
+
+  function zonesEqual(a,b){
+    if(!a||!b||a.length!==b.length)return false;
+    for(var i=0;i<a.length;i++)if(a[i]!==b[i])return false;
+    return true;
+  }
+
+  function syncControls(){
+    var controls=root.querySelector('.lb-controls');
+    if(!controls)return;
+    controls.outerHTML=buildControls(zones,allItems.length,activeZone);
+    bindControls();
+  }
+
+  function bindControls(){
+    var sel=root.querySelector('.lb-filter-select');
+    if(sel)sel.addEventListener('change',function(){applyFilter(sel.value);});
+    root.querySelectorAll('.lb-filter-btn').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        var zone=btn.dataset.zone||'';
+        var isAlreadyActive=btn.classList.contains('lb-filter-btn--active');
+        root.querySelectorAll('.lb-filter-btn').forEach(function(b){removeClasses(b, CLS_FILTER_BTN_ACTIVE);});
+        if(!isAlreadyActive){addClasses(btn, CLS_FILTER_BTN_ACTIVE);}else{zone='';}
+        applyFilter(zone);
+      });
+    });
   }
 
   function setupMobileSheet(){
@@ -784,7 +824,24 @@ function createInstance(root,allItems,fetchMoreItems){
   }
 
   function buildMap(c){
-    var o=Object.assign({center:cfg.mapCenter||{lat:48.8566,lng:2.3522},zoom:cfg.mapZoom||12,zoomControl:true,mapTypeControl:false,streetViewControl:false,fullscreenControl:true,clickableIcons:false},cfg.mapOptions||{});
+    var controlPosition=google.maps&&google.maps.ControlPosition;
+    var topRight=controlPosition&&controlPosition.RIGHT_TOP;
+    var o=Object.assign({
+      center:cfg.mapCenter||{lat:48.8566,lng:2.3522},
+      zoom:cfg.mapZoom||12,
+      zoomControl:true,
+      zoomControlOptions:topRight?{position:topRight}:undefined,
+      mapTypeControl:false,
+      streetViewControl:false,
+      panControl:false,
+      rotateControl:false,
+      scaleControl:false,
+      cameraControl:false,
+      fullscreenControl:true,
+      fullscreenControlOptions:topRight?{position:topRight}:undefined,
+      gestureHandling:'greedy',
+      clickableIcons:false
+    },cfg.mapOptions||{});
     if(cfg.mapStyle)o.styles=cfg.mapStyle;
     map=new google.maps.Map(c,o);
     map.addListener('click',function(){mapTouched=true;closePopup();});
@@ -899,6 +956,8 @@ function createInstance(root,allItems,fetchMoreItems){
         allItems = nextItems;
         addMissingMarkers(allItems);
         syncMarkerPositions(allItems);
+        var nextZones=collectZones(allItems);
+        if(!zonesEqual(zones,nextZones)){zones=nextZones;syncControls();}
         currentItems = activeZone?allItems.filter(function(i){return i.zones.indexOf(activeZone)!==-1;}):allItems;
         items = currentItems;
       }
@@ -923,16 +982,22 @@ function createInstance(root,allItems,fetchMoreItems){
     allItems=nextItems;
     addMissingMarkers(allItems);
     syncMarkerPositions(allItems);
+    var nextZones=collectZones(allItems);
+    if(!zonesEqual(zones,nextZones)){
+      zones=nextZones;
+      if(activeZone&&zones.indexOf(activeZone)===-1)activeZone='';
+      syncControls();
+    }else{
+      var counter=root.querySelector('.lb-counter');
+      if(counter)counter.textContent=getI18n(cfg).itemCount(allItems.length);
+    }
     currentItems=activeZone?allItems.filter(function(i){return i.zones.indexOf(activeZone)!==-1;}):allItems;
     visibleCount=cfg.display.pageSize>0?Math.min(Math.max(visibleCount,cfg.display.pageSize),currentItems.length):currentItems.length;
-    var counter=root.querySelector('.lb-counter');
-    if(counter)counter.textContent=getI18n(cfg).itemCount(currentItems.length);
     syncVisibleMarkers();
     renderList(currentItems,visibleCount);
     if(!activeZone)fitItemsOnMap(currentItems,false);
   }
 
-  var zones=[];allItems.forEach(function(i){i.zones.forEach(function(z){if(zones.indexOf(z)===-1)zones.push(z);});});zones.sort();
   /* En mode grid, la structure HTML est identique au mode list.
      Le CSS gère l'affichage : liste=grille multi-colonnes, carte=côté droit.
      --locator-grid-list-width contrôle la proportion (défaut: 50%). */
@@ -941,22 +1006,12 @@ function createInstance(root,allItems,fetchMoreItems){
   var cc=blockClass?' '+escHtml(blockClass):'';
   addClasses(root, CLS_BLOCK+' '+CLS_BLOCK_READY);
   removeClasses(root, CLS_BLOCK_LOADING);
-  root.innerHTML='<div class="'+escHtml(CLS_INNER+lc)+cc+'"><div class="'+escHtml(CLS_SIDEBAR)+'">'+buildControls(zones,allItems.length)+'<div class="'+escHtml(CLS_LIST)+'"></div></div><div class="'+escHtml(CLS_MAP_WRAP)+'"><div class="'+escHtml(CLS_MAP)+'"></div></div></div>';
+  root.innerHTML='<div class="'+escHtml(CLS_INNER+lc)+cc+'"><div class="'+escHtml(CLS_SIDEBAR)+'">'+buildControls(zones,allItems.length,activeZone)+'<div class="'+escHtml(CLS_LIST)+'"></div></div><div class="'+escHtml(CLS_MAP_WRAP)+'"><div class="'+escHtml(CLS_MAP)+'"></div></div></div>';
   setupMobileSheet();
   buildMap(root.querySelector('.lb-map'));addAllMarkers();
   fitItemsOnMap(allItems,true);
   renderList(allItems,visibleCount);
-  var sel=root.querySelector('.lb-filter-select');if(sel)sel.addEventListener('change',function(){applyFilter(sel.value);});
-  root.querySelectorAll('.lb-filter-btn').forEach(function(btn){
-    btn.addEventListener('click',function(){
-      var zone=btn.dataset.zone||'';
-      /* Toggle : clic sur bouton actif = désactiver (revenir à "tout") */
-      var isAlreadyActive=btn.classList.contains('lb-filter-btn--active');
-      root.querySelectorAll('.lb-filter-btn').forEach(function(b){removeClasses(b, CLS_FILTER_BTN_ACTIVE);});
-      if(!isAlreadyActive){addClasses(btn, CLS_FILTER_BTN_ACTIVE);}else{zone='';}
-      applyFilter(zone);
-    });
-  });
+  bindControls();
   log('Instance:',allItems.length,'marqueurs');
   return {setItems:setItems};
 }
