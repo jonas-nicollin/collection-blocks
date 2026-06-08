@@ -2387,6 +2387,8 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       lazyInit: true,
       maxPages: 1,
       progressiveMaxPages: 'all',
+      filterIndex: 'complete',
+      filterIndexMaxPages: 'all',
       sessionCache: true,
       sessionCacheTTL: 300,
       domBatchSize: 6,
@@ -2469,6 +2471,9 @@ requestAnimationFrame(function() {
 });
 
         var rawItems = [];
+    var filterItems = [];
+    var filterIndexLoaded = false;
+    var filterIndexPromise = null;
     var sourceList = Array.isArray(cfg.sources) ? cfg.sources : [];
 
     var initialMaxPages = perf.maxPages || 1;
@@ -2520,7 +2525,8 @@ requestAnimationFrame(function() {
       }
     }
 
-    async function loadSources(maxPagesValue) {
+    async function loadSources(maxPagesValue, options) {
+      options = options || {};
       var results = await Promise.all(sourceList.map(function(src) {
         var stripFields = src.stripFields;
         if (stripFields === undefined) stripFields = perf.stripFields;
@@ -2550,7 +2556,9 @@ requestAnimationFrame(function() {
         merged.push.apply(merged, r.items || []);
       });
 
-      updateRemoteLoadedState(states, maxPagesValue);
+      if (options.updateRemoteState !== false) {
+        updateRemoteLoadedState(states, maxPagesValue);
+      }
 
       merged = uniqBy(merged, function(i) {
         return i.fullUrl || i.id;
@@ -2562,6 +2570,41 @@ requestAnimationFrame(function() {
       return merged;
     }
 
+    function shouldLoadCompleteFilterIndex() {
+      if (!fc || cfg.filters === false) return false;
+      if (perf.filterIndex === false) return false;
+      if (perf.filterIndex === 'progressive') return false;
+      return true;
+    }
+
+    async function loadCompleteFilterIndex() {
+      if (!shouldLoadCompleteFilterIndex()) {
+        filterItems = rawItems;
+        filterIndexLoaded = true;
+        return filterItems;
+      }
+
+      if (filterIndexLoaded) return filterItems;
+      if (filterIndexPromise) return filterIndexPromise;
+
+      filterIndexPromise = loadSources(perf.filterIndexMaxPages || progressiveMaxPages || 'all', {
+        updateRemoteState: false,
+      }).then(function(items) {
+        filterItems = items && items.length ? items : rawItems;
+        filterIndexLoaded = true;
+        return filterItems;
+      }).catch(function(err) {
+        if (cfg.debug) console.warn('[QueryBlock]', cfg.key, 'filter index failed', err);
+        filterItems = rawItems;
+        filterIndexLoaded = true;
+        return filterItems;
+      }).finally(function() {
+        filterIndexPromise = null;
+      });
+
+      return filterIndexPromise;
+    }
+
     async function loadNextRemotePage(reason) {
       if (!canFetchMorePages(reason) || isFetchingMore) return false;
 
@@ -2570,6 +2613,7 @@ requestAnimationFrame(function() {
 
       try {
         rawItems = await loadSources(loadedMaxPages);
+        filterItems = rawItems;
         if (filterWrapper && typeof filterWrapper.qbRebuildSecondary === 'function') {
           filterWrapper.qbRebuildSecondary();
         }
@@ -2677,6 +2721,8 @@ requestAnimationFrame(function() {
 
     try {
       rawItems = await loadSources(loadedMaxPages);
+      filterItems = rawItems;
+      await loadCompleteFilterIndex();
       await ensureConfiguredFilterOptions();
     } catch (err) {
       if (cfg.debug) console.warn('[QueryBlock]', cfg.key, err);
@@ -2797,7 +2843,7 @@ requestAnimationFrame(function() {
     }
 
     var filterWrapper = buildFilterBar(
-      function() { return rawItems; },
+      function() { return filterItems && filterItems.length ? filterItems : rawItems; },
       cfg,
       function(f) {
         if (ioInfinite) {
@@ -2815,7 +2861,9 @@ requestAnimationFrame(function() {
       },
       target,
       function(poolGetter) {
-        return ensureConfiguredFilterOptions(poolGetter, getActiveFilterPrefixes);
+        return loadCompleteFilterIndex().then(function() {
+          return ensureConfiguredFilterOptions(poolGetter, getActiveFilterPrefixes);
+        });
       }
     );
 
