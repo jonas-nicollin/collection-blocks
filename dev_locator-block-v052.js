@@ -104,6 +104,8 @@ cfg.performance=Object.assign({
   priorityImages:true,
   maxPages:1,
   progressiveMaxPages:'all',
+  filterIndex:'complete',
+  filterIndexMaxPages:'all',
   domBatchSize:6,
   sessionCache:true,
   sessionCacheTTL:300,
@@ -1037,6 +1039,20 @@ async function init(){
     var progressiveMaxPages = cfg.performance.progressiveMaxPages || 'all';
     var sourceComplete = !!(itemState.complete || itemState.fetchError);
     var isFetchingMore = false;
+
+    if(cfg.performance.filterIndex !== false && !sourceComplete){
+      try{
+        var completeState = await fetchItemsState(cfg.performance.filterIndexMaxPages || progressiveMaxPages || 'all');
+        if(completeState && Array.isArray(completeState.items) && completeState.items.length >= items.length){
+          items = completeState.items;
+          loadedMaxPages = completeState.pagesLoaded || loadedMaxPages;
+          sourceComplete = !!(completeState.complete || completeState.fetchError);
+        }
+      }catch(filterErr){
+        log('Filter index failed:', filterErr);
+      }
+    }
+
     if(!items.length){roots.forEach(function(r){removeClasses(r, CLS_BLOCK_LOADING);addClasses(r, CLS_BLOCK_READY);r.innerHTML='<p class="'+escHtml(CLS_ERROR)+'">'+getI18n(cfg).noResults+'</p>';});return;}
 
 async function fetchMoreItems(){
