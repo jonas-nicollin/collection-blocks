@@ -1319,10 +1319,11 @@ body.sqs-edit-mode-active :where(.cb-block).lb-block {
   display: flex; flex-direction: column;
   width: 240px;   /* 240px desktop — safe */
   overflow: hidden; text-decoration: none; color: inherit;
+  background: var(--locator-popup-background, #fff);
 }
 
 :where(.cb-popup--active).lb-popup--active {
-  background: var(--locator-popup-active-background, rgba(0,0,0,.035));
+  background: var(--locator-popup-active-background, var(--locator-popup-background, #fff));
 }
 
 .lb-popup-close {
