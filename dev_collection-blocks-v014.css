@@ -1437,6 +1437,22 @@ body.sqs-edit-mode-active :where(.cb-block).lb-block {
   transform: translateY(calc(100% - var(--lb-sheet-visible)));
   transition: transform .28s ease;
   will-change: transform;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+:where(.cb-block--sheet-active).lb-block--sheet-active :where(.cb-controls).lb-controls {
+  flex: 0 0 auto;
+}
+
+:where(.cb-block--sheet-active).lb-block--sheet-active :where(.cb-grid).lb-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  padding-bottom: max(.5rem, env(safe-area-inset-bottom));
 }
 
 :where(.cb-block--sheet-active).lb-block--sheet-active:where(.cb-block--sheet-mid).lb-block--sheet-mid :where(.cb-sidebar).lb-sidebar {
