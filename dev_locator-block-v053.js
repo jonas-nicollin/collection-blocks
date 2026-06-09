@@ -76,7 +76,7 @@ var cfg=Object.assign({
   key:'locator',
   sourceCollection:{path:''},category:'',tagNumero:'Numéro',tagLieu:'Lieu',tagZone:'Zone',
   layout:'list',display:{},apiKey:'',mapCenter:null,mapZoom:null,
-  mapZoomOnSelect:16,mapStyle:null,mapOptions:{},map:{},
+  mapZoomOnSelect:16,mapStyle:null,mapId:null,mapOptions:{},map:{},
   filterMode:'dropdown',
   filterMultiple:false,
   showZoneFilter:true,
@@ -691,19 +691,25 @@ function createInstance(root,allItems,fetchMoreItems){
 
     var breakpoint=Math.max(320,Number(cfg.mobileSheet.breakpoint||1024));
     var mq=window.matchMedia?window.matchMedia('(max-width: '+(breakpoint-1)+'px)'):null;
+    if(!sidebar.id)sidebar.id='lb-sheet-'+(cfg.key||'locator')+'-'+Math.random().toString(36).slice(2,8);
+    sidebar.setAttribute('role','region');
+    sidebar.setAttribute('aria-label',(cfg.i18n&&cfg.i18n.mobileSheetLabel)||'Liste des lieux');
+
     var handle=sidebar.querySelector('.lb-sheet-handle');
     if(!handle){
       handle=document.createElement('button');
       handle.className='cb-sheet-handle lb-sheet-handle';
       handle.type='button';
-      handle.setAttribute('aria-label','Ajuster la liste');
       handle.innerHTML='<span class="cb-sheet-handle__bar lb-sheet-handle__bar" aria-hidden="true"></span>';
       sidebar.insertBefore(handle,sidebar.firstChild);
     }
+    handle.setAttribute('aria-controls',sidebar.id);
 
     var states=['collapsed','mid','expanded'];
     var state=states.indexOf(cfg.mobileSheet.initial)!==-1?cfg.mobileSheet.initial:'collapsed';
+    var lastLowerState=state==='expanded'?'mid':state;
     var isActive=false;
+    var suppressClick=false;
 
     function getViewportHeight(){
       return (window.visualViewport&&window.visualViewport.height)||window.innerHeight||700;
@@ -741,12 +747,24 @@ function createInstance(root,allItems,fetchMoreItems){
     function setState(nextState){
       if(states.indexOf(nextState)===-1)nextState='collapsed';
       state=nextState;
+      if(state!=='expanded')lastLowerState=state;
       updateViewportVars();
       states.forEach(function(s){removeClasses(root,'cb-block--sheet-'+s+' lb-block--sheet-'+s);});
       addClasses(root,'cb-block--sheet-'+state+' lb-block--sheet-'+state);
       root.setAttribute('data-lb-sheet-state',state);
+      handle.setAttribute('aria-expanded',state==='collapsed'?'false':'true');
+      handle.setAttribute('aria-label',state==='expanded'?'Réduire la liste':'Agrandir la liste');
       sidebar.style.removeProperty('--lb-sheet-visible');
       refreshMap();
+    }
+
+    function toggleSheetFromTap(){
+      if(state==='expanded'){
+        setState(lastLowerState||'mid');
+      }else{
+        lastLowerState=state;
+        setState('expanded');
+      }
     }
 
     function nearestState(visible){
@@ -760,7 +778,11 @@ function createInstance(root,allItems,fetchMoreItems){
 
     handle.addEventListener('click',function(){
       if(!isActive)return;
-      setState(state==='expanded'?'collapsed':'expanded');
+      if(suppressClick){
+        suppressClick=false;
+        return;
+      }
+      toggleSheetFromTap();
     });
 
     handle.addEventListener('pointerdown',function(event){
@@ -772,11 +794,13 @@ function createInstance(root,allItems,fetchMoreItems){
       var startVisible=stateVisible(state);
       var maxVisible=stateVisible('expanded');
       var minVisible=stateVisible('collapsed');
+      var moved=false;
 
       addClasses(root,'cb-block--sheet-dragging lb-block--sheet-dragging');
       handle.setPointerCapture&&handle.setPointerCapture(event.pointerId);
 
       function move(e){
+        if(Math.abs(e.clientY-startY)>6)moved=true;
         var next=Math.max(minVisible,Math.min(maxVisible,startVisible-(e.clientY-startY)));
         sidebar.style.setProperty('--lb-sheet-visible',next+'px');
         e.preventDefault();
@@ -789,6 +813,7 @@ function createInstance(root,allItems,fetchMoreItems){
         window.removeEventListener('pointermove',move);
         window.removeEventListener('pointerup',end);
         window.removeEventListener('pointercancel',end);
+        suppressClick=moved;
         setState(nearestState(next));
       }
 
@@ -801,11 +826,16 @@ function createInstance(root,allItems,fetchMoreItems){
       isActive=!!nextActive;
       if(isActive){
         addClasses(root,'cb-block--sheet-active lb-block--sheet-active');
+        handle.removeAttribute('aria-hidden');
+        handle.removeAttribute('tabindex');
         setState(state);
       }else{
         removeClasses(root,'cb-block--sheet-active lb-block--sheet-active cb-block--sheet-dragging lb-block--sheet-dragging');
         states.forEach(function(s){removeClasses(root,'cb-block--sheet-'+s+' lb-block--sheet-'+s);});
         root.removeAttribute('data-lb-sheet-state');
+        handle.setAttribute('aria-hidden','true');
+        handle.setAttribute('tabindex','-1');
+        handle.setAttribute('aria-expanded','false');
         sidebar.style.removeProperty('--lb-sheet-visible');
         refreshMap();
       }
@@ -828,9 +858,11 @@ function createInstance(root,allItems,fetchMoreItems){
   function buildMap(c){
     var controlPosition=google.maps&&google.maps.ControlPosition;
     var topRight=controlPosition&&controlPosition.RIGHT_TOP;
+    var configuredMapId=(cfg.map&&cfg.map.mapId)||cfg.mapId||(cfg.mapOptions&&cfg.mapOptions.mapId)||null;
     var o=Object.assign({
       center:cfg.mapCenter||{lat:48.8566,lng:2.3522},
       zoom:cfg.mapZoom||12,
+      mapId:configuredMapId||undefined,
       zoomControl:true,
       zoomControlOptions:topRight?{position:topRight}:undefined,
       mapTypeControl:false,
@@ -844,7 +876,12 @@ function createInstance(root,allItems,fetchMoreItems){
       gestureHandling:'greedy',
       clickableIcons:false
     },cfg.mapOptions||{});
-    if(cfg.mapStyle)o.styles=cfg.mapStyle;
+    if(configuredMapId){
+      delete o.styles;
+      o.mapId=configuredMapId;
+    }else if(cfg.mapStyle){
+      o.styles=cfg.mapStyle;
+    }
     map=new google.maps.Map(c,o);
     map.addListener('click',function(){mapTouched=true;closePopup();});
     map.addListener('dragstart',function(){mapTouched=true;});
