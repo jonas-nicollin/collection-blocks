@@ -93,7 +93,7 @@ cfg.mobileSheet=Object.assign({
   enabled:true,
   breakpoint:1024,
   initial:'mid',
-  collapsedHeight:96,
+  collapsedHeight:56,
   midHeight:0.4,
   expandedHeight:1
 },cfg.mobileSheet||{});
@@ -707,7 +707,6 @@ function createInstance(root,allItems,fetchMoreItems){
 
     var states=['collapsed','mid','expanded'];
     var state=states.indexOf(cfg.mobileSheet.initial)!==-1?cfg.mobileSheet.initial:'collapsed';
-    var lastLowerState=state==='expanded'?'mid':state;
     var isActive=false;
     var suppressClick=false;
 
@@ -732,7 +731,7 @@ function createInstance(root,allItems,fetchMoreItems){
       var h=getInnerHeight();
       if(targetState==='expanded')return Math.max(160,Math.min(h-16,h*Number(cfg.mobileSheet.expandedHeight||1)));
       if(targetState==='mid')return Math.max(140,Math.min(h-16,h*Number(cfg.mobileSheet.midHeight||0.4)));
-      return Math.max(64,Number(cfg.mobileSheet.collapsedHeight||96));
+      return Math.max(44,Number(cfg.mobileSheet.collapsedHeight||56));
     }
 
     function refreshMap(){
@@ -747,7 +746,6 @@ function createInstance(root,allItems,fetchMoreItems){
     function setState(nextState){
       if(states.indexOf(nextState)===-1)nextState='collapsed';
       state=nextState;
-      if(state!=='expanded')lastLowerState=state;
       updateViewportVars();
       states.forEach(function(s){removeClasses(root,'cb-block--sheet-'+s+' lb-block--sheet-'+s);});
       addClasses(root,'cb-block--sheet-'+state+' lb-block--sheet-'+state);
@@ -758,13 +756,14 @@ function createInstance(root,allItems,fetchMoreItems){
       refreshMap();
     }
 
+    function nextTapState(){
+      if(state==='collapsed')return 'mid';
+      if(state==='mid')return 'expanded';
+      return 'collapsed';
+    }
+
     function toggleSheetFromTap(){
-      if(state==='expanded'){
-        setState(lastLowerState||'mid');
-      }else{
-        lastLowerState=state;
-        setState('expanded');
-      }
+      setState(nextTapState());
     }
 
     function nearestState(visible){
