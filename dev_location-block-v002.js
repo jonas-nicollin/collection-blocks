@@ -1,5 +1,5 @@
 /*!
- * Location Block v4.0.0
+ * Location Block v4.0.0-dev.2
  * github.com/jonas-nicollin/squarespace-blocks
  *
  * Affiche les informations d'un lieu sur une page Squarespace.
@@ -31,7 +31,7 @@
 'use strict';
 
 var FOUR_HOURS = 4 * 60 * 60 * 1000;
-var VERSION = '4.0.0';
+var VERSION = '4.0.0-dev.2';
 var DEFAULT_MOUNT = '.location-card';
 var DEFAULT_COUNTRY = 'Suisse';
 var DATA_CACHE_PREFIX = 'location_block_v4_data_';
@@ -233,7 +233,7 @@ function buildImgTag(lieu){
   var c = lieu.image.split('?')[0];
   var srcset = SW.map(function(w){return c + '?format=' + w + 'w ' + w + 'w';}).join(', ');
   var pos = lieu.imagePosition || '50% 50%';
-  return '<img class="location-card__image" src="' + escHtml(c) + '?format=750w" srcset="' + escHtml(srcset) + '" sizes="(max-width:768px) 100vw, 380px" loading="lazy" decoding="async" alt="' + escHtml(lieu.title) + '" style="object-position:' + escHtml(pos) + ';">';
+  return '<img class="location-card__image cb-card__img locb-card__img" src="' + escHtml(c) + '?format=750w" srcset="' + escHtml(srcset) + '" sizes="(max-width:768px) 100vw, 380px" loading="lazy" decoding="async" alt="' + escHtml(lieu.title) + '" style="object-position:' + escHtml(pos) + ';">';
 }
 
 function getNow(cfg){
@@ -552,38 +552,38 @@ function buildHours(lieu, now, cfg){
     var displayValue = sched.type === 'closed' ? 'Fermé' : sched.label;
     var open = isToday && cfg.showStatus ? isOpen(sched, nm) : null;
     var status = (isToday && cfg.showStatus && sched.type !== 'special')
-      ? '<span class="location-card__status ' + (open ? 'is-open' : 'is-closed') + '">' + (open ? 'Ouvert' : 'Fermé') + '</span>'
+      ? '<span class="location-card__status locb-card__status ' + (open ? 'is-open' : 'is-closed') + '">' + (open ? 'Ouvert' : 'Fermé') + '</span>'
       : '';
     var hiddenClass = (!isToday && cfg.collapseHours) ? ' is-hidden' : '';
-    return '<div class="location-card__hours-row' + (isToday ? ' is-today' : '') + hiddenClass + '"><span class="location-card__hours-day">' + escHtml(DAY_FULL[day]) + '</span><span class="location-card__hours-value">' + escHtml(displayValue) + status + '</span></div>';
+    return '<div class="location-card__hours-row locb-card__hours-row' + (isToday ? ' is-today' : '') + hiddenClass + '"><span class="location-card__hours-day locb-card__hours-day">' + escHtml(DAY_FULL[day]) + '</span><span class="location-card__hours-value locb-card__hours-value">' + escHtml(displayValue) + status + '</span></div>';
   });
   var toggle = cfg.collapseHours
-    ? '<button class="location-card__hours-toggle" type="button" aria-expanded="false"><span class="location-card__hours-toggle-label">Tous les horaires</span><span class="ui-icon" aria-hidden="true">expand_more</span></button>'
+    ? '<button class="location-card__hours-toggle locb-card__hours-toggle" type="button" aria-expanded="false"><span class="location-card__hours-toggle-label locb-card__hours-toggle-label">Tous les horaires</span><span class="ui-icon locb-card__icon" aria-hidden="true">expand_more</span></button>'
     : '';
-  return '<div class="location-card__hours-panel">' + rows.join('') + toggle + '</div>';
+  return '<div class="location-card__hours-panel locb-card__hours-panel">' + rows.join('') + toggle + '</div>';
 }
 
 function buildMap(lieu){
   var q = encodeURIComponent(lieu.title + ', ' + [lieu.address1, lieu.address2, lieu.address3].filter(Boolean).join(', '));
-  return '<div class="location-card__map"><iframe class="location-card__map-iframe" src="https://maps.google.com/maps?q=' + q + '&output=embed&hl=fr&z=14&iwloc=B" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Carte - ' + escHtml(lieu.title) + '"></iframe></div>';
+  return '<div class="location-card__map locb-card__map"><iframe class="location-card__map-iframe locb-card__map-iframe" src="https://maps.google.com/maps?q=' + q + '&output=embed&hl=fr&z=14&iwloc=B" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Carte - ' + escHtml(lieu.title) + '"></iframe></div>';
 }
 
 function buildCard(lieu, cfg){
   var now = getNow(cfg);
   var imgTag = buildImgTag(lieu);
-  var titleHtml = lieu.title ? '<div class="location-card__title">' + escHtml(lieu.title) + '</div>' : '';
-  var mediaHtml = imgTag ? '<div class="location-card__media">' + imgTag + titleHtml + '</div>' : '';
+  var titleHtml = lieu.title ? '<div class="location-card__title cb-card__title locb-card__title">' + escHtml(lieu.title) + '</div>' : '';
+  var mediaHtml = imgTag ? '<div class="location-card__media cb-card__media locb-card__media">' + imgTag + titleHtml + '</div>' : '';
   var addr = [lieu.address1, lieu.address2, lieu.address3].filter(Boolean).map(escHtml).join('<br>');
   var addrHtml = lieu.mapUrl
-    ? '<a class="location-card__address-link" href="' + escHtml(lieu.mapUrl) + '" target="_blank" rel="noopener noreferrer">' + addr + '</a>'
-    : '<div class="location-card__address">' + addr + '</div>';
+    ? '<a class="location-card__address-link cb-card__link locb-card__address-link" href="' + escHtml(lieu.mapUrl) + '" target="_blank" rel="noopener noreferrer">' + addr + '</a>'
+    : '<div class="location-card__address locb-card__address">' + addr + '</div>';
   var phoneHref = telHref(lieu.phone);
-  var phoneHtml = (lieu.phone && phoneHref) ? '<div class="location-card__contact-line"><a href="' + escHtml(phoneHref) + '">' + escHtml(lieu.phone) + '</a></div>' : '';
-  var emailHtml = lieu.email ? '<div class="location-card__contact-line"><a href="mailto:' + escHtml(lieu.email) + '">' + escHtml(lieu.email) + '</a></div>' : '';
+  var phoneHtml = (lieu.phone && phoneHref) ? '<div class="location-card__contact-line locb-card__contact-line"><a href="' + escHtml(phoneHref) + '">' + escHtml(lieu.phone) + '</a></div>' : '';
+  var emailHtml = lieu.email ? '<div class="location-card__contact-line locb-card__contact-line"><a href="mailto:' + escHtml(lieu.email) + '">' + escHtml(lieu.email) + '</a></div>' : '';
   var websiteUrl = normUrl(lieu.website);
-  var websiteHtml = websiteUrl ? '<div class="location-card__contact-line"><a href="' + escHtml(websiteUrl) + '" target="_blank" rel="noopener noreferrer">' + escHtml(lieu.website) + '</a></div>' : '';
+  var websiteHtml = websiteUrl ? '<div class="location-card__contact-line locb-card__contact-line"><a href="' + escHtml(websiteUrl) + '" target="_blank" rel="noopener noreferrer">' + escHtml(lieu.website) + '</a></div>' : '';
   var instagramUrl = lieu.instagram ? 'https://instagram.com/' + lieu.instagram.replace(/^@/,'') : '';
-  var instagramHtml = (cfg.showSocialLinks && instagramUrl) ? '<div class="location-card__contact-line"><a href="' + escHtml(instagramUrl) + '" target="_blank" rel="noopener noreferrer">@' + escHtml(lieu.instagram.replace(/^@/,'')) + '</a></div>' : '';
+  var instagramHtml = (cfg.showSocialLinks && instagramUrl) ? '<div class="location-card__contact-line locb-card__contact-line"><a href="' + escHtml(instagramUrl) + '" target="_blank" rel="noopener noreferrer">@' + escHtml(lieu.instagram.replace(/^@/,'')) + '</a></div>' : '';
   var hasContact = lieu.phone || lieu.email || lieu.website || (cfg.showSocialLinks && lieu.instagram);
 
   var mapLinkTarget = '';
@@ -597,15 +597,15 @@ function buildCard(lieu, cfg){
     }
   }
   var mapLink = (cfg.showMapLink && mapLinkHref)
-    ? '<div class="location-card__maplink-wrap"><a class="location-card__maplink" href="' + mapLinkHref + '"' + mapLinkTarget + '><span>Voir sur la carte</span><span class="ui-icon" aria-hidden="true">chevron_right</span></a></div>'
+    ? '<div class="location-card__maplink-wrap locb-card__maplink-wrap"><a class="location-card__maplink cb-card__link locb-card__maplink" href="' + mapLinkHref + '"' + mapLinkTarget + '><span>Voir sur la carte</span><span class="ui-icon locb-card__icon" aria-hidden="true">chevron_right</span></a></div>'
     : '';
 
-  return '<article class="location-card__inner">' +
+  return '<article class="location-card__inner cb-card locb-card">' +
     mediaHtml +
-    '<div class="location-card__body">' +
-      '<div class="location-card__section"><span class="ui-icon" aria-hidden="true">location_on</span><div class="location-card__content">' + addrHtml + '</div></div>' +
-      '<div class="location-card__section"><span class="ui-icon" aria-hidden="true">schedule</span><div class="location-card__content">' + buildHours(lieu, now, cfg) + '</div></div>' +
-      (hasContact ? '<div class="location-card__section"><span class="ui-icon" aria-hidden="true">contact_page</span><div class="location-card__content">' + phoneHtml + emailHtml + websiteHtml + instagramHtml + '</div></div>' : '') +
+    '<div class="location-card__body cb-card__body locb-card__body">' +
+      '<div class="location-card__section cb-card__group locb-card__section"><span class="ui-icon locb-card__icon" aria-hidden="true">location_on</span><div class="location-card__content locb-card__content">' + addrHtml + '</div></div>' +
+      '<div class="location-card__section cb-card__group locb-card__section"><span class="ui-icon locb-card__icon" aria-hidden="true">schedule</span><div class="location-card__content locb-card__content">' + buildHours(lieu, now, cfg) + '</div></div>' +
+      (hasContact ? '<div class="location-card__section cb-card__group locb-card__section"><span class="ui-icon locb-card__icon" aria-hidden="true">contact_page</span><div class="location-card__content locb-card__content">' + phoneHtml + emailHtml + websiteHtml + instagramHtml + '</div></div>' : '') +
       mapLink +
     '</div>' +
     (cfg.showMap ? buildMap(lieu) : '') +
@@ -652,11 +652,12 @@ function getImgSrc(block){
 }
 
 async function renderCard(card, index, cfg){
+  card.classList.add('location-block', 'locb-block');
   var key = await getPageMatch(card, cfg);
   var lieu = key ? index[key] || null : null;
   if(!lieu){
     console.warn('Location Block v' + VERSION + ': lieu introuvable', {key: key, config: cfg.id});
-    card.innerHTML = '<p class="location-card__error">Lieu introuvable.</p>';
+    card.innerHTML = '<p class="location-card__error locb-card__error">Lieu introuvable.</p>';
     return;
   }
   if(!lieu.image){
@@ -676,7 +677,8 @@ async function initConfig(cfg){
   }catch(err){
     console.error('Location Block v' + VERSION + ':', err);
     cards.forEach(function(c){
-      c.innerHTML = '<p class="location-card__error">Impossible de charger les informations du lieu.</p>';
+      c.classList.add('location-block', 'locb-block');
+      c.innerHTML = '<p class="location-card__error locb-card__error">Impossible de charger les informations du lieu.</p>';
     });
     return;
   }
