@@ -225,6 +225,7 @@
           showLabel: true,
           order: null,
           filterFormat: null,
+          filterGranularity: null,
         };
       }
       return {
@@ -233,6 +234,7 @@
         showLabel:    p.showLabel    !== false,
         order:        p.order        || null,
         filterFormat: p.filterFormat || null,
+        filterGranularity: p.filterGranularity || null,
       };
     });
   }
@@ -255,13 +257,13 @@
   function injectLoaderStyles() {
     if (document.getElementById('qb-loader-styles')) return;
     var css = [
-      '.qb-loader{display:flex;align-items:center;justify-content:center;gap:16px;padding:3rem 1rem;min-height:6rem}',
-      '.qb-loader-dot{width:4px;height:4px;border-radius:50%;background:var(--paragraphMediumColor,currentColor);opacity:.2;animation:qb-pulse 1.2s infinite ease-in-out}',
-      '.qb-loader-dot:nth-child(1){animation-delay:0s}',
-      '.qb-loader-dot:nth-child(2){animation-delay:.4s}',
-      '.qb-loader-dot:nth-child(3){animation-delay:.8s}',
+      '.cb-loader.qb-loader{display:flex;align-items:center;justify-content:center;gap:16px;padding:3rem 1rem;min-height:6rem}',
+      '.cb-loader__dot.qb-loader__dot{width:4px;height:4px;border-radius:50%;background:var(--paragraphMediumColor,currentColor);opacity:.2;animation:qb-pulse 1.2s infinite ease-in-out}',
+      '.cb-loader__dot.qb-loader__dot:nth-child(1){animation-delay:0s}',
+      '.cb-loader__dot.qb-loader__dot:nth-child(2){animation-delay:.4s}',
+      '.cb-loader__dot.qb-loader__dot:nth-child(3){animation-delay:.8s}',
       '@keyframes qb-pulse{0%,100%{opacity:.2}33%{opacity:.7}66%{opacity:.4}}',
-      '.qb-loader--text{display:block;opacity:.5;text-align:center;padding:3rem 1rem}',
+      '.cb-loader--text.qb-loader--text{display:block;opacity:.5;text-align:center;padding:3rem 1rem}',
     ].join('');
     var s = document.createElement('style');
     s.id = 'qb-loader-styles';
@@ -446,6 +448,12 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
     for (var prefix in tags) {
       if (!Object.prototype.hasOwnProperty.call(tags, prefix) || !tags[prefix]) continue;
       if (!getTagValuesByPrefix(item, prefix).some(function(v) {
+        var selectedDatePart = getISODatePart(tags[prefix]);
+        if (selectedDatePart) {
+          var valueDatePart = getISODatePart(v);
+          if (valueDatePart && valueDatePart === selectedDatePart) return true;
+        }
+
         return norm(v) === norm(tags[prefix]);
       })) return false;
     }
@@ -469,6 +477,12 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
     return isFinite(n) ? n : null;
   }
 
+  function tryISODateValue(s) {
+    var raw = String(s || '').split('/')[0];
+    var parsed = parseISO(raw);
+    return parsed ? parsed.ts : null;
+  }
+
   function sortItems(items, sort) {
     if (!sort) return items;
 
@@ -485,9 +499,12 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
       if (typeof type === 'object' && type.tagPrefix) {
         var av = getTagValuesByPrefix(a, type.tagPrefix)[0] || '';
         var bv = getTagValuesByPrefix(b, type.tagPrefix)[0] || '';
+        var ad = tryISODateValue(av);
+        var bd = tryISODateValue(bv);
         var an = tryNum(av);
         var bn = tryNum(bv);
 
+        if (ad !== null && bd !== null) return (ad - bd) * dir;
         if (an !== null && bn !== null) return (an - bn) * dir;
         return norm(av).localeCompare(norm(bv)) * dir;
       }
@@ -603,15 +620,18 @@ var isPriority = priority === true || imgIndex < 3;
   }
 
   function buildExcerptElement(item, def) {
-    if (!item.excerpt) return null;
+    if (!item.excerpt && !item.excerptRaw) return null;
 
     def = def || {};
 
     var richExcerpt = def.richHTML === true || def.htmlMode === 'rich' || def.excerptMode === 'rich';
+    var excerptText = def.max === false
+      ? cleanHTML(item.excerptRaw || item.excerpt, { preserveLineBreaks: true })
+      : (def.max ? truncate(item.excerptRaw || item.excerpt, def.max, { preserveLineBreaks: true }) : item.excerpt);
     var utils = getCollectionUtils();
 
     if (utils && typeof utils.buildTextElement === 'function') {
-      return utils.buildTextElement(item.excerpt, {
+      return utils.buildTextElement(excerptText, {
         prefix: 'qb-card',
         role: 'excerpt',
         tag: def.tag || 'div',
@@ -633,7 +653,7 @@ var isPriority = priority === true || imgIndex < 3;
       return node;
     }
 
-    cleanHTML(item.excerpt, { preserveLineBreaks: true }).split(/\n/).forEach(function(line) {
+    cleanHTML(excerptText, { preserveLineBreaks: true }).split(/\n/).forEach(function(line) {
       if (!line) return;
       var lineNode = el(def.lineTag || 'span', {
         class: qCardClass('cb-card__excerpt-line', 'qb-card__excerpt-line') + (def.lineClassName ? ' ' + def.lineClassName : ''),
@@ -642,7 +662,7 @@ var isPriority = priority === true || imgIndex < 3;
       node.appendChild(lineNode);
     });
 
-    if (!node.hasChildNodes()) node.textContent = item.excerpt;
+    if (!node.hasChildNodes()) node.textContent = excerptText;
     return node;
   }
 
@@ -787,6 +807,11 @@ var isPriority = priority === true || imgIndex < 3;
       'data-qb-index': String(index),
     });
 
+    if (getLightboxOptions(cfg)) {
+      card.dataset.qbLightboxKey = getLightboxItemKey(item, index);
+      card.setAttribute('aria-haspopup', 'dialog');
+    }
+
     if (link) {
       card.href = item.fullUrl;
       var openInNewTab = disp.openInNewTab === true || cfg.openInNewTab === true;
@@ -896,6 +921,166 @@ var isPriority = priority === true || imgIndex < 3;
 
     card.appendChild(body);
     return card;
+  }
+
+  function getLightboxOptions(cfg) {
+    var disp = (cfg && cfg.display) || {};
+    var raw = (cfg && cfg.lightbox) || disp.lightbox || null;
+    if (!raw || raw.enabled !== true) return null;
+
+    return {
+      enabled: true,
+      groups: Array.isArray(raw.groups) ? raw.groups : null,
+      showLink: raw.showLink !== false,
+      linkLabel: raw.linkLabel || 'Voir la page',
+      closeLabel: raw.closeLabel || 'Fermer',
+      className: [cfg && cfg.classes, raw.className],
+    };
+  }
+
+  function getLightboxItemKey(item, index) {
+    return [item.fullUrl || '', item.urlId || '', String(index == null ? '' : index)].join('::');
+  }
+
+  function isModifiedNavigation(event) {
+    return event.defaultPrevented ||
+      (event.button && event.button !== 0) ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey;
+  }
+
+  function addLightboxClasses(node, classes) {
+    if (node) addUiClasses(node, classes);
+    return node;
+  }
+
+  function decorateLightboxChild(node, definition) {
+    if (!node) return node;
+
+    var type = typeof definition === 'string' ? definition : (definition && definition.type);
+
+    if (type === 'image') {
+      addLightboxClasses(node, 'cb-lightbox__media qb-lightbox__media');
+      var img = node.querySelector && node.querySelector('img');
+      if (img) addLightboxClasses(img, 'cb-lightbox__img qb-lightbox__img');
+    } else if (type === 'title') {
+      addLightboxClasses(node, 'cb-lightbox__title qb-lightbox__title');
+    } else if (type === 'excerpt') {
+      addLightboxClasses(node, 'cb-lightbox__excerpt qb-lightbox__excerpt');
+    } else if (type === 'location') {
+      addLightboxClasses(node, 'cb-lightbox__location qb-lightbox__location');
+    } else if (type === 'categories') {
+      addLightboxClasses(node, 'cb-lightbox__meta qb-lightbox__meta');
+    } else if (type === 'tagPrefix') {
+      addLightboxClasses(node, 'cb-lightbox__tag-field qb-lightbox__tag-field');
+    }
+
+    return node;
+  }
+
+  function buildLightboxGroups(item, cfg, options) {
+    var groups = options.groups || [
+      { role: 'media', children: ['image'] },
+      { role: 'body', children: ['title', 'categories', { type: 'excerpt', max: false }, 'location'] },
+    ];
+
+    var fragment = document.createDocumentFragment();
+
+    groups.forEach(function(group) {
+      var wrapper = el(group.tag || 'div', {
+        class: qCardClass('cb-lightbox__group', 'qb-lightbox__group'),
+      });
+
+      if (group.role) addUiClasses(wrapper, ROLE_CLASS[group.role] || '');
+      if (group.role === 'body') {
+        addUiClasses(wrapper, 'cb-lightbox__content qb-lightbox__content');
+      } else if (group.role) {
+        addUiClasses(wrapper, qCardClass('cb-lightbox__' + group.role, 'qb-lightbox__' + group.role));
+      }
+      if (group.className) addUiClasses(wrapper, group.className);
+      if (group.inline === true) addUiClasses(wrapper, 'cb-card__group--inline qb-card__group--inline');
+
+      (group.children || []).forEach(function(child) {
+        var descriptor = typeof child === 'string' ? { type: child } : Object.assign({}, child || {});
+        if (descriptor.type === 'excerpt' && descriptor.max === undefined) descriptor.max = false;
+
+        var node = buildChild(descriptor, item, 0);
+        if (node) wrapper.appendChild(decorateLightboxChild(node, descriptor));
+      });
+
+      if (wrapper.hasChildNodes()) fragment.appendChild(wrapper);
+    });
+
+    if (options.showLink !== false && item.fullUrl) {
+      var link = el('a', { class: 'cb-lightbox__link qb-lightbox__link', href: item.fullUrl });
+      link.textContent = options.linkLabel;
+      if ((cfg.display && cfg.display.openInNewTab === true) || cfg.openInNewTab === true) {
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+      }
+
+      var linkWrap = el('div', { class: 'cb-lightbox__footer qb-lightbox__footer' });
+      linkWrap.appendChild(link);
+      fragment.appendChild(linkWrap);
+    }
+
+    return fragment;
+  }
+
+  function getOrCreateLightbox(target, cfg) {
+    if (target.__qbLightbox) return target.__qbLightbox;
+
+    var options = getLightboxOptions(cfg);
+    var utils = getCollectionUtils();
+    if (!options || !utils || typeof utils.createLightbox !== 'function') return null;
+
+    target.__qbLightbox = utils.createLightbox({
+      prefix: 'qb',
+      closeLabel: options.closeLabel,
+      className: options.className,
+      ariaLabel: (cfg && cfg.heading && cfg.heading.text) || (cfg && cfg.key) || 'Query content',
+    });
+
+    return target.__qbLightbox;
+  }
+
+  function setupLightbox(target, cfg, items) {
+    var options = getLightboxOptions(cfg);
+    if (!options || !target) return;
+
+    target.__qbLightboxItems = new Map();
+    items.forEach(function(item, index) {
+      target.__qbLightboxItems.set(getLightboxItemKey(item, index), item);
+    });
+
+    if (target.__qbLightboxBound) return;
+    target.__qbLightboxBound = true;
+
+    target.addEventListener('click', function(event) {
+      if (isModifiedNavigation(event)) return;
+      if (!event.target || typeof event.target.closest !== 'function') return;
+
+      var card = event.target.closest('.qb-card[data-qb-lightbox-key]');
+      if (!card || !target.contains(card)) return;
+
+      var item = target.__qbLightboxItems && target.__qbLightboxItems.get(card.dataset.qbLightboxKey);
+      if (!item) return;
+
+      var lightbox = getOrCreateLightbox(target, cfg);
+      if (!lightbox) return;
+
+      event.preventDefault();
+
+      lightbox.open({
+        content: buildLightboxGroups(item, cfg, options),
+        trigger: card,
+        closeLabel: options.closeLabel,
+        className: options.className,
+        ariaLabel: item.title || (cfg && cfg.key) || 'Query content',
+      });
+    });
   }
 
   /* ════════════════════════════════════
@@ -1271,10 +1456,11 @@ var isPriority = priority === true || imgIndex < 3;
     })();
 
     var gbCfg = cfg.display && cfg.display.groupBy;
+    var hasDateKeys = orderedKeys.some(isDateKey);
     var useSmartDate = gbCfg &&
       gbCfg.groupByDay &&
       gbCfg.highlightToday !== false &&
-      isDateKey(orderedKeys[0] || '');
+      hasDateKeys;
 
     var sortedKeys;
 
@@ -1288,6 +1474,13 @@ var isPriority = priority === true || imgIndex < 3;
       }).sort().reverse();
 
       sortedKeys = futureKeys.concat(pastKeys);
+    } else if (gbCfg && gbCfg.groupByDay && gbCfg.highlightToday === false && hasDateKeys) {
+      var dateKeys = orderedKeys.filter(isDateKey).sort();
+      var otherKeys = sortGroupKeys(orderedKeys.filter(function(k) {
+        return !isDateKey(k);
+      }), groupOrder);
+
+      sortedKeys = dateKeys.concat(otherKeys);
     } else {
       sortedKeys = sortGroupKeys(orderedKeys, groupOrder);
     }
@@ -1408,6 +1601,41 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       if (at !== null && bt !== null) return at - bt;
       return at !== null ? -1 : bt !== null ? 1 : norm(a).localeCompare(norm(b));
     });
+  }
+
+  function isDatePrefix(prefix, datePrefix) {
+    return !!(datePrefix && norm(prefix) === norm(datePrefix));
+  }
+
+  function shouldCollapseDateFilter(pd, datePrefix, format) {
+    if (!pd || !isDatePrefix(pd.prefix, datePrefix)) return false;
+
+    var granularity = String(pd.filterGranularity || '').toLowerCase();
+    if (granularity === 'value' || granularity === 'exact' || granularity === 'time') return false;
+    if (granularity === 'day') return true;
+
+    var fmt = format || 'day';
+    return fmt === 'day' ||
+      fmt === 'date' ||
+      fmt === 'short' ||
+      fmt === 'numeric';
+  }
+
+  function collapseDateFilterValues(vals) {
+    var seen = {};
+    var out = [];
+
+    vals.forEach(function(value) {
+      var datePart = getISODatePart(value);
+      var key = datePart || value;
+      var seenKey = norm(key);
+
+      if (seen[seenKey]) return;
+      seen[seenKey] = true;
+      out.push(key);
+    });
+
+    return out;
   }
 
   /* ════════════════════════════════════
@@ -1859,11 +2087,13 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
           return a.concat(getTagValuesByPrefix(i, pd.prefix));
         }, []).filter(Boolean), norm);
 
+        var fmt = pd.filterFormat || (datePrefix && norm(pd.prefix) === norm(datePrefix) ? 'day' : null);
         var vals = sortTagValues(raw, pd.prefix, datePrefix);
+        var collapseByDay = shouldCollapseDateFilter(pd, datePrefix, fmt);
 
+        if (collapseByDay) vals = collapseDateFilterValues(vals);
         if (pd.order) vals = applyCustomOrder(vals, pd.order);
 
-        var fmt = pd.filterFormat || (datePrefix && norm(pd.prefix) === norm(datePrefix) ? 'day' : null);
         var displayVals = fmt ? vals.map(function(v) {
           return formatISOTag(v, fmt) || v;
         }) : vals;
@@ -2157,6 +2387,8 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       lazyInit: true,
       maxPages: 1,
       progressiveMaxPages: 'all',
+      filterIndex: 'complete',
+      filterIndexMaxPages: 'all',
       sessionCache: true,
       sessionCacheTTL: 300,
       domBatchSize: 6,
@@ -2239,6 +2471,9 @@ requestAnimationFrame(function() {
 });
 
         var rawItems = [];
+    var filterItems = [];
+    var filterIndexLoaded = false;
+    var filterIndexPromise = null;
     var sourceList = Array.isArray(cfg.sources) ? cfg.sources : [];
 
     var initialMaxPages = perf.maxPages || 1;
@@ -2290,7 +2525,8 @@ requestAnimationFrame(function() {
       }
     }
 
-    async function loadSources(maxPagesValue) {
+    async function loadSources(maxPagesValue, options) {
+      options = options || {};
       var results = await Promise.all(sourceList.map(function(src) {
         var stripFields = src.stripFields;
         if (stripFields === undefined) stripFields = perf.stripFields;
@@ -2320,7 +2556,9 @@ requestAnimationFrame(function() {
         merged.push.apply(merged, r.items || []);
       });
 
-      updateRemoteLoadedState(states, maxPagesValue);
+      if (options.updateRemoteState !== false) {
+        updateRemoteLoadedState(states, maxPagesValue);
+      }
 
       merged = uniqBy(merged, function(i) {
         return i.fullUrl || i.id;
@@ -2332,6 +2570,41 @@ requestAnimationFrame(function() {
       return merged;
     }
 
+    function shouldLoadCompleteFilterIndex() {
+      if (!fc || cfg.filters === false) return false;
+      if (perf.filterIndex === false) return false;
+      if (perf.filterIndex === 'progressive') return false;
+      return true;
+    }
+
+    async function loadCompleteFilterIndex() {
+      if (!shouldLoadCompleteFilterIndex()) {
+        filterItems = rawItems;
+        filterIndexLoaded = true;
+        return filterItems;
+      }
+
+      if (filterIndexLoaded) return filterItems;
+      if (filterIndexPromise) return filterIndexPromise;
+
+      filterIndexPromise = loadSources(perf.filterIndexMaxPages || progressiveMaxPages || 'all', {
+        updateRemoteState: false,
+      }).then(function(items) {
+        filterItems = items && items.length ? items : rawItems;
+        filterIndexLoaded = true;
+        return filterItems;
+      }).catch(function(err) {
+        if (cfg.debug) console.warn('[QueryBlock]', cfg.key, 'filter index failed', err);
+        filterItems = rawItems;
+        filterIndexLoaded = true;
+        return filterItems;
+      }).finally(function() {
+        filterIndexPromise = null;
+      });
+
+      return filterIndexPromise;
+    }
+
     async function loadNextRemotePage(reason) {
       if (!canFetchMorePages(reason) || isFetchingMore) return false;
 
@@ -2340,6 +2613,7 @@ requestAnimationFrame(function() {
 
       try {
         rawItems = await loadSources(loadedMaxPages);
+        filterItems = rawItems;
         if (filterWrapper && typeof filterWrapper.qbRebuildSecondary === 'function') {
           filterWrapper.qbRebuildSecondary();
         }
@@ -2447,6 +2721,8 @@ requestAnimationFrame(function() {
 
     try {
       rawItems = await loadSources(loadedMaxPages);
+      filterItems = rawItems;
+      await loadCompleteFilterIndex();
       await ensureConfiguredFilterOptions();
     } catch (err) {
       if (cfg.debug) console.warn('[QueryBlock]', cfg.key, err);
@@ -2567,7 +2843,7 @@ requestAnimationFrame(function() {
     }
 
     var filterWrapper = buildFilterBar(
-      function() { return rawItems; },
+      function() { return filterItems && filterItems.length ? filterItems : rawItems; },
       cfg,
       function(f) {
         if (ioInfinite) {
@@ -2585,7 +2861,9 @@ requestAnimationFrame(function() {
       },
       target,
       function(poolGetter) {
-        return ensureConfiguredFilterOptions(poolGetter, getActiveFilterPrefixes);
+        return loadCompleteFilterIndex().then(function() {
+          return ensureConfiguredFilterOptions(poolGetter, getActiveFilterPrefixes);
+        });
       }
     );
 
@@ -2756,6 +3034,8 @@ if (canAppendIncrementally) {
           prevCount: prevCardCount,
         });
       }
+
+      setupLightbox(target, cfgForRender, shown);
 
       if (headingResult.ctaBelowEl) {
         var existing = root.querySelector('.qb-heading__cta-below');

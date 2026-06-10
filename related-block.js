@@ -1196,10 +1196,149 @@
         if (items.length === 1) addClasses(section, "cb-block--single-item rb-block--single-item");
         if (items.length > 1) addClasses(section, "cb-block--multiple-items rb-block--multiple-items");
     }
-    function buildCard(item, CFG, extraClasses, currentItem) {
+    function getLightboxOptions(CFG) {
+        const raw = CFG.lightbox || CFG.display?.lightbox || null;
+        if (!raw || raw.enabled !== true) return null;
+        return {
+            enabled: true,
+            showImage: raw.showImage ?? CFG.display?.showImage ?? true,
+            showTitle: raw.showTitle ?? CFG.display?.showTitle ?? true,
+            showCategories: raw.showCategories ?? CFG.display?.showCategories ?? false,
+            showTagPrefixFields: raw.showTagPrefixFields ?? true,
+            showExcerpt: raw.showExcerpt ?? CFG.display?.showExcerpt ?? false,
+            showLocation: raw.showLocation ?? CFG.display?.showLocation ?? false,
+            showLink: raw.showLink ?? true,
+            linkLabel: raw.linkLabel || "Voir la page",
+            closeLabel: raw.closeLabel || "Fermer",
+            className: [ CFG.classes?.block || "", raw.className || "" ]
+        };
+    }
+    function getLightboxItemKey(item, index) {
+        return [ item.fullUrl || "", item.urlId || "", String(index ?? "") ].join("::");
+    }
+    function isModifiedNavigation(event) {
+        return event.defaultPrevented || event.button && event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+    }
+    function addLightboxClass(node, classes) {
+        if (node) addClasses(node, classes);
+        return node;
+    }
+    function buildLightboxContent(item, CFG, options) {
+        const fragment = document.createDocumentFragment();
+        const mediaCfg = {
+            ...CFG,
+            display: {
+                ...(CFG.display || {}),
+                showImage: options.showImage !== false
+            }
+        };
+        if (options.showImage !== false && item.assetUrl) {
+            const media = buildImageElement(item, mediaCfg);
+            if (media) {
+                addLightboxClass(media, "cb-lightbox__media rb-lightbox__media");
+                const img = media.querySelector("img");
+                if (img) addLightboxClass(img, "cb-lightbox__img rb-lightbox__img");
+                fragment.appendChild(media);
+            }
+        }
+        const content = document.createElement("div");
+        content.className = "cb-lightbox__content rb-lightbox__content";
+        if (options.showTitle !== false && item.title) {
+            content.appendChild(addLightboxClass(buildTitleElement(item), "cb-lightbox__title rb-lightbox__title"));
+        }
+        if (options.showCategories === true) {
+            const meta = buildMetaElement(item);
+            if (meta) content.appendChild(addLightboxClass(meta, "cb-lightbox__meta rb-lightbox__meta"));
+        }
+        if (options.showTagPrefixFields !== false) {
+            buildTagPrefixElements(item, CFG).forEach(node => {
+                content.appendChild(addLightboxClass(node, "cb-lightbox__tag-field rb-lightbox__tag-field"));
+            });
+        }
+        if (options.showExcerpt === true && item.excerpt) {
+            const excerpt = buildExcerptElement(item, {
+                ...CFG,
+                display: {
+                    ...(CFG.display || {}),
+                    showExcerpt: true
+                }
+            }, {
+                tag: "div"
+            });
+            if (excerpt) content.appendChild(addLightboxClass(excerpt, "cb-lightbox__excerpt rb-lightbox__excerpt"));
+        }
+        if (options.showLocation === true && item.locationText) {
+            const location = buildLocationElement(item);
+            if (location) content.appendChild(addLightboxClass(location, "cb-lightbox__location rb-lightbox__location"));
+        }
+        if (options.showLink !== false && item.fullUrl) {
+            const link = document.createElement("a");
+            link.className = "cb-lightbox__link rb-lightbox__link";
+            link.href = item.fullUrl;
+            link.textContent = options.linkLabel;
+            if (CFG.display?.openInNewTab === true || CFG.openInNewTab === true) {
+                link.target = "_blank";
+                link.rel = "noopener noreferrer";
+            }
+            content.appendChild(link);
+        }
+        fragment.appendChild(content);
+        return fragment;
+    }
+    function getOrCreateLightbox(section, CFG) {
+        if (section.__rbLightbox) return section.__rbLightbox;
+        const options = getLightboxOptions(CFG);
+        const utils = getCollectionUtils();
+        if (!utils || typeof utils.createLightbox !== "function") return null;
+        section.__rbLightbox = utils.createLightbox({
+            prefix: "rb",
+            closeLabel: options.closeLabel,
+            className: options.className,
+            ariaLabel: CFG.heading || CFG.headingSingular || "Related content"
+        });
+        return section.__rbLightbox;
+    }
+    function openLightbox(section, CFG, item, trigger) {
+        const options = getLightboxOptions(CFG);
+        if (!options) return;
+        const lightbox = getOrCreateLightbox(section, CFG);
+        if (!lightbox) return;
+        lightbox.open({
+            content: buildLightboxContent(item, CFG, options),
+            trigger: trigger,
+            closeLabel: options.closeLabel,
+            className: options.className,
+            ariaLabel: item.title || CFG.heading || CFG.headingSingular || "Related content"
+        });
+    }
+    function setupLightbox(section, CFG, items) {
+        const options = getLightboxOptions(CFG);
+        if (!options || !section) return;
+        section.__rbLightboxItems = new Map();
+        items.forEach((item, index) => {
+            section.__rbLightboxItems.set(getLightboxItemKey(item, index), item);
+        });
+        if (section.__rbLightboxBound) return;
+        section.__rbLightboxBound = true;
+        section.addEventListener("click", event => {
+            if (isModifiedNavigation(event)) return;
+            if (!event.target || typeof event.target.closest !== "function") return;
+            const card = event.target.closest(".rb-card[data-rb-lightbox-key]");
+            if (!card || !section.contains(card)) return;
+            const item = section.__rbLightboxItems?.get(card.dataset.rbLightboxKey);
+            if (!item) return;
+            event.preventDefault();
+            openLightbox(section, CFG, item, card);
+        });
+    }
+    function buildCard(item, CFG, extraClasses, currentItem, index) {
         const card = document.createElement("a");
         card.className = "cb-card rb-card";
         card.href = item.fullUrl || CFG.sourceCollection.path + "/" + item.urlId;
+        if (getLightboxOptions(CFG)) {
+            card.dataset.rbLightboxKey = getLightboxItemKey(item, index);
+            card.setAttribute("aria-haspopup", "dialog");
+        }
         if (CFG.display?.openInNewTab === true || CFG.openInNewTab === true) {
             card.target = "_blank";
             card.rel = "noopener noreferrer";
@@ -1279,7 +1418,7 @@
         if (count === 1) addClasses(list, "cb-grid--single rb-grid--single");
         if (count > 1) addClasses(list, "cb-grid--multiple rb-grid--multiple");
         const extraClasses = String(CFG.classes?.block || "").split(/\s+/).map(s => s.trim()).filter(Boolean);
-        items.forEach(item => list.appendChild(buildCard(item, CFG, extraClasses, currentItem)));
+        items.forEach((item, index) => list.appendChild(buildCard(item, CFG, extraClasses, currentItem, index)));
         return list;
     }
     function replaceBlockContent(section, items, CFG, currentItem) {
@@ -1291,6 +1430,7 @@
         inner.appendChild(buildList(items, CFG, currentItem));
         section.classList.remove("cb-block--loading", "rb-block--loading");
         section.classList.add("cb-block--ready", "rb-block--ready");
+        setupLightbox(section, CFG, items);
         applyStateClasses(section);
     }
     function replaceBlockWithEmptyState(section, CFG) {
@@ -1325,6 +1465,7 @@
         if (heading) inner.appendChild(heading);
         inner.appendChild(buildList(items, CFG, currentItem));
         section.appendChild(inner);
+        setupLightbox(section, CFG, items);
         applyStateClasses(section);
         return section;
     }
