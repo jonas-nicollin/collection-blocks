@@ -1421,7 +1421,7 @@ body.sqs-edit-mode-active :where(.cb-block).lb-block {
 }
 
 :where(.cb-block--sheet-active).lb-block--sheet-active :where(.cb-sidebar).lb-sidebar {
-  --lb-sheet-visible: var(--locator-sheet-collapsed, 96px);
+  --lb-sheet-visible: var(--locator-sheet-collapsed, 56px);
   position: absolute;
   left: 0;
   right: 0;
@@ -1475,8 +1475,8 @@ body.sqs-edit-mode-active :where(.cb-block).lb-block {
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  min-height: 2rem;
-  padding: .55rem 0 .35rem;
+  min-height: var(--locator-sheet-handle-height, 3.5rem);
+  padding: 0;
   cursor: grab;
   touch-action: none;
 }
@@ -1486,8 +1486,8 @@ body.sqs-edit-mode-active :where(.cb-block).lb-block {
 }
 
 :where(.cb-sheet-handle__bar).lb-sheet-handle__bar {
-  width: 2.75rem;
-  height: .25rem;
+  width: 3rem;
+  height: .3rem;
   border-radius: 999px;
   background: currentColor;
   opacity: .22;
