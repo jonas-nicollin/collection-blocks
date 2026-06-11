@@ -1,5 +1,5 @@
 /*!
- * Location Block v4.0.0-dev.3
+ * Location Block v4.0.0-dev.4
  * github.com/jonas-nicollin/squarespace-blocks
  *
  * Affiche les informations d'un lieu sur une page Squarespace.
@@ -28,7 +28,7 @@
 'use strict';
 
 var FOUR_HOURS = 4 * 60 * 60 * 1000;
-var VERSION = '4.0.0-dev.3';
+var VERSION = '4.0.0-dev.4';
 var DEFAULT_MOUNT = '.location-block';
 var DEFAULT_COUNTRY = 'Suisse';
 var DATA_CACHE_PREFIX = 'location_block_v4_data_';
@@ -95,6 +95,9 @@ var DEFAULT_CONFIG = {
     staleWhileRevalidate: true
   },
   showMap: true,
+  lazyMap: false,
+  lazyMapRootMargin: '400px',
+  lazyMapPlaceholder: 'Carte',
   showMapLink: true,
   mapLinkUrl: 'auto',
   showStatus: true,
@@ -559,9 +562,22 @@ function buildHours(lieu, now, cfg){
   return '<div class="locb-card__hours-panel">' + rows.join('') + toggle + '</div>';
 }
 
-function buildMap(lieu){
+function getMapSrc(lieu){
   var q = encodeURIComponent(lieu.title + ', ' + [lieu.address1, lieu.address2, lieu.address3].filter(Boolean).join(', '));
-  return '<div class="locb-card__map"><iframe class="locb-card__map-iframe" src="https://maps.google.com/maps?q=' + q + '&output=embed&hl=fr&z=14&iwloc=B" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Carte - ' + escHtml(lieu.title) + '"></iframe></div>';
+  return 'https://maps.google.com/maps?q=' + q + '&output=embed&hl=fr&z=14&iwloc=B';
+}
+
+function buildMapIframe(src, title){
+  return '<iframe class="locb-card__map-iframe" src="' + escHtml(src) + '" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="' + escHtml(title) + '"></iframe>';
+}
+
+function buildMap(lieu, cfg){
+  var src = getMapSrc(lieu);
+  var title = 'Carte - ' + lieu.title;
+  if(cfg.lazyMap){
+    return '<div class="locb-card__map locb-card__map--lazy" data-map-src="' + escHtml(src) + '" data-map-title="' + escHtml(title) + '" aria-label="' + escHtml(title) + '"><div class="locb-card__map-placeholder">' + escHtml(cfg.lazyMapPlaceholder || 'Carte') + '</div></div>';
+  }
+  return '<div class="locb-card__map">' + buildMapIframe(src, title) + '</div>';
 }
 
 function buildCard(lieu, cfg){
@@ -604,8 +620,35 @@ function buildCard(lieu, cfg){
       (hasContact ? '<div class="cb-card__group locb-card__section"><span class="ui-icon locb-card__icon" aria-hidden="true">contact_page</span><div class="locb-card__content">' + phoneHtml + emailHtml + websiteHtml + instagramHtml + '</div></div>' : '') +
       mapLink +
     '</div>' +
-    (cfg.showMap ? buildMap(lieu) : '') +
+    (cfg.showMap ? buildMap(lieu, cfg) : '') +
   '</article>';
+}
+
+function loadLazyMap(map){
+  if(!map || map.dataset.mapLoaded === 'true') return;
+  var src = map.getAttribute('data-map-src');
+  if(!src) return;
+  var title = map.getAttribute('data-map-title') || 'Carte';
+  map.innerHTML = buildMapIframe(src, title);
+  map.dataset.mapLoaded = 'true';
+}
+
+function bindLazyMaps(card, cfg){
+  if(!cfg.lazyMap) return;
+  var maps = Array.from(card.querySelectorAll('.locb-card__map--lazy'));
+  if(!maps.length) return;
+  if(!('IntersectionObserver' in window)){
+    maps.forEach(loadLazyMap);
+    return;
+  }
+  var observer = new IntersectionObserver(function(entries){
+    entries.forEach(function(entry){
+      if(!entry.isIntersecting) return;
+      loadLazyMap(entry.target);
+      observer.unobserve(entry.target);
+    });
+  }, {rootMargin: cfg.lazyMapRootMargin || '400px'});
+  maps.forEach(function(map){observer.observe(map);});
 }
 
 function bindToggle(card){
@@ -662,6 +705,7 @@ async function renderCard(card, index, cfg){
   }
   card.innerHTML = buildCard(lieu, cfg);
   bindToggle(card);
+  bindLazyMaps(card, cfg);
 }
 
 async function initConfig(cfg){
