@@ -1,5 +1,5 @@
 /*!
- * Location Block v4.0.0-dev.4
+ * Location Block v4.0.0-dev.5
  * github.com/jonas-nicollin/squarespace-blocks
  *
  * Affiche les informations d'un lieu sur une page Squarespace.
@@ -28,7 +28,7 @@
 'use strict';
 
 var FOUR_HOURS = 4 * 60 * 60 * 1000;
-var VERSION = '4.0.0-dev.4';
+var VERSION = '4.0.0-dev.5';
 var DEFAULT_MOUNT = '.location-block';
 var DEFAULT_COUNTRY = 'Suisse';
 var DATA_CACHE_PREFIX = 'location_block_v4_data_';
@@ -156,6 +156,17 @@ function mergeObjects(a, b){
   return out;
 }
 
+function mergeColumns(defaults, overrides){
+  var out = {};
+  Object.keys(defaults || {}).forEach(function(key){
+    out[key] = [].concat(defaults[key] || []);
+  });
+  Object.keys(overrides || {}).forEach(function(key){
+    out[key] = [].concat(overrides[key] || [], out[key] || []);
+  });
+  return out;
+}
+
 function normalizeSource(raw){
   if(raw.source && typeof raw.source === 'object'){
     return {
@@ -188,7 +199,7 @@ function normalizeConfig(raw, index){
   cfg.id = cfg.id || raw.name || ('location-block-' + index);
   cfg.mount = raw.mount || raw.selector || DEFAULT_MOUNT;
   cfg.source = normalizeSource(raw);
-  cfg.columns = mergeObjects(DEFAULT_COLUMNS, raw.columns || raw.columnMap || {});
+  cfg.columns = mergeColumns(DEFAULT_COLUMNS, raw.columns || raw.columnMap || {});
   cfg.match = normalizeMatch(raw.match, raw);
   cfg.cache = mergeObjects(DEFAULT_CONFIG.cache, raw.cache || {});
   if(raw.cacheTTL != null) cfg.cache.ttl = raw.cacheTTL;
@@ -445,7 +456,7 @@ async function fetchLocations(cfg){
     }else if(type === 'json' || type === 'sheetbest'){
       if(!source.url) throw new Error('source.url manquant pour la source JSON');
       var data = await fetchJson(source.url);
-      rows = Array.isArray(data) ? data : (data.locations || data.lieux || data.result || []);
+      rows = Array.isArray(data) ? data : (data.items || data.locations || data.lieux || data.result || []);
     }else{
       throw new Error('source.type inconnu: ' + type);
     }
