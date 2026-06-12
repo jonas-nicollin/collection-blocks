@@ -1,5 +1,5 @@
 /*!
- * Location Block v4.0.0-dev.5
+ * Location Block v4.0.0-dev.6
  * github.com/jonas-nicollin/squarespace-blocks
  *
  * Affiche les informations d'un lieu sur une page Squarespace.
@@ -28,7 +28,7 @@
 'use strict';
 
 var FOUR_HOURS = 4 * 60 * 60 * 1000;
-var VERSION = '4.0.0-dev.5';
+var VERSION = '4.0.0-dev.6';
 var DEFAULT_MOUNT = '.location-block';
 var DEFAULT_COUNTRY = 'Suisse';
 var DATA_CACHE_PREFIX = 'location_block_v4_data_';
@@ -95,6 +95,7 @@ var DEFAULT_CONFIG = {
     staleWhileRevalidate: true
   },
   showMap: true,
+  mapQuery: 'coordinates-first',
   lazyMap: false,
   lazyMapRootMargin: '400px',
   lazyMapPlaceholder: 'Carte',
@@ -501,8 +502,37 @@ function getCardMatch(card, cfg){
   return normalizeMatchValue(value, cfg.match.normalize);
 }
 
-async function fetchPageJson(){
-  var path = window.location.pathname || '/';
+function getUrlPath(value){
+  try{
+    var url = new URL(value, window.location.origin);
+    return url.pathname || '/';
+  }catch(_){
+    return '';
+  }
+}
+
+function getPageJsonCandidatePaths(){
+  var paths = [];
+  function add(path){
+    if(!path || paths.indexOf(path) !== -1) return;
+    paths.push(path);
+  }
+
+  add(window.location.pathname || '/');
+
+  var canonical = document.querySelector('link[rel="canonical"]');
+  if(canonical) add(getUrlPath(canonical.getAttribute('href') || ''));
+
+  var ogUrl = document.querySelector('meta[property="og:url"], meta[name="og:url"]');
+  if(ogUrl) add(getUrlPath(ogUrl.getAttribute('content') || ''));
+
+  if(document.referrer) add(getUrlPath(document.referrer));
+
+  return paths;
+}
+
+async function fetchPageJson(path){
+  path = path || window.location.pathname || '/';
   if(!PAGE_JSON_PROMISES[path]){
     PAGE_JSON_PROMISES[path] = fetch(path + '?format=json', {cache: 'default'}).then(function(res){
       if(!res.ok) throw new Error('JSON page inaccessible (' + res.status + ')');
@@ -512,10 +542,53 @@ async function fetchPageJson(){
   return PAGE_JSON_PROMISES[path];
 }
 
+async function fetchFirstPageJson(){
+  var paths = getPageJsonCandidatePaths();
+  var lastError = null;
+  for(var i = 0; i < paths.length; i++){
+    try{
+      return await fetchPageJson(paths[i]);
+    }catch(err){
+      lastError = err;
+    }
+  }
+  if(lastError) throw lastError;
+  throw new Error('Aucun chemin JSON de page disponible');
+}
+
 function pickPageValues(json, source){
   var item = json && json.item ? json.item : {};
   if(source === 'categories') return item.categories || json.categories || [];
   return item.tags || json.tags || [];
+}
+
+function getContextObjects(){
+  var ctx;
+  try{
+    ctx = window.Static && window.Static.SQUARESPACE_CONTEXT;
+  }catch(_){
+    ctx = null;
+  }
+  if(!ctx) return [];
+  return [
+    ctx.item,
+    ctx.collectionItem,
+    ctx.currentItem,
+    ctx.page,
+    ctx.currentPage,
+    ctx
+  ].filter(Boolean);
+}
+
+function pickContextValues(source){
+  var key = source === 'categories' ? 'categories' : 'tags';
+  var objects = getContextObjects();
+  for(var i = 0; i < objects.length; i++){
+    var obj = objects[i];
+    if(Array.isArray(obj[key]) && obj[key].length) return obj[key];
+    if(obj.item && Array.isArray(obj.item[key]) && obj.item[key].length) return obj.item[key];
+  }
+  return [];
 }
 
 function getValueByPrefix(values, prefix){
@@ -540,8 +613,13 @@ async function getPageMatch(card, cfg){
   if(metaMatch) return metaMatch;
 
   if(!cfg.useFetchForSlug) return null;
+
+  var contextValues = pickContextValues(cfg.match.pageSource || 'tags');
+  var contextFound = getValueByPrefix(contextValues, cfg.match.prefix);
+  if(contextFound) return normalizeMatchValue(contextFound, cfg.match.normalize);
+
   try{
-    var json = await fetchPageJson();
+    var json = await fetchFirstPageJson();
     var values = pickPageValues(json, cfg.match.pageSource || 'tags');
     var found = getValueByPrefix(values, cfg.match.prefix);
     return found ? normalizeMatchValue(found, cfg.match.normalize) : null;
@@ -573,8 +651,23 @@ function buildHours(lieu, now, cfg){
   return '<div class="locb-card__hours-panel">' + rows.join('') + toggle + '</div>';
 }
 
-function getMapSrc(lieu){
-  var q = encodeURIComponent(lieu.title + ', ' + [lieu.address1, lieu.address2, lieu.address3].filter(Boolean).join(', '));
+function validCoordinate(value, min, max){
+  var n = parseFloat(String(value || '').replace(',', '.'));
+  return isFinite(n) && n >= min && n <= max ? n : null;
+}
+
+function getMapSrc(lieu, cfg){
+  var lat = validCoordinate(lieu.latitude, -90, 90);
+  var lng = validCoordinate(lieu.longitude, -180, 180);
+  var query;
+
+  if(cfg.mapQuery !== 'address' && lat !== null && lng !== null){
+    query = lat + ',' + lng;
+  }else{
+    query = lieu.title + ', ' + [lieu.address1, lieu.address2, lieu.address3].filter(Boolean).join(', ');
+  }
+
+  var q = encodeURIComponent(query);
   return 'https://maps.google.com/maps?q=' + q + '&output=embed&hl=fr&z=14&iwloc=B';
 }
 
@@ -583,7 +676,7 @@ function buildMapIframe(src, title){
 }
 
 function buildMap(lieu, cfg){
-  var src = getMapSrc(lieu);
+  var src = getMapSrc(lieu, cfg);
   var title = 'Carte - ' + lieu.title;
   if(cfg.lazyMap){
     return '<div class="locb-card__map locb-card__map--lazy" data-map-src="' + escHtml(src) + '" data-map-title="' + escHtml(title) + '" aria-label="' + escHtml(title) + '"><div class="locb-card__map-placeholder">' + escHtml(cfg.lazyMapPlaceholder || 'Carte') + '</div></div>';
