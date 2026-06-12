@@ -1,5 +1,5 @@
 /*!
- * Location Block v4.0.0-dev.6
+ * Location Block v4.0.0-dev.7
  * github.com/jonas-nicollin/squarespace-blocks
  *
  * Affiche les informations d'un lieu sur une page Squarespace.
@@ -28,7 +28,7 @@
 'use strict';
 
 var FOUR_HOURS = 4 * 60 * 60 * 1000;
-var VERSION = '4.0.0-dev.6';
+var VERSION = '4.0.0-dev.7';
 var DEFAULT_MOUNT = '.location-block';
 var DEFAULT_COUNTRY = 'Suisse';
 var DATA_CACHE_PREFIX = 'location_block_v4_data_';
@@ -591,6 +591,27 @@ function pickContextValues(source){
   return [];
 }
 
+function pickDomValues(source){
+  var selector = source === 'categories'
+    ? '.blog-item-category, .entry-category, [data-category], a[href*="/category/"], a[href*="category="]'
+    : '.blog-item-tag, .entry-tag, [data-tag], a[href*="/tag/"], a[href*="tag="]';
+  var values = [];
+
+  try{
+    Array.from(document.querySelectorAll(selector)).forEach(function(el){
+      var value = el.getAttribute('data-tag') ||
+        el.getAttribute('data-category') ||
+        el.getAttribute('aria-label') ||
+        el.textContent ||
+        '';
+      value = String(value).trim();
+      if(value && values.indexOf(value) === -1) values.push(value);
+    });
+  }catch(_){}
+
+  return values;
+}
+
 function getValueByPrefix(values, prefix){
   values = Array.isArray(values) ? values : [];
   prefix = String(prefix || '');
@@ -617,6 +638,10 @@ async function getPageMatch(card, cfg){
   var contextValues = pickContextValues(cfg.match.pageSource || 'tags');
   var contextFound = getValueByPrefix(contextValues, cfg.match.prefix);
   if(contextFound) return normalizeMatchValue(contextFound, cfg.match.normalize);
+
+  var domValues = pickDomValues(cfg.match.pageSource || 'tags');
+  var domFound = getValueByPrefix(domValues, cfg.match.prefix);
+  if(domFound) return normalizeMatchValue(domFound, cfg.match.normalize);
 
   try{
     var json = await fetchFirstPageJson();
