@@ -7,6 +7,30 @@
 
 
 /* ==========================================================================
+   Collection Blocks — Canonical Card Defaults
+   ========================================================================== */
+
+:where(.cb-card__media) {
+  position: relative;
+  overflow: hidden;
+}
+
+:where(.cb-card__img-wrap) {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+}
+
+:where(.cb-card__img) {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+
+/* ==========================================================================
    Query Block
    ========================================================================== */
 
