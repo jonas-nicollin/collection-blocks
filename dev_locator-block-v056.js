@@ -152,7 +152,7 @@ cfg.map=Object.assign({
 function log(){if(cfg.debug)console.log.apply(console,['[LocatorBlock]'].concat(Array.prototype.slice.call(arguments)));}
 
 var CLS_CARD='cb-card lb-card';
-var CLS_CARD_CLICKABLE='cb-card lb-card lb-card--clickable';
+var CLS_CARD_CLICKABLE='cb-card cb-card--clickable lb-card lb-card--clickable';
 var CLS_MEDIA='cb-card__media lb-card__media';
 var CLS_IMG_WRAP='cb-card__img-wrap lb-card__img-wrap';
 var CLS_IMAGE='cb-card__img lb-card__img';
@@ -162,7 +162,6 @@ var CLS_TITLE='cb-card__title lb-card__title';
 var CLS_TAG_FIELD='cb-card__tag-field lb-card__tag-field';
 var CLS_TAG_VALUE='cb-card__tag-value lb-card__tag-value';
 var CLS_TAG_ICON='ui-icon cb-card__tag-icon lb-card__tag-icon';
-var CLS_LOCATION='cb-card__location lb-card__location';
 var CLS_LINK='cb-card__link lb-card__link';
 var CLS_GROUP='cb-card__group lb-card__group';
 var CLS_GROUP_INLINE='cb-card__group--inline lb-card__group--inline';
@@ -437,16 +436,16 @@ function renderChild(child,item){
   }
   if(child==='title'){
     if(!d.showTitle||!item.title)return'';
-    return'<div class="'+escHtml(CLS_TITLE)+'">'+escHtml(item.title)+'</div>';
+    return'<div class="'+escHtml(CLS_TITLE)+'" role="heading" aria-level="3">'+escHtml(item.title)+'</div>';
   }
   if(child==='numero'){
     if(!d.showNumero||!item.numero)return'';
-    return'<div class="'+escHtml(CLS_TAG_FIELD+tagFieldModifier('numero'))+'" data-prefix="'+escHtml(cfg.tagNumero||'Numéro')+'"><span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.numero)+'</span></div>';
+    return'<div class="'+escHtml(CLS_TAG_FIELD+tagFieldModifier('numero'))+'" data-prefix="'+escHtml(String(cfg.tagNumero||'Numéro').replace(/:$/,''))+'"><span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.numero)+'</span></div>';
   }
   if(child==='lieu'){
     if(!d.showLieu||!item.lieu)return'';
     var icon=d.lieuIcon?'<span class="'+escHtml(CLS_TAG_ICON)+'" aria-hidden="true">'+escHtml(d.lieuIcon)+'</span>':'';
-    return'<div class="'+escHtml(CLS_TAG_FIELD+tagFieldModifier('lieu')+' '+CLS_LOCATION)+'" data-prefix="'+escHtml(cfg.tagLieu||'Lieu')+'">'+icon+'<span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.lieu)+'</span></div>';
+    return'<div class="'+escHtml(CLS_TAG_FIELD+tagFieldModifier('lieu'))+'" data-prefix="'+escHtml(String(cfg.tagLieu||'Lieu').replace(/:$/,''))+'">'+icon+'<span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.lieu)+'</span></div>';
   }
   if(child==='zones'){
     if(!d.showZones||!item.zones.length)return'';
@@ -503,9 +502,9 @@ function buildCardHTML(item){
   if(d.showImage&&item.imageBase)mediaHtml='<div class="'+escHtml(CLS_MEDIA)+'">'+imgWrapTag(item.imageBase,item.title,'(max-width:768px) 100vw,'+(cfg.layout==='grid'?'33vw':'50vw'),item.focalPos)+'</div>';
 
   var bodyHtml='';
-  if(d.showNumero&&item.numero)bodyHtml+='<div class="'+escHtml(CLS_TAG_FIELD+tagFieldModifier('numero'))+'" data-prefix="'+escHtml(cfg.tagNumero||'Numéro')+'"><span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.numero)+'</span></div>';
-  if(d.showTitle&&item.title)bodyHtml+='<div class="'+escHtml(CLS_TITLE)+'">'+escHtml(item.title)+'</div>';
-  if(d.showLieu&&item.lieu){var icon=d.lieuIcon?'<span class="'+escHtml(CLS_TAG_ICON)+'" aria-hidden="true">'+escHtml(d.lieuIcon)+'</span>':'';bodyHtml+='<div class="'+escHtml(CLS_TAG_FIELD+tagFieldModifier('lieu')+' '+CLS_LOCATION)+'" data-prefix="'+escHtml(cfg.tagLieu||'Lieu')+'">'+icon+'<span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.lieu)+'</span></div>';}
+  if(d.showNumero&&item.numero)bodyHtml+='<div class="'+escHtml(CLS_TAG_FIELD+tagFieldModifier('numero'))+'" data-prefix="'+escHtml(String(cfg.tagNumero||'Numéro').replace(/:$/,''))+'"><span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.numero)+'</span></div>';
+  if(d.showTitle&&item.title)bodyHtml+='<div class="'+escHtml(CLS_TITLE)+'" role="heading" aria-level="3">'+escHtml(item.title)+'</div>';
+  if(d.showLieu&&item.lieu){var icon=d.lieuIcon?'<span class="'+escHtml(CLS_TAG_ICON)+'" aria-hidden="true">'+escHtml(d.lieuIcon)+'</span>':'';bodyHtml+='<div class="'+escHtml(CLS_TAG_FIELD+tagFieldModifier('lieu'))+'" data-prefix="'+escHtml(String(cfg.tagLieu||'Lieu').replace(/:$/,''))+'">'+icon+'<span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.lieu)+'</span></div>';}
   if(d.showZones&&item.zones.length){var utilsZones=getCollectionUtils();bodyHtml+=utilsZones&&typeof utilsZones.buildCategoriesHTML==='function'?utilsZones.buildCategoriesHTML(item.zones,{prefix:'lb-card'}):'<div class="cb-card__categories lb-card__categories">'+item.zones.map(function(z){return'<span class="'+escHtml('cb-card__category lb-card__category'+categoryModifier(z))+'">'+escHtml(z)+'</span>';}).join('')+'</div>';}
 
   var clHtml='';
@@ -1054,10 +1053,10 @@ function createInstance(root,allItems,fetchMoreItems){
      --locator-grid-list-width contrôle la proportion (défaut: 50%). */
   var lc=cfg.layout==='grid'?' '+CLS_INNER_GRID:' '+CLS_INNER_LIST;
   var blockClass=cfg.classes&&cfg.classes.block?cfg.classes.block:'';
-  var cc=blockClass?' '+escHtml(blockClass):'';
-  addClasses(root, CLS_BLOCK+' '+CLS_BLOCK_READY);
+  addClasses(root, CLS_BLOCK+' '+CLS_BLOCK_READY+' '+blockClass);
   removeClasses(root, CLS_BLOCK_LOADING);
-  root.innerHTML='<div class="'+escHtml(CLS_INNER+lc)+cc+'"><div class="'+escHtml(CLS_SIDEBAR)+'">'+buildControls(zones,allItems.length,activeZone)+'<div class="'+escHtml(CLS_LIST)+'"></div></div><div class="'+escHtml(CLS_MAP_WRAP)+'"><div class="'+escHtml(CLS_MAP)+'"></div></div></div>';
+  root.removeAttribute('data-cb-classes');
+  root.innerHTML='<div class="'+escHtml(CLS_INNER+lc)+'"><div class="'+escHtml(CLS_SIDEBAR)+'">'+buildControls(zones,allItems.length,activeZone)+'<div class="'+escHtml(CLS_LIST)+'"></div></div><div class="'+escHtml(CLS_MAP_WRAP)+'"><div class="'+escHtml(CLS_MAP)+'"></div></div></div>';
   setupMobileSheet();
   buildMap(root.querySelector('.lb-map'));addAllMarkers();
   fitItemsOnMap(allItems,true);
@@ -1073,10 +1072,10 @@ async function init(){
   log('Init —',roots.length,'conteneur(s)');if(!roots.length)return;
   roots.forEach(function(r){
     addClasses(r, CLS_BLOCK+' '+CLS_BLOCK_LOADING);
+    if(cfg.classes&&cfg.classes.block)addClasses(r, cfg.classes.block);
     r.setAttribute('data-cb-key', cfg.key || 'locator');
     r.setAttribute('data-lb-key', cfg.key || 'locator');
-    if(cfg.classes&&cfg.classes.block)r.setAttribute('data-cb-classes', cfg.classes.block);
-    else r.removeAttribute('data-cb-classes');
+    r.removeAttribute('data-cb-classes');
   });
   if(!cfg.apiKey){roots.forEach(function(r){removeClasses(r, CLS_BLOCK_LOADING);addClasses(r, CLS_BLOCK_READY);r.innerHTML='<p class="'+escHtml(CLS_ERROR)+'">apiKey manquant</p>';});return;}
   roots.forEach(function(r){r.innerHTML='<div class="'+escHtml(CLS_INNER+' '+CLS_INNER_LIST)+'"><div class="'+escHtml(CLS_SIDEBAR)+'"><div class="'+escHtml(CLS_LIST)+'">'+buildSkeleton()+'</div></div><div class="'+escHtml(CLS_MAP_WRAP)+'"><div class="'+escHtml(CLS_MAP+' '+CLS_MAP_LOADING)+'"></div></div></div>';});
