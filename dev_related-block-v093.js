@@ -979,11 +979,17 @@
                 prefix: "rb-card",
                 role: "title",
                 tag: "div",
-                allowEmpty: true
+                allowEmpty: true,
+                attrs: {
+                    role: "heading",
+                    "aria-level": "3"
+                }
             });
         }
         const el = document.createElement("div");
         el.className = "cb-card__title rb-card__title";
+        el.setAttribute("role", "heading");
+        el.setAttribute("aria-level", "3");
         el.textContent = cleanText(item.title || "");
         return el;
     }
@@ -1083,7 +1089,7 @@
     /**
    * Construit les nœuds DOM pour un type de contenu.
    * Accepte une string ('image', 'title'…) ou un objet descriptor
-   * ({ type: 'tagPrefix', prefix: 'Date:', displayFormat: 'day' }).
+   * ({ type: 'tagPrefix', prefix: 'Date', displayFormat: 'day' }).
    */
     function buildContentNodesByType(definition, item, CFG, context) {
         const descriptor = typeof definition === "string" ? {
@@ -1360,7 +1366,6 @@
             card.target = "_blank";
             card.rel = "noopener noreferrer";
         }
-        extraClasses.forEach(cls => card.classList.add(cls + "__item"));
         // Marquer l'item courant (ex: pour la bande parcours avec excludeCurrentItem: false)
         if (currentItem) {
             const curUrl = String(currentItem.fullUrl || "").replace(/\/+$/, "") || "/";
