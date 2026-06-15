@@ -1077,8 +1077,12 @@ var isPriority = priority === true || imgIndex < 3;
     if (!options || !target) return;
 
     target.__qbLightboxItems = new Map();
+    target.__qbLightboxItemsByUrl = new Map();
+    target.__qbLightboxShown = items.slice();
     items.forEach(function(item, index) {
       target.__qbLightboxItems.set(getLightboxItemKey(item, index), item);
+      if (item.fullUrl) target.__qbLightboxItemsByUrl.set(String(item.fullUrl).replace(/\/+$/, ''), item);
+      if (item.urlId) target.__qbLightboxItemsByUrl.set(String(item.urlId), item);
     });
 
     if (target.__qbLightboxBound) return;
@@ -1091,13 +1095,20 @@ var isPriority = priority === true || imgIndex < 3;
       var card = event.target.closest('.qb-card[data-qb-lightbox-key]');
       if (!card || !target.contains(card)) return;
 
+      event.preventDefault();
+
       var item = target.__qbLightboxItems && target.__qbLightboxItems.get(card.dataset.qbLightboxKey);
+      if (!item) {
+        var idx = Number(card.getAttribute('data-qb-index') || card.getAttribute('data-cb-index'));
+        if (Number.isFinite(idx) && target.__qbLightboxShown) item = target.__qbLightboxShown[idx] || null;
+      }
+      if (!item && card.getAttribute('href') && target.__qbLightboxItemsByUrl) {
+        item = target.__qbLightboxItemsByUrl.get(String(card.getAttribute('href')).replace(/\/+$/, '')) || null;
+      }
       if (!item) return;
 
       var lightbox = getOrCreateLightbox(target, cfg);
       if (!lightbox) return;
-
-      event.preventDefault();
 
       lightbox.open({
         content: buildLightboxGroups(item, cfg, options),
