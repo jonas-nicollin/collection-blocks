@@ -1,5 +1,5 @@
 /*!
- * Location Block v4.0.0-dev.7
+ * Location Block v4.0.0-dev.8
  * github.com/jonas-nicollin/squarespace-blocks
  *
  * Affiche les informations d'un lieu sur une page Squarespace.
@@ -28,7 +28,7 @@
 'use strict';
 
 var FOUR_HOURS = 4 * 60 * 60 * 1000;
-var VERSION = '4.0.0-dev.7';
+var VERSION = '4.0.0-dev.8';
 var DEFAULT_MOUNT = '.location-block';
 var DEFAULT_COUNTRY = 'Suisse';
 var DATA_CACHE_PREFIX = 'location_block_v4_data_';
@@ -428,20 +428,23 @@ function cacheWrite(cfg, data){
   }catch(_){}
 }
 
-async function fetchJson(url){
-  var res = await fetch(url, {cache: 'default'});
+async function fetchJson(url, options){
+  var fetchCache = options && options.forceFresh ? 'reload' : 'default';
+  var res = await fetch(url, {cache: fetchCache});
   if(!res.ok) throw new Error('JSON inaccessible (' + res.status + ')');
   return res.json();
 }
 
-async function fetchText(url){
-  var res = await fetch(url, {cache: 'default'});
+async function fetchText(url, options){
+  var fetchCache = options && options.forceFresh ? 'reload' : 'default';
+  var res = await fetch(url, {cache: fetchCache});
   if(!res.ok) throw new Error('CSV inaccessible (' + res.status + ')');
   return res.text();
 }
 
-async function fetchLocations(cfg){
-  var cached = cacheRead(cfg, false);
+async function fetchLocations(cfg, options){
+  options = options || {};
+  var cached = options.forceFresh ? null : cacheRead(cfg, false);
   if(cached) return cached;
 
   try{
@@ -453,10 +456,10 @@ async function fetchLocations(cfg){
       rows = Array.isArray(source.data) ? source.data : [];
     }else if(type === 'csv' || type === 'google-sheet-csv'){
       if(!source.url) throw new Error('source.url manquant pour la source CSV');
-      rows = parseCSV(await fetchText(source.url));
+      rows = parseCSV(await fetchText(source.url, options));
     }else if(type === 'json' || type === 'sheetbest'){
       if(!source.url) throw new Error('source.url manquant pour la source JSON');
-      var data = await fetchJson(source.url);
+      var data = await fetchJson(source.url, options);
       rows = Array.isArray(data) ? data : (data.items || data.locations || data.lieux || data.result || []);
     }else{
       throw new Error('source.type inconnu: ' + type);
@@ -819,10 +822,18 @@ function getImgSrc(block){
   return img ? (img.currentSrc || img.src || img.dataset.src || '') : '';
 }
 
-async function renderCard(card, index, cfg){
+async function renderCard(card, index, cfg, getFreshIndex){
   card.classList.add('location-block', 'locb-block');
   var key = await getPageMatch(card, cfg);
   var lieu = key ? index[key] || null : null;
+  if(!lieu && key && typeof getFreshIndex === 'function'){
+    try{
+      var freshIndex = await getFreshIndex();
+      lieu = freshIndex[key] || null;
+    }catch(err){
+      console.warn('Location Block v' + VERSION + ': recharge fraiche impossible apres lieu introuvable', err);
+    }
+  }
   if(!lieu){
     console.warn('Location Block v' + VERSION + ': lieu introuvable', {key: key, config: cfg.id});
     card.innerHTML = '<p class="locb-card__error">Lieu introuvable.</p>';
@@ -852,7 +863,14 @@ async function initConfig(cfg){
     return;
   }
   var index = buildIndex(lieux);
-  await Promise.all(cards.map(function(card){return renderCard(card, index, cfg);}));
+  var freshIndexPromise = null;
+  function getFreshIndex(){
+    if(!freshIndexPromise){
+      freshIndexPromise = fetchLocations(cfg, {forceFresh: true}).then(buildIndex);
+    }
+    return freshIndexPromise;
+  }
+  await Promise.all(cards.map(function(card){return renderCard(card, index, cfg, getFreshIndex);}));
 }
 
 async function init(){
