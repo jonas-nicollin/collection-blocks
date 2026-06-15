@@ -1117,7 +1117,7 @@
     });
 
     if (descriptor.dataPrefix !== false && descriptor.prefix) {
-      row.setAttribute('data-prefix', descriptor.prefix);
+      row.setAttribute('data-prefix', String(descriptor.prefix).replace(/:$/, ''));
     }
 
     var joinWith = descriptor.joinWith != null ? descriptor.joinWith : ', ';
