@@ -784,7 +784,7 @@ var isPriority = priority === true || imgIndex < 3;
           'cb-card__tag-field' + (prefixSlug ? ' cb-card__tag-field--' + prefixSlug : ''),
           'qb-card__tag-field' + (prefixSlug ? ' qb-card__tag-field--' + prefixSlug : '')
         ),
-        'data-prefix': prefix,
+        'data-prefix': String(prefix || '').replace(/:$/, ''),
       });
 
       var labelNode = buildLabelNode(label, labelIcon);
