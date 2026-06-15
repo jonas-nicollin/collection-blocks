@@ -698,6 +698,8 @@ function createInstance(root,allItems,fetchMoreItems){
     var sidebar=root.querySelector('.lb-sidebar');
     if(!inner||!sidebar)return;
 
+    root.removeAttribute('data-cb-classes');
+    if(cfg.classes&&cfg.classes.block)addClasses(root, cfg.classes.block);
     addClasses(root,'cb-block--sheet lb-block--sheet');
     addClasses(inner,'cb-sheet lb-sheet');
 
