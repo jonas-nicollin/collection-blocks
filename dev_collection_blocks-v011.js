@@ -1,5 +1,3 @@
-/* Ici, un commentaire */
-
 (function() {
   'use strict';
 
@@ -915,6 +913,17 @@
     );
   }
 
+  function categoryModifier(name, prefix) {
+    var slug = slugify(String(name || '').replace(/:$/, ''));
+    if (!slug) return '';
+
+    var specific = prefix || '';
+    return classNames(
+      'cb-card__category--' + slug,
+      specific && specific !== 'cb-card' ? specific + '__category--' + slug : ''
+    );
+  }
+
   function createEl(tag, attrs) {
     var node = document.createElement(tag);
 
@@ -1064,7 +1073,11 @@
 
     cats.forEach(function(cat) {
       var catEl = createEl(options.itemTag || 'span', {
-        class: classNames(cardClass('category', prefix), options.itemClassName)
+        class: classNames(
+          cardClass('category', prefix),
+          categoryModifier(cat, prefix),
+          options.itemClassName
+        )
       });
       catEl.textContent = cat;
       wrap.appendChild(catEl);
@@ -1117,7 +1130,7 @@
 
     if (icon) {
       var iconEl = createEl('span', {
-        class: descriptor.iconClassName || cardClass('tag-icon', prefix),
+        class: descriptor.iconClassName || classNames('ui-icon', cardClass('tag-icon', prefix)),
         'aria-hidden': 'true'
       });
 
@@ -1223,7 +1236,7 @@
     var itemClass = classNames(cardClass('category', prefix), options.itemClassName);
 
     return '<div class="' + escapeHTML(wrapClass) + '">' + cats.map(function(cat) {
-      return '<span class="' + escapeHTML(itemClass) + '">' + escapeHTML(cat) + '</span>';
+      return '<span class="' + escapeHTML(classNames(itemClass, categoryModifier(cat, prefix))) + '">' + escapeHTML(cat) + '</span>';
     }).join('') + '</div>';
   }
 
@@ -1312,7 +1325,7 @@
     });
 
     var closeIcon = createEl('span', {
-      class: classNames('cb-icon', prefix && prefix !== 'cb' ? prefix + '-icon' : ''),
+      class: classNames('ui-icon', 'cb-icon', prefix && prefix !== 'cb' ? prefix + '-icon' : ''),
       'aria-hidden': 'true'
     });
 
@@ -1549,6 +1562,7 @@
     classNames: classNames,
     cardClass: cardClass,
     tagFieldModifier: tagFieldModifier,
+    categoryModifier: categoryModifier,
     createEl: createEl,
     buildTextElement: buildTextElement,
     buildCategories: buildCategories,
@@ -1584,6 +1598,7 @@
     classNames: classNames,
     cardClass: cardClass,
     tagFieldModifier: tagFieldModifier,
+    categoryModifier: categoryModifier,
     createEl: createEl,
     buildTextElement: buildTextElement,
     buildCategories: buildCategories,
