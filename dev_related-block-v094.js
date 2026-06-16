@@ -1435,7 +1435,7 @@
     function buildList(items, CFG, currentItem) {
         const list = document.createElement("div");
         const count = items.length;
-        list.className = "cb-grid rb-grid";
+        list.className = "cb-grid rb-grid cb-grid--grid rb-grid--grid";
         list.dataset.count = count;
         if (count === 1) addClasses(list, "cb-grid--single rb-grid--single");
         if (count > 1) addClasses(list, "cb-grid--multiple rb-grid--multiple");
