@@ -177,6 +177,9 @@ var CLS_INNER_GRID='cb-block__inner--grid lb-block__inner--grid';
 var CLS_INNER_LIST='cb-block__inner--list lb-block__inner--list';
 var CLS_SIDEBAR='cb-sidebar lb-sidebar';
 var CLS_LIST='cb-grid lb-grid';
+function listClass(){
+  return addClassNames(CLS_LIST,cfg.layout==='grid'?'cb-grid--grid lb-grid--grid':'cb-grid--list lb-grid--list');
+}
 var CLS_MAP_WRAP='cb-map-wrap lb-map-wrap';
 var CLS_MAP='cb-map lb-map';
 var CLS_MAP_LOADING='cb-map--loading lb-map--loading';
@@ -1058,7 +1061,7 @@ function createInstance(root,allItems,fetchMoreItems){
   addClasses(root, CLS_BLOCK+' '+CLS_BLOCK_READY+' '+blockClass);
   removeClasses(root, CLS_BLOCK_LOADING);
   root.removeAttribute('data-cb-classes');
-  root.innerHTML='<div class="'+escHtml(CLS_INNER+lc)+'"><div class="'+escHtml(CLS_SIDEBAR)+'">'+buildControls(zones,allItems.length,activeZone)+'<div class="'+escHtml(CLS_LIST)+'"></div></div><div class="'+escHtml(CLS_MAP_WRAP)+'"><div class="'+escHtml(CLS_MAP)+'"></div></div></div>';
+  root.innerHTML='<div class="'+escHtml(CLS_INNER+lc)+'"><div class="'+escHtml(CLS_SIDEBAR)+'">'+buildControls(zones,allItems.length,activeZone)+'<div class="'+escHtml(listClass())+'"></div></div><div class="'+escHtml(CLS_MAP_WRAP)+'"><div class="'+escHtml(CLS_MAP)+'"></div></div></div>';
   setupMobileSheet();
   buildMap(root.querySelector('.lb-map'));addAllMarkers();
   fitItemsOnMap(allItems,true);
@@ -1080,7 +1083,7 @@ async function init(){
     r.removeAttribute('data-cb-classes');
   });
   if(!cfg.apiKey){roots.forEach(function(r){removeClasses(r, CLS_BLOCK_LOADING);addClasses(r, CLS_BLOCK_READY);r.innerHTML='<p class="'+escHtml(CLS_ERROR)+'">apiKey manquant</p>';});return;}
-  roots.forEach(function(r){r.innerHTML='<div class="'+escHtml(CLS_INNER+' '+CLS_INNER_LIST)+'"><div class="'+escHtml(CLS_SIDEBAR)+'"><div class="'+escHtml(CLS_LIST)+'">'+buildSkeleton()+'</div></div><div class="'+escHtml(CLS_MAP_WRAP)+'"><div class="'+escHtml(CLS_MAP+' '+CLS_MAP_LOADING)+'"></div></div></div>';});
+  roots.forEach(function(r){r.innerHTML='<div class="'+escHtml(CLS_INNER+' '+(cfg.layout==='grid'?CLS_INNER_GRID:CLS_INNER_LIST))+'"><div class="'+escHtml(CLS_SIDEBAR)+'"><div class="'+escHtml(listClass())+'">'+buildSkeleton()+'</div></div><div class="'+escHtml(CLS_MAP_WRAP)+'"><div class="'+escHtml(CLS_MAP+' '+CLS_MAP_LOADING)+'"></div></div></div>';});
   try{
     var initialMaxPages = cfg.performance.maxPages || 1;
     var loaders=[fetchItemsState(initialMaxPages),loadMapsAPI()];if(cfg.map.clustering)loaders.push(loadClusterer());
