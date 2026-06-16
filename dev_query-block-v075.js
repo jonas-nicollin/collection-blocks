@@ -2926,7 +2926,7 @@ requestAnimationFrame(function() {
 
     var gridClass = dispLayout === 'list'
       ? 'cb-grid qb-grid cb-grid--list qb-grid--list'
-      : 'cb-grid qb-grid';
+      : 'cb-grid qb-grid cb-grid--grid qb-grid--grid';
 
     var grid = el('div', { class: gridClass });
 
@@ -2982,7 +2982,7 @@ requestAnimationFrame(function() {
 
       grid.className = currentLayout === 'list'
         ? 'cb-grid qb-grid cb-grid--list qb-grid--list'
-        : 'cb-grid qb-grid';
+        : 'cb-grid qb-grid cb-grid--grid qb-grid--grid';
 
       target.classList.toggle('cb-block--list', currentLayout === 'list');
       target.classList.toggle('qb-block--list', currentLayout === 'list');
