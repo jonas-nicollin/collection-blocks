@@ -2422,7 +2422,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
     cfg.cardClassName = (raw && raw.classes && typeof raw.classes === 'object')
       ? (raw.classes.card || raw.classes.cards || raw.classes.item || '')
-      : '';
+      : (raw && raw.cardClassName ? raw.cardClassName : '');
 
     if (cfg.openInNewTab !== undefined) {
       cfg.display = Object.assign({}, cfg.display || {});
