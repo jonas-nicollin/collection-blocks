@@ -115,7 +115,12 @@
   }
 
   function cardClassName(cfg) {
-    return (cfg && cfg.cardClassName) || '';
+    if (!cfg) return '';
+    if (cfg.cardClassName) return cfg.cardClassName;
+    if (cfg.classes && typeof cfg.classes === 'object') {
+      return cfg.classes.card || cfg.classes.cards || cfg.classes.item || '';
+    }
+    return '';
   }
 
   function qCardClass(shared, specific) {
@@ -3042,7 +3047,7 @@ requestAnimationFrame(function() {
       }
 
       var cfgForRender = Object.assign({}, cfg, {
-        cardClassName: currentCardClassName,
+        cardClassName: currentCardClassName || baseCardClassName,
         display: Object.assign({}, disp, {
           groups: currentGroups || disp.groups,
           groupBy: currentGroupBy,
