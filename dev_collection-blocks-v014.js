@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.6';
+  var VERSION = '0.7';
   var STORE_KEY_PREFIX = 'collection-blocks::v0.6::';
 
   var memoryCache = new Map();
@@ -96,6 +96,21 @@
 
   function getDataSourceRegistry() {
     if (typeof window === 'undefined') return null;
+
+    var canonical = window.COLLECTION_DATA;
+
+    if (canonical && typeof canonical === 'object') {
+      if (canonical.collections && typeof canonical.collections === 'object') {
+        return canonical.collections;
+      }
+
+      if (canonical.sources && typeof canonical.sources === 'object') {
+        return canonical.sources;
+      }
+
+      return canonical;
+    }
+
     return window.COLLECTION_BLOCKS_DATA_SOURCES || null;
   }
 
