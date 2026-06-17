@@ -1,9 +1,8 @@
-/**/
 (function() {
   'use strict';
 
-  var VERSION = '0.5';
-  var STORE_KEY_PREFIX = 'collection-blocks::v0.4::';
+  var VERSION = '0.6';
+  var STORE_KEY_PREFIX = 'collection-blocks::v0.6::';
 
   var memoryCache = new Map();
   var pendingFetches = new Map();
@@ -85,10 +84,58 @@
   function ensureJson(url) {
     if (!url) return url;
     if (url.indexOf('format=json') !== -1) return url;
+    if (/\.json(?:[?#]|$)/i.test(url)) return url;
     return url.indexOf('?') !== -1 ? url + '&format=json' : url + '?format=json';
   }
 
+  function trimTrailingSlash(path) {
+    path = normalizePath(path);
+    if (path.length > 1) return path.replace(/\/+$/, '');
+    return path || '/';
+  }
+
+  function getDataSourceRegistry() {
+    if (typeof window === 'undefined') return null;
+    return window.COLLECTION_BLOCKS_DATA_SOURCES || null;
+  }
+
+  function resolveDataSource(path, options) {
+    options = options || {};
+
+    var explicit = options.dataUrl || options.jsonUrl || options.staticUrl || options.sourceUrl;
+    var source = explicit || null;
+    var registry = getDataSourceRegistry();
+    var cleanPath = normalizePath(path);
+    var trimmedPath = trimTrailingSlash(cleanPath);
+
+    if (!source && registry && typeof registry === 'object') {
+      source = registry[cleanPath] ||
+        registry[trimmedPath] ||
+        registry[ensureJson(cleanPath)] ||
+        registry[ensureJson(trimmedPath)];
+    }
+
+    if (!source) return null;
+
+    if (typeof source === 'string') {
+      source = { url: source };
+    }
+
+    if (!source || typeof source !== 'object' || !source.url) return null;
+
+    return Object.assign({}, source, {
+      url: normalizePath(source.url)
+    });
+  }
+
   function makeCacheKey(path, options) {
+    options = options || {};
+
+    var dataSource = resolveDataSource(path, options);
+    var sourceKey = dataSource && dataSource.url
+      ? '::source=' + dataSource.url
+      : '';
+
     var keepKey = Array.isArray(options.keepFields)
       ? '::keep=' + options.keepFields.join(',')
       : '';
@@ -97,7 +144,7 @@
       ? '::strip=' + options.stripFields.join(',')
       : '';
 
-    return STORE_KEY_PREFIX + normalizePath(path) + keepKey + stripKey;
+    return STORE_KEY_PREFIX + normalizePath(path) + sourceKey + keepKey + stripKey;
   }
 
   function normalizeMaxPages(value) {
@@ -145,6 +192,7 @@
       pagesLoaded: Number(state.pagesLoaded || 0),
       complete: !!state.complete,
       fetchError: state.fetchError ? Object.assign({}, state.fetchError) : null,
+      source: state.source ? Object.assign({}, state.source) : null,
       hasNext: !!(state.nextUrl || state.nextOffset != null),
       nextUrl: state.nextUrl || null,
       nextOffset: state.nextOffset != null ? state.nextOffset : null
@@ -273,25 +321,34 @@
     options = Object.assign({}, DEFAULTS, options || {});
 
     var cleanPath = normalizePath(path);
+    var dataSource = resolveDataSource(cleanPath, options);
+    var sourcePath = dataSource && dataSource.url ? dataSource.url : cleanPath;
+    var sourceCredentials = dataSource && dataSource.credentials
+      ? dataSource.credentials
+      : (options.credentials || DEFAULTS.credentials);
+    var allowSourceFallback = !(dataSource && dataSource.fallback === false) && options.fallback !== false;
     var maxPages = normalizeMaxPages(targetPages);
     var items = state.items || [];
     var page = Number(state.pagesLoaded || 0);
     var url = state.nextUrl || null;
 
     if (!url && state.nextOffset != null) {
-      url = ensureJson(cleanPath) + '&offset=' + encodeURIComponent(state.nextOffset);
+      url = ensureJson(sourcePath) + '&offset=' + encodeURIComponent(state.nextOffset);
     }
 
     if (!url && page === 0) {
-      url = ensureJson(cleanPath);
+      url = ensureJson(sourcePath);
     }
 
     state.fetchError = null;
+    state.source = dataSource && dataSource.url
+      ? { type: 'static', url: dataSource.url }
+      : { type: 'squarespace', path: cleanPath };
 
     while (page < maxPages && url && !state.complete) {
       try {
         var res = await fetch(url, {
-          credentials: options.credentials || DEFAULTS.credentials
+          credentials: sourceCredentials
         });
 
         if (!res.ok) {
@@ -316,7 +373,7 @@
         if (state.nextUrl) {
           url = state.nextUrl;
         } else if (state.nextOffset != null) {
-          url = ensureJson(cleanPath) + '&offset=' + encodeURIComponent(state.nextOffset);
+          url = ensureJson(sourcePath) + '&offset=' + encodeURIComponent(state.nextOffset);
         } else {
           url = null;
         }
@@ -325,6 +382,16 @@
         state.pagesLoaded = page;
         state.items = items;
       } catch (err) {
+        if (dataSource && allowSourceFallback && !items.length) {
+          dataSource = null;
+          sourcePath = cleanPath;
+          sourceCredentials = options.credentials || DEFAULTS.credentials;
+          url = ensureJson(cleanPath);
+          state.fetchError = null;
+          state.source = { type: 'squarespace', path: cleanPath, fallbackFrom: 'static' };
+          continue;
+        }
+
         state.fetchError = serializeError(err);
         state.complete = false;
 
@@ -343,7 +410,8 @@
       nextUrl: null,
       nextOffset: null,
       complete: false,
-      fetchError: null
+      fetchError: null,
+      source: null
     };
   }
 
@@ -506,6 +574,7 @@
         pagesLoaded: state.pagesLoaded || 0,
         complete: !!state.complete,
         fetchError: state.fetchError ? Object.assign({}, state.fetchError) : null,
+        source: state.source ? Object.assign({}, state.source) : null,
         hasNext: !!(state.nextUrl || state.nextOffset != null)
       };
     });
