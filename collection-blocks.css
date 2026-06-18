@@ -7,6 +7,30 @@
 
 
 /* ==========================================================================
+   Collection Blocks — Canonical Card Defaults
+   ========================================================================== */
+
+:where(.cb-card__media) {
+  position: relative;
+  overflow: hidden;
+}
+
+:where(.cb-card__img-wrap) {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+}
+
+:where(.cb-card__img) {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+
+/* ==========================================================================
    Query Block
    ========================================================================== */
 
@@ -601,9 +625,12 @@ body:where(.cb-panel-open).qb-panel-open { overflow: hidden; }
 
 
 /* ─────────────────────────────────────────────
-   GROUPE INLINE (role: 'body', inline: true)
+   BODY / GROUPE INLINE
    ───────────────────────────────────────────── */
 
+:where(.cb-card__body--inline),
+:where(.cb-card__group--inline),
+:where(.cb-card__body--inline).qb-card__body--inline,
 :where(.cb-card__group--inline).qb-card__group--inline {
   display: flex;
   flex-direction: row;
@@ -613,6 +640,9 @@ body:where(.cb-panel-open).qb-panel-open { overflow: hidden; }
 }
 
 /* Les enfants directs ne forcent plus le flex-direction column */
+:where(.cb-card__body--inline) > *,
+:where(.cb-card__group--inline) > *,
+:where(.cb-card__body--inline).qb-card__body--inline > *,
 :where(.cb-card__group--inline).qb-card__group--inline > * {
   flex-shrink: 0;
 }
@@ -791,11 +821,10 @@ body:where(.cb-panel-open).qb-panel-open { overflow: hidden; }
 :where(.cb-card__media).rb-card__media {
   position: relative;
   overflow: hidden;
-  aspect-ratio: 3 / 2;
   background: rgba(0, 0, 0, 0.05);
 }
 
-:where(.cb-card__media).rb-card__media img {
+:where(.cb-card__img).rb-card__img {
   display: block;
   width: 100%;
   height: 100%;
@@ -1217,7 +1246,6 @@ body.sqs-edit-mode-active :where(.cb-block).lb-block {
   position: relative;
   overflow: hidden;
   flex: 0 0 auto;
-  aspect-ratio: 3 / 2;
 }
 :where(.cb-block__inner--grid).lb-block__inner--grid :where(.cb-card__media).lb-card__media { width: 100%; }
 
