@@ -919,8 +919,7 @@
                 className: fieldConfig.className,
                 icon: fieldConfig.icon,
                 iconType: fieldConfig.iconType,
-                iconClassName: "cb-card__tag-icon rb-card__tag-icon",
-                textOnlyWhenNoIcon: true
+                iconClassName: "ui-icon cb-card__tag-icon rb-card__tag-icon"
             }, {
                 prefix: "rb-card"
             });
@@ -932,7 +931,7 @@
         const icon = String(fieldConfig.icon || "").trim();
         if (icon) {
             const iconEl = document.createElement("span");
-            iconEl.className = "cb-card__tag-icon rb-card__tag-icon";
+            iconEl.className = "ui-icon cb-card__tag-icon rb-card__tag-icon";
             iconEl.setAttribute("aria-hidden", "true");
             if (String(fieldConfig.iconType || "text").toLowerCase() === "html") {
                 iconEl.innerHTML = icon;
@@ -945,7 +944,10 @@
             textEl.textContent = fullText;
             el.appendChild(textEl);
         } else {
-            el.textContent = fullText;
+            const textEl = document.createElement("span");
+            textEl.className = "cb-card__tag-value rb-card__tag-value";
+            textEl.textContent = fullText;
+            el.appendChild(textEl);
         }
         return el;
     }
@@ -963,7 +965,8 @@
         meta.className = "cb-card__meta rb-card__meta cb-card__categories rb-card__categories";
         cats.forEach(cat => {
             const span = document.createElement("span");
-            span.className = "cb-card__category rb-card__category";
+            const slug = slugifyToken(cat);
+            span.className = "cb-card__category rb-card__category" + (slug ? ` cb-card__category--${slug} rb-card__category--${slug}` : "");
             span.textContent = cleanText(cat);
             meta.appendChild(span);
         });
@@ -976,11 +979,17 @@
                 prefix: "rb-card",
                 role: "title",
                 tag: "div",
-                allowEmpty: true
+                allowEmpty: true,
+                attrs: {
+                    role: "heading",
+                    "aria-level": "3"
+                }
             });
         }
         const el = document.createElement("div");
         el.className = "cb-card__title rb-card__title";
+        el.setAttribute("role", "heading");
+        el.setAttribute("aria-level", "3");
         el.textContent = cleanText(item.title || "");
         return el;
     }
@@ -1037,25 +1046,32 @@
         }
         return fields.map(fc => buildTagPrefixField(item, fc, overrideDisplayFormat)).filter(Boolean);
     }
-    function buildImageElement(item, CFG) {
+    function buildImageElement(item, CFG, asChild) {
         if (!CFG.display?.showImage || !item.assetUrl) return null;
         const utils = getCollectionUtils();
         const base = utils && typeof utils.getImageBase === "function" ? utils.getImageBase(item) : String(item.assetUrl || "").split("?")[0];
         if (!base) return null;
-        const media = document.createElement("div");
-        media.className = "cb-card__media rb-card__media cb-card__img-wrap rb-card__img-wrap";
-        const img = document.createElement("img");
-        img.className = "cb-card__img rb-card__img";
         const srcsetWidths = Array.isArray(CFG.display?.srcsetWidths) ? CFG.display.srcsetWidths : [ 300, 500, 750, 1e3, 1500 ];
         const cleanWidths = srcsetWidths.filter(w => Number(w) <= 1500);
+        const media = document.createElement("div");
+        media.className = "cb-card__media rb-card__media";
+        const wrap = utils && typeof utils.buildImg === "function"
+          ? utils.buildImg(base, item.mediaFocalPoint, cleanText(item.title || ""), {
+              wrapperClass: "cb-card__img-wrap rb-card__img-wrap",
+              imageClass: "cb-card__img rb-card__img",
+              widths: cleanWidths,
+              sizes: CFG.display?.imageSizes || DEFAULT_IMAGE_SIZES
+            })
+          : null;
         if (utils && typeof utils.buildImg === "function") {
-            return utils.buildImg(base, item.mediaFocalPoint, cleanText(item.title || ""), {
-                wrapperClass: "cb-card__media rb-card__media cb-card__img-wrap rb-card__img-wrap",
-                imageClass: "cb-card__img rb-card__img",
-                widths: cleanWidths,
-                sizes: CFG.display?.imageSizes || DEFAULT_IMAGE_SIZES
-            });
+            if (asChild) return wrap;
+            media.appendChild(wrap);
+            return media;
         }
+        const fallbackWrap = document.createElement("div");
+        fallbackWrap.className = "cb-card__img-wrap rb-card__img-wrap";
+        const img = document.createElement("img");
+        img.className = "cb-card__img rb-card__img";
         const fallbackSrc = `${base}?format=750w`;
         img.src = fallbackSrc;
         img.srcset = utils && typeof utils.buildSrcset === "function" ? utils.buildSrcset(base, cleanWidths) : cleanWidths.map(w => `${base}?format=${w}w ${w}w`).join(", ");
@@ -1065,21 +1081,23 @@
         img.decoding = "async";
         img.fetchPriority = "low";
         img.style.objectPosition = utils && typeof utils.focalPoint === "function" ? utils.focalPoint(item.mediaFocalPoint) : item.mediaFocalPoint && typeof item.mediaFocalPoint.x === "number" && typeof item.mediaFocalPoint.y === "number" ? `${Math.round(item.mediaFocalPoint.x * 100)}% ${Math.round(item.mediaFocalPoint.y * 100)}%` : "50% 50%";
-        media.appendChild(img);
+        fallbackWrap.appendChild(img);
+        if (asChild) return fallbackWrap;
+        media.appendChild(fallbackWrap);
         return media;
     }
     /**
    * Construit les nœuds DOM pour un type de contenu.
    * Accepte une string ('image', 'title'…) ou un objet descriptor
-   * ({ type: 'tagPrefix', prefix: 'Date:', displayFormat: 'day' }).
+   * ({ type: 'tagPrefix', prefix: 'Date', displayFormat: 'day' }).
    */
-    function buildContentNodesByType(definition, item, CFG) {
+    function buildContentNodesByType(definition, item, CFG, context) {
         const descriptor = typeof definition === "string" ? {
             type: definition
         } : definition || {};
         const type = descriptor.type;
         if (type === "image") {
-            const el = buildImageElement(item, CFG);
+            const el = buildImageElement(item, CFG, context?.insideMedia === true);
             return el ? [ el ] : [];
         }
         if (type === "meta" && CFG.display?.showCategories) {
@@ -1114,11 +1132,15 @@
             const children = Array.isArray(group?.children) ? group.children : [];
             if (!children.length) return;
             const wrapper = document.createElement(group?.tag || "div");
+            const role = group?.role || "";
+            const roleClasses = role === "media" ? "cb-card__media rb-card__media" : role === "body" ? "cb-card__body rb-card__body" : role === "header" ? "cb-card__header rb-card__header" : role === "meta" ? "cb-card__meta rb-card__meta" : role === "footer" ? "cb-card__footer rb-card__footer" : "cb-card__group rb-card__group";
+            addClasses(wrapper, roleClasses);
             String(group?.className || "").split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => wrapper.classList.add(cls));
-            addClasses(wrapper, "cb-card__group rb-card__group");
-            if (group?.inline === true) addClasses(wrapper, "cb-card__group--inline rb-card__group--inline");
+            if (group?.inline === true) {
+                addClasses(wrapper, role === "body" ? "cb-card__body--inline rb-card__body--inline" : "cb-card__group--inline rb-card__group--inline");
+            }
             children.forEach(child => {
-                buildContentNodesByType(child, item, CFG).forEach(node => wrapper.appendChild(node));
+                buildContentNodesByType(child, item, CFG, { insideMedia: role === "media" }).forEach(node => wrapper.appendChild(node));
             });
             if (wrapper.childNodes.length) {
                 fragment.appendChild(wrapper);
@@ -1242,7 +1264,7 @@
             }
         }
         const content = document.createElement("div");
-        content.className = "cb-lightbox__content rb-lightbox__content";
+        content.className = "cb-card__body rb-card__body cb-lightbox__content rb-lightbox__content";
         if (options.showTitle !== false && item.title) {
             content.appendChild(addLightboxClass(buildTitleElement(item), "cb-lightbox__title rb-lightbox__title"));
         }
@@ -1334,6 +1356,7 @@
     function buildCard(item, CFG, extraClasses, currentItem, index) {
         const card = document.createElement("a");
         card.className = "cb-card rb-card";
+        String(CFG.classes?.card || CFG.classes?.cards || CFG.classes?.item || "").split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => card.classList.add(cls));
         card.href = item.fullUrl || CFG.sourceCollection.path + "/" + item.urlId;
         if (getLightboxOptions(CFG)) {
             card.dataset.rbLightboxKey = getLightboxItemKey(item, index);
@@ -1343,7 +1366,6 @@
             card.target = "_blank";
             card.rel = "noopener noreferrer";
         }
-        extraClasses.forEach(cls => card.classList.add(cls + "__item"));
         // Marquer l'item courant (ex: pour la bande parcours avec excludeCurrentItem: false)
         if (currentItem) {
             const curUrl = String(currentItem.fullUrl || "").replace(/\/+$/, "") || "/";
@@ -1413,7 +1435,7 @@
     function buildList(items, CFG, currentItem) {
         const list = document.createElement("div");
         const count = items.length;
-        list.className = "cb-grid rb-grid";
+        list.className = "cb-grid rb-grid cb-grid--grid rb-grid--grid";
         list.dataset.count = count;
         if (count === 1) addClasses(list, "cb-grid--single rb-grid--single");
         if (count > 1) addClasses(list, "cb-grid--multiple rb-grid--multiple");
