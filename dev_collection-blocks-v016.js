@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.7';
+  var VERSION = '0.8';
   var STORE_KEY_PREFIX = 'collection-blocks::v0.6::';
 
   var memoryCache = new Map();
@@ -37,7 +37,12 @@
     stripFields: []
   };
 
-  var SRCSET_WIDTHS = [300, 500, 750, 1000, 1500];
+  var SRCSET_WIDTHS = [300, 500, 750, 1000, 1200, 1500, 2000, 2500];
+  var IMAGE_SIZE_PRESETS = {
+    standard: '(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw',
+    wide: '100vw'
+  };
+  var DEFAULT_IMAGE_SIZES = IMAGE_SIZE_PRESETS.standard;
 
   function now() {
     return Date.now();
@@ -940,6 +945,13 @@
     }).join(', ');
   }
 
+  function getImageSizes(options) {
+    options = options || {};
+    if (options.sizes || options.imageSizes) return options.sizes || options.imageSizes;
+    var preset = options.imagePreset || options.preset || 'standard';
+    return IMAGE_SIZE_PRESETS[preset] || DEFAULT_IMAGE_SIZES;
+  }
+
   function escapeHTML(str) {
     return String(str || '')
       .replace(/&/g, '&amp;')
@@ -1266,11 +1278,16 @@
 
     var wrapperClass = options.wrapperClass || 'cb-card__img-wrap';
     var imageClass = options.imageClass || 'cb-card__img';
-    var sizes = options.sizes || '(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw';
+    var sizes = getImageSizes(options);
     var fallbackWidth = Number(options.fallbackWidth || 750);
     var priority = options.priority === true;
 
     var wrap = createEl('div', { class: wrapperClass });
+
+    if (options.ratio) {
+      wrap.style.setProperty('--cb-card-image-ratio', String(options.ratio));
+    }
+
     var img = createEl('img', {
       class: imageClass,
       src: base + '?format=' + fallbackWidth + 'w',
@@ -1294,7 +1311,7 @@
     if (!base) return '';
 
     var imageClass = options.imageClass || options.className || 'cb-card__img';
-    var sizes = options.sizes || '(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw';
+    var sizes = getImageSizes(options);
     var fallbackWidth = Number(options.fallbackWidth || 750);
     var priority = options.priority === true;
     var fallback = base + '?format=' + fallbackWidth + 'w';
@@ -1525,6 +1542,9 @@
         wrapperClass: cardClass('img-wrap', prefix, descriptor.className),
         imageClass: cardClass('img', prefix, descriptor.imageClassName),
         sizes: descriptor.sizes || options.imageSizes,
+        widths: descriptor.widths || descriptor.srcsetWidths || options.srcsetWidths,
+        imagePreset: descriptor.imagePreset || options.imagePreset,
+        ratio: descriptor.ratio || descriptor.imageRatio || options.imageRatio,
         priority: descriptor.priority || options.priorityImage === true
       });
     }
