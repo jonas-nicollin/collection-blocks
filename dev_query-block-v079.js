@@ -542,29 +542,42 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
       }, { rootMargin: '300px 0px' })
     : null;
 
-  var SRCSET_WIDTHS = [300, 500, 750, 1000, 1500];
+  var SRCSET_WIDTHS = [300, 500, 750, 1000, 1200, 1500, 2000, 2500];
+var IMAGE_SIZE_PRESETS = {
+  standard: '(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw',
+  wide: '100vw'
+};
+var DEFAULT_IMAGE_SIZES = IMAGE_SIZE_PRESETS.standard;
 var QB_RENDER_IMAGE_INDEX = 0;
 
-  function buildImg(assetUrl, focalPoint, alt, priority) {
+  function buildImg(assetUrl, focalPoint, alt, options) {
+  if (typeof options === 'boolean') options = { priority: options };
+  options = options || {};
   var imgIndex = QB_RENDER_IMAGE_INDEX++;
-var isPriority = priority === true || imgIndex < 3;
+var isPriority = options.priority === true || imgIndex < 3;
   var utils = getCollectionUtils();
   var base = String(assetUrl || '').split('?')[0];
+  var widths = Array.isArray(options.widths) && options.widths.length
+    ? options.widths
+    : SRCSET_WIDTHS;
+  var preset = options.imagePreset || options.preset || 'standard';
+  var sizes = options.sizes || options.imageSizes || IMAGE_SIZE_PRESETS[preset] || DEFAULT_IMAGE_SIZES;
 
   var srcset = (utils && typeof utils.buildSrcset === 'function')
-    ? utils.buildSrcset(base, SRCSET_WIDTHS)
-    : SRCSET_WIDTHS.map(function(w) {
+    ? utils.buildSrcset(base, widths)
+    : widths.map(function(w) {
       return base + '?format=' + w + 'w ' + w + 'w';
     }).join(', ');
 
-  var fallbackSrc = base + '?format=750w';
+  var fallbackSrc = base + '?format=' + Number(options.fallbackWidth || 750) + 'w';
 
   var wrap = el('div', { class: qCardClass('cb-card__img-wrap', 'qb-card__img-wrap') });
+  if (options.ratio) wrap.style.setProperty('--cb-card-image-ratio', String(options.ratio));
 
   var img = el('img', {
     class: qCardClass('cb-card__img', 'qb-card__img'),
     alt: alt || '',
-    sizes: '(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw',
+    sizes: sizes,
     decoding: 'async',
   });
 
@@ -675,11 +688,20 @@ var isPriority = priority === true || imgIndex < 3;
     return node;
   }
 
-  function buildChild(def, item, cardIndex) {
+  function buildChild(def, item, cardIndex, cfg) {
     var type = typeof def === 'string' ? def : (def && def.type);
 
     if (type === 'image') {
-      return item.assetUrl ? buildImg(item.assetUrl, item.focalPoint, item.title, cardIndex < 3) : null;
+      var display = cfg && cfg.display ? cfg.display : {};
+      var descriptor = def && typeof def === 'object' ? def : {};
+      return item.assetUrl ? buildImg(item.assetUrl, item.focalPoint, item.title, {
+        priority: descriptor.priority === true || cardIndex < 3,
+        sizes: descriptor.sizes || descriptor.imageSizes || display.imageSizes,
+        widths: descriptor.widths || descriptor.srcsetWidths || display.srcsetWidths,
+        imagePreset: descriptor.imagePreset || display.imagePreset,
+        ratio: descriptor.ratio || descriptor.imageRatio || display.imageRatio,
+        fallbackWidth: descriptor.fallbackWidth || display.imageFallbackWidth
+      }) : null;
     }
 
     if (type === 'categories') {
@@ -884,7 +906,7 @@ var isPriority = priority === true || imgIndex < 3;
           }
 
           var built = children.map(function(def) {
-            return buildChild(def, item, index);
+            return buildChild(def, item, index, cfg);
           }).filter(Boolean);
 
           built.forEach(function(node, ni) {
@@ -898,7 +920,7 @@ var isPriority = priority === true || imgIndex < 3;
           });
         } else {
           children.forEach(function(def) {
-            var node = buildChild(def, item, index);
+            var node = buildChild(def, item, index, cfg);
             if (node) wrapper.appendChild(node);
           });
         }
@@ -909,17 +931,24 @@ var isPriority = priority === true || imgIndex < 3;
       return card;
     }
 
-    if (item.assetUrl) card.appendChild(buildImg(item.assetUrl, item.focalPoint, item.title, index < 3));
+    if (item.assetUrl) card.appendChild(buildImg(item.assetUrl, item.focalPoint, item.title, {
+      priority: index < 3,
+      sizes: disp.imageSizes,
+      widths: disp.srcsetWidths,
+      imagePreset: disp.imagePreset,
+      ratio: disp.imageRatio,
+      fallbackWidth: disp.imageFallbackWidth
+    }));
 
     var body = el('div', { class: qCardClass('cb-card__body', 'qb-card__body') });
 
     if (item.categories.length) {
-      var meta = buildChild('categories', item, index);
+      var meta = buildChild('categories', item, index, cfg);
       if (meta) body.appendChild(meta);
     }
 
     if (item.title) {
-      var tt = buildChild('title', item, index);
+      var tt = buildChild('title', item, index, cfg);
       body.appendChild(tt);
     }
 
@@ -930,7 +959,7 @@ var isPriority = priority === true || imgIndex < 3;
         label: f.label,
         labelIcon: f.labelIcon,
         joinWith: f.joinWith,
-      }, item);
+      }, item, index, cfg);
 
       if (node) body.appendChild(node);
     });
@@ -941,7 +970,7 @@ var isPriority = priority === true || imgIndex < 3;
     }
 
     if (disp.location && item.location) {
-      var lp = buildChild('location', item, index);
+      var lp = buildChild('location', item, index, cfg);
       body.appendChild(lp);
     }
 
@@ -1037,7 +1066,7 @@ var isPriority = priority === true || imgIndex < 3;
         var descriptor = typeof child === 'string' ? { type: child } : Object.assign({}, child || {});
         if (descriptor.type === 'excerpt' && descriptor.max === undefined) descriptor.max = false;
 
-        var node = buildChild(descriptor, item, 0);
+        var node = buildChild(descriptor, item, 0, cfg);
         if (node) wrapper.appendChild(decorateLightboxChild(node, descriptor));
       });
 
