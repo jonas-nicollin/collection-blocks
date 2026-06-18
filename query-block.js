@@ -114,6 +114,15 @@
     return e;
   }
 
+  function cardClassName(cfg) {
+    if (!cfg) return '';
+    if (cfg.cardClassName) return cfg.cardClassName;
+    if (cfg.classes && typeof cfg.classes === 'object') {
+      return cfg.classes.card || cfg.classes.cards || cfg.classes.item || '';
+    }
+    return '';
+  }
+
   function qCardClass(shared, specific) {
     var utils = getCollectionUtils();
     if (utils && typeof utils.classNames === 'function') return utils.classNames(shared, specific);
@@ -605,7 +614,7 @@ var isPriority = priority === true || imgIndex < 3;
 
   function buildLabelNode(label, labelIcon) {
     if (labelIcon) {
-      var ic = el('span', { class: 'cb-icon qb-icon cb-tag-icon qb-tag-icon' });
+      var ic = el('span', { class: 'ui-icon cb-card__tag-icon qb-card__tag-icon' });
       ic.textContent = labelIcon;
       return ic;
     }
@@ -682,7 +691,13 @@ var isPriority = priority === true || imgIndex < 3;
 
       var w = el('div', { class: qCardClass('cb-card__categories', 'qb-card__categories') });
       item.categories.forEach(function(c) {
-        var s = el('span', { class: qCardClass('cb-card__category', 'qb-card__category') });
+        var catSlug = slugify(c);
+        var s = el('span', {
+          class: qCardClass(
+            'cb-card__category' + (catSlug ? ' cb-card__category--' + catSlug : ''),
+            'qb-card__category' + (catSlug ? ' qb-card__category--' + catSlug : '')
+          )
+        });
         s.textContent = c;
         w.appendChild(s);
       });
@@ -761,17 +776,20 @@ var isPriority = priority === true || imgIndex < 3;
           values: vals,
           label: labelIcon ? '' : label,
           labelIcon: labelIcon,
-          iconClassName: 'cb-icon qb-icon cb-tag-icon qb-tag-icon',
+          iconClassName: 'ui-icon cb-card__tag-icon qb-card__tag-icon',
           joinWith: joinWith,
           separateLabel: true,
           labelSuffix: '\u00A0',
-          modifier: false,
         }, { prefix: 'qb-card' });
       }
 
+      var prefixSlug = slugify(String(prefix || '').replace(/:$/, ''));
       var row = el('div', {
-        class: qCardClass('cb-card__tag-field', 'qb-card__tag-field'),
-        'data-prefix': prefix,
+        class: qCardClass(
+          'cb-card__tag-field' + (prefixSlug ? ' cb-card__tag-field--' + prefixSlug : ''),
+          'qb-card__tag-field' + (prefixSlug ? ' qb-card__tag-field--' + prefixSlug : '')
+        ),
+        'data-prefix': String(prefix || '').replace(/:$/, ''),
       });
 
       var labelNode = buildLabelNode(label, labelIcon);
@@ -802,7 +820,7 @@ var isPriority = priority === true || imgIndex < 3;
     var disp = cfg.display || {};
     var link = disp.cardLink !== false;
     var card = el(link ? 'a' : 'div', {
-      class: qCardClass('cb-card', 'qb-card'),
+      class: qCardClass('cb-card', 'qb-card') + (cardClassName(cfg) ? ' ' + cardClassName(cfg) : ''),
       'data-cb-index': String(index),
       'data-qb-index': String(index),
     });
@@ -826,6 +844,7 @@ var isPriority = priority === true || imgIndex < 3;
     if (cardClassesCfg) {
       if (cardClassesCfg.categories) {
         item.categories.forEach(function(cat) {
+          card.classList.add('cb-cat--' + slugify(cat));
           card.classList.add('qb-cat--' + slugify(cat));
         });
       }
@@ -836,6 +855,7 @@ var isPriority = priority === true || imgIndex < 3;
 
       tagPfxList.forEach(function(pfx) {
         getTagValuesByPrefix(item, pfx).forEach(function(val) {
+          card.classList.add('cb-tag--' + slugify(pfx) + '--' + slugify(val));
           card.classList.add('qb-tag--' + slugify(pfx) + '--' + slugify(val));
         });
       });
@@ -848,14 +868,20 @@ var isPriority = priority === true || imgIndex < 3;
         var wrapper = el('div', {
           class: ROLE_CLASS[grp.role] || qCardClass('cb-card__group', 'qb-card__group'),
         });
+        if (grp.className) addUiClasses(wrapper, grp.className);
 
         var sep = grp.separator || ' ';
         var useInline = grp.inline === true;
         var children = grp.children || [];
 
         if (useInline) {
-          wrapper.classList.add('cb-card__group--inline');
-          wrapper.classList.add('qb-card__group--inline');
+          if (grp.role === 'body') {
+            wrapper.classList.add('cb-card__body--inline');
+            wrapper.classList.add('qb-card__body--inline');
+          } else {
+            wrapper.classList.add('cb-card__group--inline');
+            wrapper.classList.add('qb-card__group--inline');
+          }
 
           var built = children.map(function(def) {
             return buildChild(def, item, index);
@@ -1000,7 +1026,12 @@ var isPriority = priority === true || imgIndex < 3;
         addUiClasses(wrapper, qCardClass('cb-lightbox__' + group.role, 'qb-lightbox__' + group.role));
       }
       if (group.className) addUiClasses(wrapper, group.className);
-      if (group.inline === true) addUiClasses(wrapper, 'cb-card__group--inline qb-card__group--inline');
+      if (group.inline === true) {
+        addUiClasses(wrapper, group.role === 'body'
+          ? 'cb-card__body--inline qb-card__body--inline'
+          : 'cb-card__group--inline qb-card__group--inline'
+        );
+      }
 
       (group.children || []).forEach(function(child) {
         var descriptor = typeof child === 'string' ? { type: child } : Object.assign({}, child || {});
@@ -1051,8 +1082,12 @@ var isPriority = priority === true || imgIndex < 3;
     if (!options || !target) return;
 
     target.__qbLightboxItems = new Map();
+    target.__qbLightboxItemsByUrl = new Map();
+    target.__qbLightboxShown = items.slice();
     items.forEach(function(item, index) {
       target.__qbLightboxItems.set(getLightboxItemKey(item, index), item);
+      if (item.fullUrl) target.__qbLightboxItemsByUrl.set(String(item.fullUrl).replace(/\/+$/, ''), item);
+      if (item.urlId) target.__qbLightboxItemsByUrl.set(String(item.urlId), item);
     });
 
     if (target.__qbLightboxBound) return;
@@ -1065,13 +1100,20 @@ var isPriority = priority === true || imgIndex < 3;
       var card = event.target.closest('.qb-card[data-qb-lightbox-key]');
       if (!card || !target.contains(card)) return;
 
+      event.preventDefault();
+
       var item = target.__qbLightboxItems && target.__qbLightboxItems.get(card.dataset.qbLightboxKey);
+      if (!item) {
+        var idx = Number(card.getAttribute('data-qb-index') || card.getAttribute('data-cb-index'));
+        if (Number.isFinite(idx) && target.__qbLightboxShown) item = target.__qbLightboxShown[idx] || null;
+      }
+      if (!item && card.getAttribute('href') && target.__qbLightboxItemsByUrl) {
+        item = target.__qbLightboxItemsByUrl.get(String(card.getAttribute('href')).replace(/\/+$/, '')) || null;
+      }
       if (!item) return;
 
       var lightbox = getOrCreateLightbox(target, cfg);
       if (!lightbox) return;
-
-      event.preventDefault();
 
       lightbox.open({
         content: buildLightboxGroups(item, cfg, options),
@@ -2378,6 +2420,10 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       ? (cfg.classes.block || '')
       : (typeof cfg.classes === 'string' ? cfg.classes : '');
 
+    cfg.cardClassName = (raw && raw.classes && typeof raw.classes === 'object')
+      ? (raw.classes.card || raw.classes.cards || raw.classes.item || '')
+      : (raw && raw.cardClassName ? raw.cardClassName : '');
+
     if (cfg.openInNewTab !== undefined) {
       cfg.display = Object.assign({}, cfg.display || {});
       if (cfg.display.openInNewTab === undefined) cfg.display.openInNewTab = cfg.openInNewTab;
@@ -2797,6 +2843,20 @@ requestAnimationFrame(function() {
     var currentGroupBy = disp.groupBy || null;
     var currentGroupOrder = disp.groupOrder || 'collection';
     var currentTagPrefixes = null;
+    var baseCardClassName = cfg.cardClassName || '';
+    var currentCardClassName = baseCardClassName;
+
+    function getTabCardClassName(tab) {
+      if (!tab) return '';
+      if (tab.classes && typeof tab.classes === 'object') {
+        return tab.classes.card || tab.classes.cards || tab.classes.item || '';
+      }
+      return tab.cardClassName || tab.cardClass || '';
+    }
+
+    function mergeCardClassName(tab) {
+      return [baseCardClassName, getTabCardClassName(tab)].filter(Boolean).join(' ');
+    }
 
     function updateTabClass(tabLabel) {
       Array.from(target.classList).forEach(function(c) {
@@ -2840,6 +2900,8 @@ requestAnimationFrame(function() {
 
       if (tab.tagPrefixes !== undefined) currentTagPrefixes = tab.tagPrefixes;
       else currentTagPrefixes = null;
+
+      currentCardClassName = mergeCardClassName(tab);
     }
 
     var filterWrapper = buildFilterBar(
@@ -2869,7 +2931,7 @@ requestAnimationFrame(function() {
 
     var gridClass = dispLayout === 'list'
       ? 'cb-grid qb-grid cb-grid--list qb-grid--list'
-      : 'cb-grid qb-grid';
+      : 'cb-grid qb-grid cb-grid--grid qb-grid--grid';
 
     var grid = el('div', { class: gridClass });
 
@@ -2910,6 +2972,7 @@ requestAnimationFrame(function() {
         if (initTab.groupBy !== undefined) currentGroupBy = initTab.groupBy;
         if (initTab.groupOrder !== undefined) currentGroupOrder = initTab.groupOrder;
         if (initTab.tagPrefixes !== undefined) currentTagPrefixes = initTab.tagPrefixes;
+        currentCardClassName = mergeCardClassName(initTab);
       }
     }
 
@@ -2924,7 +2987,7 @@ requestAnimationFrame(function() {
 
       grid.className = currentLayout === 'list'
         ? 'cb-grid qb-grid cb-grid--list qb-grid--list'
-        : 'cb-grid qb-grid';
+        : 'cb-grid qb-grid cb-grid--grid qb-grid--grid';
 
       target.classList.toggle('cb-block--list', currentLayout === 'list');
       target.classList.toggle('qb-block--list', currentLayout === 'list');
@@ -2983,15 +3046,14 @@ requestAnimationFrame(function() {
         return;
       }
 
-      var cfgForRender = (currentGroups || currentGroupBy !== (disp.groupBy || null))
-        ? Object.assign({}, cfg, {
-            display: Object.assign({}, disp, {
-              groups: currentGroups || disp.groups,
-              groupBy: currentGroupBy,
-              groupOrder: currentGroupOrder,
-            }),
-          })
-        : cfg;
+      var cfgForRender = Object.assign({}, cfg, {
+        cardClassName: currentCardClassName || baseCardClassName,
+        display: Object.assign({}, disp, {
+          groups: currentGroups || disp.groups,
+          groupBy: currentGroupBy,
+          groupOrder: currentGroupOrder,
+        }),
+      });
 
       var activeGroupFilter = null;
 
