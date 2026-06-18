@@ -209,7 +209,14 @@ function getTag(tags,p){var utils=getCollectionUtils();if(utils&&typeof utils.ge
 function getTags(tags,p){var utils=getCollectionUtils();if(utils&&typeof utils.getTagValuesByPrefix==='function')return utils.getTagValuesByPrefix({tags:tags||[]},p);if(!Array.isArray(tags))return[];var re=tagRe(p);return tags.filter(function(x){return re.test(String(x));}).map(function(x){return String(x).replace(re,'').trim();});}
 
 /* ── Image srcset ── */
-var SW=[300,500,750,1000,1500];
+var SW=[300,500,750,1000,1200,1500,2000,2500];
+function getImageSizes(sizes,cfg){
+  if(sizes)return sizes;
+  var preset=(cfg.display&&cfg.display.imagePreset)||'standard';
+  if(cfg.display&&cfg.display.imageSizes)return cfg.display.imageSizes;
+  if(preset==='wide')return '100vw';
+  return cfg.layout==='grid'?'(max-width:768px) 100vw,33vw':'(max-width:768px) 100vw,50vw';
+}
 var LOCATOR_RENDER_IMAGE_INDEX=0;
 
 function buildSrcset(b){
@@ -244,11 +251,12 @@ function imgTag(base,alt,cls,sizes,fp,priority){
 
   var pos=fp||'50% 50%';
   var fallback=base+'?format=750w';
+  var imageSizes=getImageSizes(sizes,cfg);
   var utils=getCollectionUtils();
   if(utils&&typeof utils.buildImgHTML==='function'){
     return utils.buildImgHTML(base,pos,alt,{
       imageClass:cls,
-      sizes:sizes||'(max-width:768px) 100vw, 400px',
+      sizes:imageSizes,
       widths:SW,
       priority:isPriority
     });
@@ -257,7 +265,7 @@ function imgTag(base,alt,cls,sizes,fp,priority){
   return '<img class="'+escHtml(cls)+'"'
     +' src="'+escHtml(fallback)+'"'
     +' srcset="'+escHtml(buildSrcset(base))+'"'
-    +' sizes="'+escHtml(sizes||'(max-width:768px) 100vw, 400px')+'"'
+    +' sizes="'+escHtml(imageSizes)+'"'
     +' alt="'+escHtml(alt)+'"'
     +' loading="'+(isPriority?'eager':'lazy')+'"'
     +' fetchpriority="'+(isPriority?'high':'low')+'"'
@@ -267,7 +275,8 @@ function imgTag(base,alt,cls,sizes,fp,priority){
 
 function imgWrapTag(base,alt,sizes,fp,priority){
   if(!base)return'';
-  return '<div class="'+escHtml(CLS_IMG_WRAP)+'">'+imgTag(base,alt,CLS_IMAGE,sizes,fp,priority)+'</div>';
+  var style=cfg.display.imageRatio?' style="--cb-card-image-ratio:'+escHtml(cfg.display.imageRatio)+'"':'';
+  return '<div class="'+escHtml(CLS_IMG_WRAP)+'"'+style+'>'+imgTag(base,alt,CLS_IMAGE,sizes,fp,priority)+'</div>';
 }
    
 /* ── Coordonnées ── */
@@ -435,7 +444,7 @@ function renderChild(child,item){
   var d=cfg.display;
   if(child==='image'){
     if(!d.showImage||!item.imageBase)return'';
-    return imgWrapTag(item.imageBase,item.title,'(max-width:768px) 100vw,'+(cfg.layout==='grid'?'33vw':'50vw'),item.focalPos);
+    return imgWrapTag(item.imageBase,item.title,'',item.focalPos);
   }
   if(child==='title'){
     if(!d.showTitle||!item.title)return'';
@@ -502,7 +511,7 @@ function buildCardHTML(item){
 
   /* Comportement par défaut : media (image seule) + body (tous les champs texte) */
   var mediaHtml='';
-  if(d.showImage&&item.imageBase)mediaHtml='<div class="'+escHtml(CLS_MEDIA)+'">'+imgWrapTag(item.imageBase,item.title,'(max-width:768px) 100vw,'+(cfg.layout==='grid'?'33vw':'50vw'),item.focalPos)+'</div>';
+  if(d.showImage&&item.imageBase)mediaHtml='<div class="'+escHtml(CLS_MEDIA)+'">'+imgWrapTag(item.imageBase,item.title,'',item.focalPos)+'</div>';
 
   var bodyHtml='';
   if(d.showNumero&&item.numero)bodyHtml+='<div class="'+escHtml(CLS_TAG_FIELD+tagFieldModifier('numero'))+'" data-prefix="'+escHtml(String(cfg.tagNumero||'Numéro').replace(/:$/,''))+'"><span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.numero)+'</span></div>';
