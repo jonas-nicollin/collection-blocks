@@ -1928,6 +1928,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       tags: {},
       search: '',
     };
+    var activeTabConfig = null;
 
     var secondaryEl = null;
     var mobileObj = null;
@@ -2039,6 +2040,18 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       state.search = '';
     }
 
+    function getTabSetting(name, fallback) {
+      if (activeTabConfig && activeTabConfig[name] !== undefined) {
+        return activeTabConfig[name];
+      }
+
+      return fallback;
+    }
+
+    function areSecondaryFiltersDisabled() {
+      return activeTabConfig && activeTabConfig.filters === false;
+    }
+
     function buildPillGroup(vals, displayVals, label, showLabel, getCurrent, onSelect) {
       var wrap = el('div', { class: CLS_FILTER_GROUP + ' ' + CLS_FILTER_GROUP_PILLS });
 
@@ -2113,8 +2126,12 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     }
 
     function appendSecondary(pool, container) {
-      if (fc.categories !== false) {
-        var catsCfg = (fc.categories && typeof fc.categories === 'object') ? fc.categories : {};
+      if (areSecondaryFiltersDisabled()) return;
+
+      var categoriesSetting = getTabSetting('categories', fc.categories);
+
+      if (categoriesSetting !== false) {
+        var catsCfg = (categoriesSetting && typeof categoriesSetting === 'object') ? categoriesSetting : {};
         var catsOrder = catsCfg.order || null;
         var catsShowLbl = catsCfg.showLabel !== false;
         var catsLabel = catsCfg.label || 'Cat\u00e9gorie';
@@ -2214,7 +2231,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         container.appendChild(grp);
       });
 
-      if (fc.search !== false) {
+      if (getTabSetting('search', fc.search) !== false) {
         var sg = el('div', { class: CLS_FILTER_GROUP + ' ' + CLS_FILTER_GROUP_SEARCH });
 
         var inp = el('input', {
@@ -2270,6 +2287,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         }
 
         if (active) {
+          activeTabConfig = tab;
           state.tab = tab.filter || null;
           if (onTabChange) onTabChange(tab);
         }
@@ -2283,6 +2301,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
           addUiClasses(btn, CLS_TAB_BTN_ACTIVE);
 
+          activeTabConfig = tab;
           state.tab = tab.filter || null;
           resetSec();
 
