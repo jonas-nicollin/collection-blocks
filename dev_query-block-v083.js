@@ -772,6 +772,32 @@ var isPriority = options.priority === true || imgIndex < 3;
       return pl;
     }
 
+    if (type === 'link' || type === 'cta') {
+      if (!item.fullUrl) return null;
+
+      var dispLink = (cfg && cfg.display) || {};
+      var labelText = (def && (def.label || def.text)) || dispLink.linkLabel || 'Voir la page';
+      var linkClasses = qCardClass('cb-card__link', 'qb-card__link');
+      if (def && def.className) linkClasses += ' ' + def.className;
+
+      if (dispLink.cardLink !== false) {
+        var spanLink = el('span', { class: linkClasses });
+        spanLink.textContent = labelText;
+        return spanLink;
+      }
+
+      var cardLink = el('a', { class: linkClasses, href: item.fullUrl });
+      cardLink.textContent = labelText;
+
+      var openInNewTab = dispLink.openInNewTab === true || (cfg && cfg.openInNewTab === true);
+      if (openInNewTab) {
+        cardLink.target = '_blank';
+        cardLink.rel = 'noopener noreferrer';
+      }
+
+      return cardLink;
+    }
+
     if (type === 'tagPrefix') {
       var prefix = (def && def.prefix) || '';
       var label = (def && def.label != null) ? def.label : '';
