@@ -2521,11 +2521,21 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
     var mode = pag.mode || 'load-more';
     var hasPerPage = pag.perPage !== undefined && pag.perPage !== null && pag.perPage !== false;
+    var hasMaxItems = pag.maxItems !== undefined && pag.maxItems !== null && pag.maxItems !== false;
+
     var perPage = hasPerPage
       ? Number(pag.perPage)
       : (mode === 'none' ? Infinity : 12);
 
     if (!isFinite(perPage) || perPage <= 0) perPage = Infinity;
+
+    var maxItems = hasMaxItems ? Number(pag.maxItems) : Infinity;
+    if (!isFinite(maxItems) || maxItems <= 0) maxItems = Infinity;
+
+    if (!hasMaxItems && mode === 'none' && hasPerPage) {
+      maxItems = perPage;
+    }
+
     var dispLayout = disp.layout || 'grid';
 
     target.classList.add('cb-block');
@@ -3057,8 +3067,8 @@ requestAnimationFrame(function() {
         return matchesUIFilters(item, activeFilters);
       });
 
-      var total = filtered.length;
-      var shown = filtered.slice(0, currentPage * perPage);
+      var total = Math.min(filtered.length, maxItems);
+      var shown = filtered.slice(0, Math.min(currentPage * perPage, maxItems));
 
             var prevCardCount = fromPagination
         ? grid.querySelectorAll('.qb-card').length
@@ -3157,7 +3167,8 @@ if (canAppendIncrementally) {
         if (!existing) root.appendChild(headingResult.ctaBelowEl);
       }
 
-      var hasMore = shown.length < total || canFetchMorePages();
+      var reachedMaxItems = isFinite(maxItems) && shown.length >= maxItems;
+      var hasMore = !reachedMaxItems && (shown.length < total || canFetchMorePages());
 
       if (!hasMore) {
         if (i18n.endLabel !== false && i18n.endLabel) {
