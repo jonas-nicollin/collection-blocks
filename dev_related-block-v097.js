@@ -1,7 +1,11 @@
 (function() {
     "use strict";
     // ── Rétrocompatibilité ─────────────────────────────────────────────
-    const ALL_CONFIGS = Array.isArray(window.RELATED_BLOCK_CONFIGS) ? window.RELATED_BLOCK_CONFIGS : [];
+    const ALL_CONFIGS = Array.isArray(window.RELATED_BLOCK_CONFIGS)
+        ? window.RELATED_BLOCK_CONFIGS
+        : Array.isArray(window.COLLECTION_RELATED_BLOCK_CONFIGS)
+            ? window.COLLECTION_RELATED_BLOCK_CONFIGS
+            : [];
     if (!ALL_CONFIGS.length) return;
     // Extraire l'entrée _shared (doit être en première position)
     const SHARED_CONFIG = ALL_CONFIGS[0]?._shared === true ? ALL_CONFIGS[0] : null;
@@ -27,6 +31,9 @@
         };
         const source = normalizeCollectionRef(cfg.sourceCollection);
         if (source) cfg.sourceCollection = source;
+        if (!cfg.target && cfg.insertion && cfg.insertion.targetSelector) {
+            cfg.target = cfg.insertion.targetSelector;
+        }
         if (cfg.currentItem) {
             const currentSource = normalizeCollectionRef(cfg.currentItem.sourceCollection);
             if (currentSource) cfg.currentItem = {
