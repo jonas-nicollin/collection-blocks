@@ -2520,7 +2520,12 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     if (pag.endLabel !== undefined) i18n.endLabel = pag.endLabel;
 
     var mode = pag.mode || 'load-more';
-    var perPage = mode === 'none' ? Infinity : Number(pag.perPage || 12);
+    var hasPerPage = pag.perPage !== undefined && pag.perPage !== null && pag.perPage !== false;
+    var perPage = hasPerPage
+      ? Number(pag.perPage)
+      : (mode === 'none' ? Infinity : 12);
+
+    if (!isFinite(perPage) || perPage <= 0) perPage = Infinity;
     var dispLayout = disp.layout || 'grid';
 
     target.classList.add('cb-block');
