@@ -39,8 +39,8 @@ function detectLocale(){
 }
 /* Dictionnaire i18n par défaut — surcharger via cfg.i18n */
 var I18N_DEFAULTS={
-  fr:{noResults:'Aucun résultat dans cette zone',allZones:'Toutes les zones',itemCount:function(n){return n+' exposition'+(n>1?'s':'');},loading:'Chargement…',error:'Impossible de charger les données.'},
-  en:{noResults:'No results in this area',allZones:'All areas',itemCount:function(n){return n+' exhibition'+(n>1?'s':'');},loading:'Loading…',error:'Unable to load data.'},
+  fr:{noResults:'Aucun résultat dans cette zone',allZones:'Toutes les zones',searchPlaceholder:'Rechercher…',itemCount:function(n){return n+' exposition'+(n>1?'s':'');},loading:'Chargement…',error:'Impossible de charger les données.'},
+  en:{noResults:'No results in this area',allZones:'All areas',searchPlaceholder:'Search…',itemCount:function(n){return n+' exhibition'+(n>1?'s':'');},loading:'Loading…',error:'Unable to load data.'},
 };
 function getI18n(cfg){
   var locale=detectLocale();
@@ -78,8 +78,12 @@ var cfg=Object.assign({
   layout:'list',display:{},apiKey:'',mapCenter:null,mapZoom:null,
   mapZoomOnSelect:16,mapStyle:null,mapId:null,mapOptions:{},map:{},
   filterMode:'dropdown',
+  filterSource:'zones',
+  filterOrder:null,
+  filterLabel:null,
   filterMultiple:false,
   showZoneFilter:true,
+  showSearch:false,
   sort:{type:'numero',direction:'asc'},
   classes:{block:''},
   mobileSheet:{},
@@ -410,6 +414,7 @@ function getCollectionOptions(maxPages){
       numero: getTag(item.tags, cfg.tagNumero),
       lieu: getTag(item.tags, cfg.tagLieu),
       zones: getTags(item.tags, cfg.tagZone),
+      categories: (item.categories || []).map(function(c){return String(c||'').trim();}).filter(Boolean),
       imageBase: getImgBase(item),
       focalPos: focalPos,
       lat: c.lat,
@@ -464,6 +469,12 @@ function renderChild(child,item){
     var utils=getCollectionUtils();
     if(utils&&typeof utils.buildCategoriesHTML==='function')return utils.buildCategoriesHTML(item.zones,{prefix:'lb-card'});
     return'<div class="cb-card__categories lb-card__categories">'+item.zones.map(function(z){return'<span class="'+escHtml('cb-card__category lb-card__category'+categoryModifier(z))+'">'+escHtml(z)+'</span>';}).join('')+'</div>';
+  }
+  if(child==='categories'){
+    if(!item.categories||!item.categories.length)return'';
+    var utilsCats=getCollectionUtils();
+    if(utilsCats&&typeof utilsCats.buildCategoriesHTML==='function')return utilsCats.buildCategoriesHTML(item.categories,{prefix:'lb-card'});
+    return'<div class="cb-card__categories lb-card__categories">'+item.categories.map(function(c){return'<span class="'+escHtml('cb-card__category lb-card__category'+categoryModifier(c))+'">'+escHtml(c)+'</span>';}).join('')+'</div>';
   }
   if(child==='cardLink'){
     if(cfg.display.cardLink===false||!item.url)return'';
@@ -595,9 +606,11 @@ function loadMapsAPI(){if(window.google&&window.google.maps)return Promise.resol
 function loadClusterer(){if(window.markerClusterer)return Promise.resolve();if(clustererPromise)return clustererPromise;clustererPromise=new Promise(function(resolve){var s=document.createElement('script');s.src='https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js';s.onload=function(){resolve();};s.onerror=function(){clustererPromise=null;resolve();};document.head.appendChild(s);});return clustererPromise;}
 
 /* ── Contrôles + skeleton ── */
-function buildControls(zones,total,activeZone){
+function buildControls(zones,total,activeZone,searchValue){
   var f='';
   if(cfg.showZoneFilter&&zones.length){
+    var allLabel=(cfg.i18n&&cfg.i18n.allZones)||getI18n(cfg).allZones;
+    var filterLabel=cfg.filterLabel||'Filtrer';
     if(cfg.filterMode==='buttons'){
       /* Boutons pill — même apparence que Query Block (qb-filter-btn) */
       var btns='';
@@ -605,13 +618,18 @@ function buildControls(zones,total,activeZone){
       f='<div class="'+escHtml(CLS_FILTER_GROUP+' '+CLS_FILTER_BUTTONS)+'">'+btns+'</div>';
     }else{
       /* Dropdown (défaut) */
-      var opts=['<option value="">Toutes les zones</option>']
+      var opts=['<option value="">'+escHtml(allLabel)+'</option>']
         .concat(zones.map(function(z){return'<option value="'+escHtml(z)+'"'+(z===activeZone?' selected':'')+'>'+escHtml(z)+'</option>';})).join('');
       f='<div class="'+escHtml(CLS_FILTER_GROUP+' '+CLS_FILTER_WRAP)+'">'
-        +'<select class="'+escHtml(CLS_FILTER_SELECT)+'" aria-label="Filtrer par zone">'+opts+'</select>'
+        +'<select class="'+escHtml(CLS_FILTER_SELECT)+'" aria-label="'+escHtml(filterLabel)+'">'+opts+'</select>'
         +'<span class="'+escHtml(CLS_FILTER_ICON)+'" aria-hidden="true">expand_more</span>'
         +'</div>';
     }
+  }
+  if(cfg.showSearch){
+    f+='<div class="'+escHtml(CLS_FILTER_GROUP+' lb-filter-group--search')+'">'
+      +'<input class="cb-filter-search lb-filter-search" type="search" value="'+escHtml(searchValue||'')+'" placeholder="'+escHtml(getI18n(cfg).searchPlaceholder)+'" aria-label="'+escHtml(getI18n(cfg).searchPlaceholder)+'">'
+      +'</div>';
   }
   var countHtml=cfg.display.showCount!==false
     ?'<span class="'+escHtml(CLS_COUNTER)+'">'+getI18n(cfg).itemCount(total)+'</span>':'';
@@ -660,7 +678,7 @@ function buildSkeleton(){var s='';for(var i=0;i<4;i++)s+='<div class="'+escHtml(
 
 /* ── Instance ── */
 function createInstance(root,allItems,fetchMoreItems){
-  var map,markers={},clusterer=null,activeId=null,activePopup=null,activeZone='';
+  var map,markers={},clusterer=null,activeId=null,activePopup=null,activeZone='',activeSearch='';
   var mapTouched=false;
   var currentItems=allItems,visibleCount=cfg.display.pageSize>0?cfg.display.pageSize:allItems.length;
   var zones=collectZones(allItems);
@@ -671,9 +689,37 @@ function createInstance(root,allItems,fetchMoreItems){
 
   function collectZones(items){
     var out=[];
-    (items||[]).forEach(function(i){(i.zones||[]).forEach(function(z){if(out.indexOf(z)===-1)out.push(z);});});
+    (items||[]).forEach(function(i){getFilterValues(i).forEach(function(z){if(out.indexOf(z)===-1)out.push(z);});});
     out.sort();
+    if(Array.isArray(cfg.filterOrder)&&cfg.filterOrder.length){
+      var order=cfg.filterOrder.map(function(v){return String(v).toLowerCase();});
+      out.sort(function(a,b){
+        var ai=order.indexOf(String(a).toLowerCase());
+        var bi=order.indexOf(String(b).toLowerCase());
+        if(ai===-1)ai=9999;
+        if(bi===-1)bi=9999;
+        if(ai!==bi)return ai-bi;
+        return String(a).localeCompare(String(b),'fr');
+      });
+    }
     return out;
+  }
+
+  function getFilterValues(item){
+    return cfg.filterSource==='categories' ? (item.categories||[]) : (item.zones||[]);
+  }
+
+  function matchesSearch(item){
+    if(!activeSearch)return true;
+    var q=String(activeSearch).toLowerCase();
+    return [item.title,item.lieu,item.numero].concat(item.categories||[],item.zones||[]).join(' ').toLowerCase().indexOf(q)!==-1;
+  }
+
+  function getFilteredItems(){
+    return allItems.filter(function(i){
+      var filterOk=!activeZone||getFilterValues(i).indexOf(activeZone)!==-1;
+      return filterOk&&matchesSearch(i);
+    });
   }
 
   function zonesEqual(a,b){
@@ -685,13 +731,15 @@ function createInstance(root,allItems,fetchMoreItems){
   function syncControls(){
     var controls=root.querySelector('.lb-controls');
     if(!controls)return;
-    controls.outerHTML=buildControls(zones,allItems.length,activeZone);
+    controls.outerHTML=buildControls(zones,allItems.length,activeZone,activeSearch);
     bindControls();
   }
 
   function bindControls(){
     var sel=root.querySelector('.lb-filter-select');
     if(sel)sel.addEventListener('change',function(){applyFilter(sel.value);});
+    var search=root.querySelector('.lb-filter-search');
+    if(search)search.addEventListener('input',function(){applySearch(search.value);});
     root.querySelectorAll('.lb-filter-btn').forEach(function(btn){
       btn.addEventListener('click',function(){
         var zone=btn.dataset.zone||'';
@@ -1022,7 +1070,7 @@ function createInstance(root,allItems,fetchMoreItems){
         syncMarkerPositions(allItems);
         var nextZones=collectZones(allItems);
         if(!zonesEqual(zones,nextZones)){zones=nextZones;syncControls();}
-        currentItems = activeZone?allItems.filter(function(i){return i.zones.indexOf(activeZone)!==-1;}):allItems;
+        currentItems = getFilteredItems();
         items = currentItems;
       }
     }catch(err){
@@ -1033,7 +1081,8 @@ function createInstance(root,allItems,fetchMoreItems){
   renderList(items, visibleCount);
 });}}
   }
-  function applyFilter(zone){closePopup();activeZone=zone||'';currentItems=activeZone?allItems.filter(function(i){return i.zones.indexOf(activeZone)!==-1;}):allItems;visibleCount=cfg.display.pageSize>0?cfg.display.pageSize:currentItems.length;renderList(currentItems,visibleCount);allItems.forEach(function(i){if(!markers[i.id])return;markers[i.id].marker.setVisible(currentItems.some(function(ci){return ci.id===i.id;}));});if(currentItems.length&&activeZone){var b=new google.maps.LatLngBounds();currentItems.forEach(function(i){b.extend({lat:i.lat,lng:i.lng});});map.fitBounds(b,{padding:60});}}
+  function applyFilter(zone){closePopup();activeZone=zone||'';currentItems=getFilteredItems();visibleCount=cfg.display.pageSize>0?cfg.display.pageSize:currentItems.length;renderList(currentItems,visibleCount);allItems.forEach(function(i){if(!markers[i.id])return;markers[i.id].marker.setVisible(currentItems.some(function(ci){return ci.id===i.id;}));});if(currentItems.length&&activeZone){var b=new google.maps.LatLngBounds();currentItems.forEach(function(i){b.extend({lat:i.lat,lng:i.lng});});map.fitBounds(b,{padding:60});}}
+  function applySearch(value){closePopup();activeSearch=String(value||'').trim();currentItems=getFilteredItems();visibleCount=cfg.display.pageSize>0?cfg.display.pageSize:currentItems.length;renderList(currentItems,visibleCount);allItems.forEach(function(i){if(!markers[i.id])return;markers[i.id].marker.setVisible(currentItems.some(function(ci){return ci.id===i.id;}));});}
   function syncVisibleMarkers(){
     var visibleIds={};
     currentItems.forEach(function(i){visibleIds[i.id]=true;});
@@ -1055,7 +1104,7 @@ function createInstance(root,allItems,fetchMoreItems){
       var counter=root.querySelector('.lb-counter');
       if(counter)counter.textContent=getI18n(cfg).itemCount(allItems.length);
     }
-    currentItems=activeZone?allItems.filter(function(i){return i.zones.indexOf(activeZone)!==-1;}):allItems;
+    currentItems=getFilteredItems();
     visibleCount=cfg.display.pageSize>0?Math.min(Math.max(visibleCount,cfg.display.pageSize),currentItems.length):currentItems.length;
     syncVisibleMarkers();
     renderList(currentItems,visibleCount);
@@ -1070,7 +1119,7 @@ function createInstance(root,allItems,fetchMoreItems){
   addClasses(root, CLS_BLOCK+' '+CLS_BLOCK_READY+' '+blockClass);
   removeClasses(root, CLS_BLOCK_LOADING);
   root.removeAttribute('data-cb-classes');
-  root.innerHTML='<div class="'+escHtml(CLS_INNER+lc)+'"><div class="'+escHtml(CLS_SIDEBAR)+'">'+buildControls(zones,allItems.length,activeZone)+'<div class="'+escHtml(listClass())+'"></div></div><div class="'+escHtml(CLS_MAP_WRAP)+'"><div class="'+escHtml(CLS_MAP)+'"></div></div></div>';
+  root.innerHTML='<div class="'+escHtml(CLS_INNER+lc)+'"><div class="'+escHtml(CLS_SIDEBAR)+'">'+buildControls(zones,allItems.length,activeZone,activeSearch)+'<div class="'+escHtml(listClass())+'"></div></div><div class="'+escHtml(CLS_MAP_WRAP)+'"><div class="'+escHtml(CLS_MAP)+'"></div></div></div>';
   setupMobileSheet();
   buildMap(root.querySelector('.lb-map'));addAllMarkers();
   fitItemsOnMap(allItems,true);
@@ -1089,6 +1138,10 @@ async function init(){
     if(cfg.classes&&cfg.classes.block)addClasses(r, cfg.classes.block);
     r.setAttribute('data-cb-key', cfg.key || 'locator');
     r.setAttribute('data-lb-key', cfg.key || 'locator');
+    if(cfg.label){
+      r.setAttribute('data-cb-label', cfg.label);
+      r.setAttribute('data-lb-label', cfg.label);
+    }
     r.removeAttribute('data-cb-classes');
   });
   if(!cfg.apiKey){roots.forEach(function(r){removeClasses(r, CLS_BLOCK_LOADING);addClasses(r, CLS_BLOCK_READY);r.innerHTML='<p class="'+escHtml(CLS_ERROR)+'">apiKey manquant</p>';});return;}
