@@ -1515,6 +1515,13 @@
         if (guard.bodyId && document.body.id !== guard.bodyId) return false;
         return true;
     }
+    function matchesRequiredBodyClasses(required) {
+        if (!Array.isArray(required) || !required.length) return true;
+        if (Array.isArray(required[0])) {
+            return required.some(group => Array.isArray(group) && group.every(cls => document.body.classList.contains(cls)));
+        }
+        return required.every(cls => document.body.classList.contains(cls));
+    }
     function getInsertTarget(selector) {
         return document.querySelector(selector || "");
     }
@@ -1647,7 +1654,7 @@
         }, CFG || {});
         if (CFG.enabled === false) return null;
         if (!matchesDevGuard(CFG)) return null;
-        if (!CFG.requiredBodyClasses.every(cls => document.body.classList.contains(cls))) return null;
+        if (!matchesRequiredBodyClasses(CFG.requiredBodyClasses)) return null;
         let observer = null;
         function getInitialMaxPages(CFG) {
   return CFG.performance?.maxPages || 1;
@@ -1854,7 +1861,7 @@ finalItems = applyFallbackFill(finalItems, items, currentItem, {
         CONFIGS.forEach(CFG => {
             if (!CFG || CFG.enabled === false) return;
             if (!matchesDevGuard(CFG)) return;
-            if (!CFG.requiredBodyClasses.every(cls => document.body.classList.contains(cls))) return;
+            if (!matchesRequiredBodyClasses(CFG.requiredBodyClasses)) return;
             if (CFG.preload?.enabled !== true) return;
             const maxPages = CFG.preload?.maxPages || CFG.performance?.maxPages || 5;
             (Array.isArray(CFG.preload?.collections) ? CFG.preload.collections : []).forEach(col => {
