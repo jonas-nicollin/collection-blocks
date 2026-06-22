@@ -627,7 +627,7 @@ function buildControls(zones,total,activeZone,searchValue){
     }
   }
   if(cfg.showSearch){
-    f+='<div class="'+escHtml(CLS_FILTER_GROUP+' lb-filter-group--search')+'">'
+    f+='<div class="'+escHtml(CLS_FILTER_GROUP+' cb-filter-group--search lb-filter-group--search')+'">'
       +'<input class="cb-filter-search lb-filter-search" type="search" value="'+escHtml(searchValue||'')+'" placeholder="'+escHtml(getI18n(cfg).searchPlaceholder)+'" aria-label="'+escHtml(getI18n(cfg).searchPlaceholder)+'">'
       +'</div>';
   }
