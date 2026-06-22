@@ -424,6 +424,15 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
         }
       }
 
+      if (pf.excludeTagValues) {
+        for (var j = 0; j < pf.excludeTagValues.length; j++) {
+          var xtv = pf.excludeTagValues[j];
+          if (getTagValuesByPrefix(item, xtv.prefix).some(function(v) {
+            return norm(v) === norm(xtv.value);
+          })) return false;
+        }
+      }
+
       return true;
     });
   }
@@ -440,6 +449,15 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
           var tv = tf.tagValues[i];
           if (!getTagValuesByPrefix(item, tv.prefix).some(function(v) {
             return norm(v) === norm(tv.value);
+          })) return false;
+        }
+      }
+
+      if (tf.excludeTagValues) {
+        for (var j = 0; j < tf.excludeTagValues.length; j++) {
+          var xtv = tf.excludeTagValues[j];
+          if (getTagValuesByPrefix(item, xtv.prefix).some(function(v) {
+            return norm(v) === norm(xtv.value);
           })) return false;
         }
       }
