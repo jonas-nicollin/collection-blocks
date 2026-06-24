@@ -14,6 +14,8 @@
   const JSON_FORMAT_SUFFIX = '?format=json';
   let MB_IS_STARTING = false;
   let MB_LAST_RUN_PATH = '';
+  let MB_EDIT_OBSERVER = null;
+  let MB_EDIT_TIMER = null;
 
   /* ════════════════════════════════════
    * UTILITAIRES TEXTE
@@ -142,6 +144,10 @@
         ? [settings.bodyClassConfiguration]
         : [];
     return list.every(cls => document.body.classList.contains(cls));
+  }
+
+  function isSquarespaceEditMode() {
+    return document.body.classList.contains('sqs-edit-mode-active');
   }
 
   /* ════════════════════════════════════
@@ -505,6 +511,34 @@ async function fetchPageJson(settings) {
     container.dataset.metadataKey = mountKey;
     if (settings.customClass) addCustomClasses(container, settings.customClass);
     return { wrapper, container };
+  }
+
+  function getExpectedMetadataTarget(settings) {
+    const fallbackTarget = document.querySelector('.blog-item-top-wrapper');
+    const targetSelector = settings.target || settings.moveToDestination;
+    const explicitTarget = targetSelector
+      ? document.querySelector(targetSelector)
+      : null;
+    const anchorAfter = settings.insertAfter
+      ? document.querySelector(settings.insertAfter)
+      : null;
+    const anchorBefore = settings.insertBefore
+      ? document.querySelector(settings.insertBefore)
+      : null;
+    return anchorAfter?.parentElement || anchorBefore?.parentElement || explicitTarget || fallbackTarget;
+  }
+
+  function hasCurrentMetadataMounts() {
+    const activeSettings = SETTINGS_LIST.filter(matchesBodyClasses);
+    if (!activeSettings.length) return false;
+    return activeSettings.every(settings => {
+      const targetSelector = settings.target || settings.moveToDestination;
+      const target = getExpectedMetadataTarget(settings);
+      if (!target) return false;
+      const wrapper = findMetadataWrapper(target, getMountKey(settings, targetSelector));
+      if (!wrapper) return false;
+      return isSquarespaceEditMode() || !!wrapper.querySelector('.mb-block');
+    });
   }
 
   /* ════════════════════════════════════
@@ -884,9 +918,21 @@ async function fetchPageJson(settings) {
     if (!mount?.container) return;
 
     buildMetadataBlocks(settings, currentItem, mount.container);
-    if (!mount.container.querySelector('.mb-block')) {
+    if (!mount.container.querySelector('.mb-block') && !isSquarespaceEditMode()) {
       mount.wrapper?.remove();
     }
+  }
+
+  function setupEditModeObserver() {
+    if (MB_EDIT_OBSERVER || !window.MutationObserver || !isSquarespaceEditMode()) return;
+    MB_EDIT_OBSERVER = new MutationObserver(() => {
+      window.clearTimeout(MB_EDIT_TIMER);
+      MB_EDIT_TIMER = window.setTimeout(startAll, 150);
+    });
+    MB_EDIT_OBSERVER.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
   }
 
   async function startAll() {
@@ -894,10 +940,7 @@ async function fetchPageJson(settings) {
     
     if (MB_IS_STARTING) return;
 
-  if (
-    MB_LAST_RUN_PATH === currentPath &&
-    document.querySelector('.mb-wrapper .mb-block')
-  ) {
+  if (MB_LAST_RUN_PATH === currentPath && hasCurrentMetadataMounts()) {
     return;
   }
 
@@ -913,6 +956,7 @@ async function fetchPageJson(settings) {
     }
 
     MB_LAST_RUN_PATH = currentPath;
+    setupEditModeObserver();
   } finally {
     MB_IS_STARTING = false;
   }
