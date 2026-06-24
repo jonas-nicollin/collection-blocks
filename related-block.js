@@ -1,7 +1,11 @@
 (function() {
     "use strict";
     // ── Rétrocompatibilité ─────────────────────────────────────────────
-    const ALL_CONFIGS = Array.isArray(window.RELATED_BLOCK_CONFIGS) ? window.RELATED_BLOCK_CONFIGS : [];
+    const ALL_CONFIGS = Array.isArray(window.RELATED_BLOCK_CONFIGS)
+        ? window.RELATED_BLOCK_CONFIGS
+        : Array.isArray(window.COLLECTION_RELATED_BLOCK_CONFIGS)
+            ? window.COLLECTION_RELATED_BLOCK_CONFIGS
+            : [];
     if (!ALL_CONFIGS.length) return;
     // Extraire l'entrée _shared (doit être en première position)
     const SHARED_CONFIG = ALL_CONFIGS[0]?._shared === true ? ALL_CONFIGS[0] : null;
@@ -27,6 +31,9 @@
         };
         const source = normalizeCollectionRef(cfg.sourceCollection);
         if (source) cfg.sourceCollection = source;
+        if (!cfg.target && cfg.insertion && cfg.insertion.targetSelector) {
+            cfg.target = cfg.insertion.targetSelector;
+        }
         if (cfg.currentItem) {
             const currentSource = normalizeCollectionRef(cfg.currentItem.sourceCollection);
             if (currentSource) cfg.currentItem = {
@@ -61,8 +68,12 @@
     }
     // ── Constantes ────────────────────────────────────────────────────
     const DEFAULT_JSON_FORMAT_SUFFIX = "?format=json";
-    const DEFAULT_SRCSET_WIDTHS = [ 100, 300, 500, 750, 1e3, 1500, 2500 ];
-    const DEFAULT_IMAGE_SIZES = "(max-width: 768px) 100vw, 50vw";
+    const DEFAULT_SRCSET_WIDTHS = [ 300, 500, 750, 1e3, 1200, 1500, 2e3, 2500 ];
+    const IMAGE_SIZE_PRESETS = {
+        standard: "(max-width: 768px) 100vw, 50vw",
+        wide: "100vw"
+    };
+    const DEFAULT_IMAGE_SIZES = IMAGE_SIZE_PRESETS.standard;
     const BODY_CLASS_PREFIX = "has-rb-block--";
     // Déduplication des fetches en vol :
     // si deux blocs demandent la même collection simultanément,
@@ -1051,8 +1062,10 @@
         const utils = getCollectionUtils();
         const base = utils && typeof utils.getImageBase === "function" ? utils.getImageBase(item) : String(item.assetUrl || "").split("?")[0];
         if (!base) return null;
-        const srcsetWidths = Array.isArray(CFG.display?.srcsetWidths) ? CFG.display.srcsetWidths : [ 300, 500, 750, 1e3, 1500 ];
-        const cleanWidths = srcsetWidths.filter(w => Number(w) <= 1500);
+        const srcsetWidths = Array.isArray(CFG.display?.srcsetWidths) ? CFG.display.srcsetWidths : DEFAULT_SRCSET_WIDTHS;
+        const cleanWidths = srcsetWidths.filter(w => Number(w) <= 2500);
+        const imagePreset = CFG.display?.imagePreset || "standard";
+        const imageSizes = CFG.display?.imageSizes || IMAGE_SIZE_PRESETS[imagePreset] || DEFAULT_IMAGE_SIZES;
         const media = document.createElement("div");
         media.className = "cb-card__media rb-card__media";
         const wrap = utils && typeof utils.buildImg === "function"
@@ -1060,7 +1073,8 @@
               wrapperClass: "cb-card__img-wrap rb-card__img-wrap",
               imageClass: "cb-card__img rb-card__img",
               widths: cleanWidths,
-              sizes: CFG.display?.imageSizes || DEFAULT_IMAGE_SIZES
+              sizes: imageSizes,
+              ratio: CFG.display?.imageRatio
             })
           : null;
         if (utils && typeof utils.buildImg === "function") {
@@ -1070,12 +1084,13 @@
         }
         const fallbackWrap = document.createElement("div");
         fallbackWrap.className = "cb-card__img-wrap rb-card__img-wrap";
+        if (CFG.display?.imageRatio) fallbackWrap.style.setProperty("--cb-card-image-ratio", String(CFG.display.imageRatio));
         const img = document.createElement("img");
         img.className = "cb-card__img rb-card__img";
         const fallbackSrc = `${base}?format=750w`;
         img.src = fallbackSrc;
         img.srcset = utils && typeof utils.buildSrcset === "function" ? utils.buildSrcset(base, cleanWidths) : cleanWidths.map(w => `${base}?format=${w}w ${w}w`).join(", ");
-        img.sizes = CFG.display?.imageSizes || DEFAULT_IMAGE_SIZES;
+        img.sizes = imageSizes;
         img.alt = cleanText(item.title || "");
         img.loading = "lazy";
         img.decoding = "async";
@@ -1500,6 +1515,13 @@
         if (guard.bodyId && document.body.id !== guard.bodyId) return false;
         return true;
     }
+    function matchesRequiredBodyClasses(required) {
+        if (!Array.isArray(required) || !required.length) return true;
+        if (Array.isArray(required[0])) {
+            return required.some(group => Array.isArray(group) && group.every(cls => document.body.classList.contains(cls)));
+        }
+        return required.every(cls => document.body.classList.contains(cls));
+    }
     function getInsertTarget(selector) {
         return document.querySelector(selector || "");
     }
@@ -1577,9 +1599,7 @@
                 showLocation: false,
                 order: [ "meta", "title", "excerpt", "location" ],
                 tagPrefixFields: [],
-                groups: [],
-                srcsetWidths: DEFAULT_SRCSET_WIDTHS,
-                imageSizes: DEFAULT_IMAGE_SIZES
+                groups: []
             },
             loading: {
                 hideLoader: false
@@ -1634,7 +1654,7 @@
         }, CFG || {});
         if (CFG.enabled === false) return null;
         if (!matchesDevGuard(CFG)) return null;
-        if (!CFG.requiredBodyClasses.every(cls => document.body.classList.contains(cls))) return null;
+        if (!matchesRequiredBodyClasses(CFG.requiredBodyClasses)) return null;
         let observer = null;
         function getInitialMaxPages(CFG) {
   return CFG.performance?.maxPages || 1;
@@ -1841,7 +1861,7 @@ finalItems = applyFallbackFill(finalItems, items, currentItem, {
         CONFIGS.forEach(CFG => {
             if (!CFG || CFG.enabled === false) return;
             if (!matchesDevGuard(CFG)) return;
-            if (!CFG.requiredBodyClasses.every(cls => document.body.classList.contains(cls))) return;
+            if (!matchesRequiredBodyClasses(CFG.requiredBodyClasses)) return;
             if (CFG.preload?.enabled !== true) return;
             const maxPages = CFG.preload?.maxPages || CFG.performance?.maxPages || 5;
             (Array.isArray(CFG.preload?.collections) ? CFG.preload.collections : []).forEach(col => {
