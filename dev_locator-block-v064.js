@@ -125,7 +125,7 @@ cfg.display=Object.assign({
   /* Éléments à afficher (utilisés par les groups par défaut) */
   showImage:   true,
   showTitle:   true,
-  showNumero:  true,
+  showNumero:  false,
   showLieu:    true,
   showZones:   false,
   lieuIcon:    'location_on',
@@ -147,7 +147,7 @@ cfg.map=Object.assign({
   markerActiveBackground:'#f3f3f3',
   markerActiveText:'#111',
   markerActiveShadow:false,
-  popup:true,popupShowImage:true,
+  popup:true,popupShowImage:true,popupShowCategories:false,
   clustering:false,clusterMinCount:2,updateListOnMapMove:false,
   overlapStrategy:'spread',
   overlapRadiusMeters:18,
@@ -206,6 +206,14 @@ function escHtml(s){var utils=getCollectionUtils();if(utils&&typeof utils.escape
 function slugifyToken(s){var utils=getCollectionUtils();if(utils&&typeof utils.slugify==='function')return utils.slugify(s);return String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');}
 function tagFieldModifier(name){var utils=getCollectionUtils();if(utils&&typeof utils.tagFieldModifier==='function'){var cls=utils.tagFieldModifier(name,'lb-card');return cls?' '+cls:'';}var slug=slugifyToken(name);return slug?' cb-card__tag-field--'+slug+' lb-card__tag-field--'+slug:'';}
 function categoryModifier(name){var utils=getCollectionUtils();if(utils&&typeof utils.categoryModifier==='function'){var cls=utils.categoryModifier(name,'lb-card');return cls?' '+cls:'';}var slug=slugifyToken(name);return slug?' cb-card__category--'+slug+' lb-card__category--'+slug:'';}
+function getCategoryLabel(cat){
+  if(typeof cat==='string')return cat.trim();
+  if(!cat||typeof cat!=='object')return '';
+  return String(cat.title||cat.name||cat.displayName||cat.fullName||cat.slug||'').trim();
+}
+function normalizeCategories(cats){
+  return (Array.isArray(cats)?cats:[]).map(getCategoryLabel).filter(Boolean);
+}
 function customCardClass(){return cfg.classes&&(cfg.classes.card||cfg.classes.cards||cfg.classes.item)||'';}
 function cardClass(clickable){return addClassNames(clickable?CLS_CARD_CLICKABLE:CLS_CARD,customCardClass());}
 function tagRe(p){return new RegExp('^'+p.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+':\\s*','i');}
@@ -390,7 +398,7 @@ function getCollectionOptions(maxPages){
     }
 
     if(cfg.category){
-      var cats = (item.categories || []).map(function(c){
+      var cats = normalizeCategories(item.categories).map(function(c){
         return String(c).toLowerCase();
       });
 
@@ -414,7 +422,7 @@ function getCollectionOptions(maxPages){
       numero: getTag(item.tags, cfg.tagNumero),
       lieu: getTag(item.tags, cfg.tagLieu),
       zones: getTags(item.tags, cfg.tagZone),
-      categories: (item.categories || []).map(function(c){return String(c||'').trim();}).filter(Boolean),
+      categories: normalizeCategories(item.categories),
       imageBase: getImgBase(item),
       focalPos: focalPos,
       lat: c.lat,
@@ -545,7 +553,14 @@ function defineCustomPopup(){
   CustomPopup.prototype.onAdd=function(){
     var d=cfg.display,item=this.item;
     var im=(cfg.map.popupShowImage&&d.showImage&&item.imageBase)?'<div class="lb-popup-media">'+imgTag(item.imageBase,item.title,'lb-popup-image','240px',item.focalPos,false)+'</div>':'';
-    var b='';if(item.numero)b+='<div class="lb-popup-num">'+escHtml(item.numero)+'</div>';if(item.title)b+='<div class="lb-popup-title">'+escHtml(item.title)+'</div>';if(item.lieu)b+='<div class="lb-popup-lieu">'+escHtml(item.lieu)+'</div>';
+    var b='';
+    if(cfg.map.popupShowCategories&&item.categories&&item.categories.length){
+      b+='<div class="cb-popup-categories lb-popup-categories">'+item.categories.map(function(cat){
+        var slug=slugifyToken(cat);
+        return '<span class="cb-popup-category lb-popup-category'+(slug?' cb-popup-category--'+escHtml(slug)+' lb-popup-category--'+escHtml(slug):'')+'">'+escHtml(cat)+'</span>';
+      }).join('')+'</div>';
+    }
+    if(item.numero)b+='<div class="lb-popup-num">'+escHtml(item.numero)+'</div>';if(item.title)b+='<div class="lb-popup-title">'+escHtml(item.title)+'</div>';if(item.lieu)b+='<div class="lb-popup-lieu">'+escHtml(item.lieu)+'</div>';
     this.container=document.createElement('div');this.container.className='cb-popup-wrap lb-popup-wrap cb-popup-wrap--active lb-popup-wrap--active';
     var pt=cfg.display.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
     this.container.innerHTML='<button class="cb-popup-close lb-popup-close" type="button" aria-label="Fermer"><span class="ui-icon" aria-hidden="true">close</span></button><a class="cb-popup lb-popup cb-popup--active lb-popup--active" href="'+escHtml(item.url)+'"'+pt+'>'+im+(b?'<div class="cb-popup-body lb-popup-body">'+b+'</div>':'')+'</a>';
@@ -932,6 +947,8 @@ function createInstance(root,allItems,fetchMoreItems){
     var controlPosition=google.maps&&google.maps.ControlPosition;
     var topRight=controlPosition&&controlPosition.RIGHT_TOP;
     var configuredMapId=(cfg.map&&cfg.map.mapId)||cfg.mapId||(cfg.mapOptions&&cfg.mapOptions.mapId)||null;
+    var configuredStyle=(cfg.map&&cfg.map.style)||cfg.mapStyle||null;
+    var resolvedStyle=configuredStyle==='clean'?clean:(Array.isArray(configuredStyle)?configuredStyle:null);
     var o=Object.assign({
       center:cfg.mapCenter||{lat:48.8566,lng:2.3522},
       zoom:cfg.mapZoom||12,
@@ -952,8 +969,8 @@ function createInstance(root,allItems,fetchMoreItems){
     if(configuredMapId){
       delete o.styles;
       o.mapId=configuredMapId;
-    }else if(cfg.mapStyle){
-      o.styles=cfg.mapStyle;
+    }else if(resolvedStyle){
+      o.styles=resolvedStyle;
     }
     map=new google.maps.Map(c,o);
     map.addListener('click',function(){mapTouched=true;closePopup();});
