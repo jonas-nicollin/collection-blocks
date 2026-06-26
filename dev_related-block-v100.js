@@ -1154,9 +1154,26 @@
             if (group?.inline === true) {
                 addClasses(wrapper, role === "body" ? "cb-card__body--inline rb-card__body--inline" : "cb-card__group--inline rb-card__group--inline");
             }
-            children.forEach(child => {
-                buildContentNodesByType(child, item, CFG, { insideMedia: role === "media" }).forEach(node => wrapper.appendChild(node));
-            });
+            if (group?.inline === true) {
+                const separator = group.separator !== undefined ? group.separator : " ";
+                const nodes = [];
+                children.forEach(child => {
+                    buildContentNodesByType(child, item, CFG, { insideMedia: role === "media" }).forEach(node => nodes.push(node));
+                });
+                nodes.forEach((node, index) => {
+                    wrapper.appendChild(node);
+                    if (index < nodes.length - 1 && separator) {
+                        const sepNode = document.createElement("span");
+                        sepNode.className = "cb-inline-sep rb-inline-sep";
+                        sepNode.textContent = separator;
+                        wrapper.appendChild(sepNode);
+                    }
+                });
+            } else {
+                children.forEach(child => {
+                    buildContentNodesByType(child, item, CFG, { insideMedia: role === "media" }).forEach(node => wrapper.appendChild(node));
+                });
+            }
             if (wrapper.childNodes.length) {
                 fragment.appendChild(wrapper);
                 hasContent = true;
