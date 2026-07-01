@@ -908,6 +908,42 @@
     }
   }
 
+  function isoDayKey(parsed) {
+    if (!parsed) return '';
+    return parsed.year + '-' + String(parsed.month + 1).padStart(2, '0') + '-' + String(parsed.day).padStart(2, '0');
+  }
+
+  function canCompactSameDayTimes(format) {
+    if (format === 'time') return false;
+    if (format === 'day' || format === 'date' || format === 'short' || format === 'numeric') return false;
+    if (format && typeof format === 'object') {
+      return format.hour != null || format.minute != null;
+    }
+    return true;
+  }
+
+  function formatISOValues(values, format, locale, options) {
+    var list = Array.isArray(values) ? values : [];
+    var compact = !options || options.compactSameDayTimes !== false;
+    var shouldCompact = compact && format != null && canCompactSameDayTimes(format);
+    var previousDay = '';
+
+    return list.map(function(value) {
+      if (format == null) return cleanHTML(value);
+
+      var raw = String(value || '').trim();
+      var parsed = parseISO(raw);
+      var dayKey = isoDayKey(parsed);
+      var useTimeOnly = shouldCompact && parsed && parsed.hour !== null && dayKey && dayKey === previousDay;
+      var formatted = useTimeOnly
+        ? formatISOTag(raw, 'time', locale)
+        : formatISOTag(raw, format, locale);
+
+      previousDay = parsed && dayKey ? dayKey : '';
+      return formatted;
+    }).filter(Boolean);
+  }
+
   function getISODatePart(str) {
     var m = String(str || '').match(/^(\d{4}-\d{2}-\d{2})/);
     return m ? m[1] : null;
@@ -1195,11 +1231,9 @@
     if (descriptor.maxItems) rawValues = rawValues.slice(0, Number(descriptor.maxItems));
 
     var displayFormat = descriptor.displayFormat;
-    var values = rawValues.map(function(value) {
-      return displayFormat != null
-        ? formatISOTag(value, displayFormat, descriptor.locale)
-        : cleanHTML(value);
-    }).filter(Boolean);
+    var values = formatISOValues(rawValues, displayFormat, descriptor.locale, {
+      compactSameDayTimes: descriptor.compactSameDayTimes
+    });
 
     if (!values.length) return null;
 
@@ -1658,6 +1692,7 @@
     getTagValuesByPrefix: getTagValuesByPrefix,
     parseISO: parseISO,
     formatISOTag: formatISOTag,
+    formatISOValues: formatISOValues,
     getISODatePart: getISODatePart,
     focalPoint: focalPoint,
     getImageBase: getImageBase,
@@ -1696,6 +1731,7 @@
     truncate: truncate,
     parseISO: parseISO,
     formatISOTag: formatISOTag,
+    formatISOValues: formatISOValues,
     getTagValuesByPrefix: getTagValuesByPrefix,
     buildSrcset: buildSrcset,
     escapeHTML: escapeHTML,
