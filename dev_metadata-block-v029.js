@@ -77,6 +77,14 @@
     return Array.from(new Set(values));
   }
 
+  function comparableText(value) {
+    return cleanText(value)
+      .toLocaleLowerCase()
+      .replace(/[’']/g, "'")
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   function normalizeClassList(classes) {
     if (!classes) return [];
     if (Array.isArray(classes)) {
@@ -322,6 +330,51 @@
       }
       return dayStr;
     } catch (_) { return s; }
+  }
+
+  function getISODateKey(parsed) {
+    if (!parsed) return '';
+    return parsed.year + '-' +
+      String(parsed.month + 1).padStart(2, '0') + '-' +
+      String(parsed.day).padStart(2, '0');
+  }
+
+  function formatDateValues(values, block) {
+    if (!block.compactSameDayTimes) {
+      return values.map(value =>
+        isISODate(value)
+          ? formatISOTag(value, block.dateFormat || 'datetime', block.dateLocale || null)
+          : value
+      );
+    }
+
+    let previousDateKey = '';
+
+    return values.map(value => {
+      if (!isISODate(value)) {
+        previousDateKey = '';
+        return value;
+      }
+
+      if (String(value).indexOf('/') !== -1) {
+        previousDateKey = '';
+        return formatISOTag(value, block.dateFormat || 'datetime', block.dateLocale || null);
+      }
+
+      const parsed = parseISO(value);
+      const dateKey = getISODateKey(parsed);
+      if (!parsed || !dateKey) {
+        previousDateKey = '';
+        return value;
+      }
+
+      if (dateKey === previousDateKey && parsed.hasTime) {
+        return formatISOTag(value, 'time', block.dateLocale || null);
+      }
+
+      previousDateKey = dateKey;
+      return formatISOTag(value, block.dateFormat || 'datetime', block.dateLocale || null);
+    });
   }
 
   /* ════════════════════════════════════
@@ -655,11 +708,7 @@ async function fetchPageJson(settings) {
 
     // 5. Formatage des dates
     if (block.formatDates) {
-      normalized = normalized.map(value =>
-        isISODate(value)
-          ? formatISOTag(value, block.dateFormat || 'datetime', block.dateLocale || null)
-          : value
-      );
+      normalized = formatDateValues(normalized, block);
     }
 
     // 6. Limiter le nombre de valeurs
@@ -734,6 +783,17 @@ async function fetchPageJson(settings) {
     sep.setAttribute('aria-hidden', 'true');
     sep.textContent = separatorText;
     return sep;
+  }
+
+  function removeExistingGroupDuplicates(content, values) {
+    const wanted = new Set(values.map(comparableText).filter(Boolean));
+    if (!wanted.size) return;
+
+    Array.from(content.querySelectorAll('.mb-value')).forEach(element => {
+      if (wanted.has(comparableText(element.textContent))) {
+        element.remove();
+      }
+    });
   }
 
   function createMetadataBlockWrapper(block, orderMap, valueCount) {
@@ -845,6 +905,9 @@ async function fetchPageJson(settings) {
       const rawValues = getRawValuesForBlock(block, itemData);
       const values    = normalizeBlockValues(rawValues, block);
       if (!values.length) return;
+      if (block.dedupeGroupValues !== false) {
+        removeExistingGroupDuplicates(targetContent, values);
+      }
 
       const mapsUrl       = block.useGoogleMapsLink ? getGoogleMapsUrl(itemData) : '';
       const groupSep      = block.groupSeparator ?? ',\u00A0';
