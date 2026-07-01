@@ -219,6 +219,7 @@ function cardClass(clickable){return addClassNames(clickable?CLS_CARD_CLICKABLE:
 function tagRe(p){return new RegExp('^'+p.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+':\\s*','i');}
 function getTag(tags,p){var utils=getCollectionUtils();if(utils&&typeof utils.getTagValuesByPrefix==='function'){var vals=utils.getTagValuesByPrefix({tags:tags||[]},p);return vals[0]||'';}if(!Array.isArray(tags))return'';var re=tagRe(p),t=tags.find(function(x){return re.test(String(x));});return t?String(t).replace(re,'').trim():'';}
 function getTags(tags,p){var utils=getCollectionUtils();if(utils&&typeof utils.getTagValuesByPrefix==='function')return utils.getTagValuesByPrefix({tags:tags||[]},p);if(!Array.isArray(tags))return[];var re=tagRe(p);return tags.filter(function(x){return re.test(String(x));}).map(function(x){return String(x).replace(re,'').trim();});}
+function formatISOValues(values,format,locale,options){var utils=getCollectionUtils();if(utils&&typeof utils.formatISOValues==='function')return utils.formatISOValues(values,format,locale,options);return(Array.isArray(values)?values:[]).map(function(v){if(format&&utils&&typeof utils.formatISOTag==='function')return utils.formatISOTag(v,format,locale);return String(v||'').trim();}).filter(Boolean);}
 
 /* ── Image srcset ── */
 var SW=[300,500,750,1000,1200,1500,2000,2500];
@@ -419,6 +420,7 @@ function getCollectionOptions(maxPages){
       id: item.id || item.urlId || '',
       url: item.fullUrl || item.url || '',
       title: item.title || '',
+      tags: item.tags || [],
       numero: getTag(item.tags, cfg.tagNumero),
       lieu: getTag(item.tags, cfg.tagLieu),
       zones: getTags(item.tags, cfg.tagZone),
@@ -455,6 +457,21 @@ function getCollectionOptions(maxPages){
 /* ── Rendu d'un child dans un group ── */
 function renderChild(child,item){
   var d=cfg.display;
+  if(child&&typeof child==='object'){
+    if(child.type==='tagPrefix'){
+      var prefix=child.prefix||'';
+      if(!prefix)return'';
+      var rawVals=getTags(item.tags,prefix);
+      if(child.maxItems)rawVals=rawVals.slice(0,Number(child.maxItems));
+      var vals=formatISOValues(rawVals,child.displayFormat||null,child.locale||null,{compactSameDayTimes:child.compactSameDayTimes});
+      if(!vals.length)return'';
+      var icon=child.labelIcon?'<span class="'+escHtml(CLS_TAG_ICON)+'" aria-hidden="true">'+escHtml(child.labelIcon)+'</span>':'';
+      var label=child.label?'<span class="cb-card__tag-label lb-card__tag-label">'+escHtml(child.label)+'</span>':'';
+      var joinWith=child.joinWith!=null?child.joinWith:(child.inlineSeparator!=null?child.inlineSeparator:', ');
+      return'<div class="'+escHtml(CLS_TAG_FIELD+tagFieldModifier(String(prefix).replace(/:$/,''))+(child.className?' '+child.className:''))+'" data-prefix="'+escHtml(String(prefix).replace(/:$/,''))+'">'+icon+label+'<span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(vals.join(joinWith))+'</span></div>';
+    }
+    return'';
+  }
   if(child==='image'){
     if(!d.showImage||!item.imageBase)return'';
     return imgWrapTag(item.imageBase,item.title,'',item.focalPos);
