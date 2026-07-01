@@ -408,6 +408,16 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
     });
   }
 
+  function matchesTagValue(value, expected) {
+    var expectedDatePart = getISODatePart(expected);
+    if (expectedDatePart) {
+      var valueDatePart = getISODatePart(value);
+      if (valueDatePart && valueDatePart === expectedDatePart) return true;
+    }
+
+    return norm(value) === norm(expected);
+  }
+
   function applyPreFilter(items, pf) {
     if (!pf) return items;
 
@@ -419,7 +429,7 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
         for (var i = 0; i < pf.tagValues.length; i++) {
           var tv = pf.tagValues[i];
           if (!getTagValuesByPrefix(item, tv.prefix).some(function(v) {
-            return norm(v) === norm(tv.value);
+            return matchesTagValue(v, tv.value);
           })) return false;
         }
       }
@@ -428,7 +438,7 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
         for (var j = 0; j < pf.excludeTagValues.length; j++) {
           var xtv = pf.excludeTagValues[j];
           if (getTagValuesByPrefix(item, xtv.prefix).some(function(v) {
-            return norm(v) === norm(xtv.value);
+            return matchesTagValue(v, xtv.value);
           })) return false;
         }
       }
@@ -448,7 +458,7 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
         for (var i = 0; i < tf.tagValues.length; i++) {
           var tv = tf.tagValues[i];
           if (!getTagValuesByPrefix(item, tv.prefix).some(function(v) {
-            return norm(v) === norm(tv.value);
+            return matchesTagValue(v, tv.value);
           })) return false;
         }
       }
@@ -457,7 +467,7 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
         for (var j = 0; j < tf.excludeTagValues.length; j++) {
           var xtv = tf.excludeTagValues[j];
           if (getTagValuesByPrefix(item, xtv.prefix).some(function(v) {
-            return norm(v) === norm(xtv.value);
+            return matchesTagValue(v, xtv.value);
           })) return false;
         }
       }
@@ -1396,6 +1406,62 @@ var isPriority = options.priority === true || imgIndex < 3;
     return m ? m[1] : null;
   }
 
+  function getTodayDatePart(cfg) {
+    var dbg = cfg && cfg.debug;
+    var now = (dbg && typeof dbg === 'object' && dbg.mockDate)
+      ? new Date(dbg.mockDate + 'T00:00:00')
+      : new Date();
+
+    return now.getFullYear() + '-' +
+      String(now.getMonth() + 1).padStart(2, '0') + '-' +
+      String(now.getDate()).padStart(2, '0');
+  }
+
+  function getTabDateParts(tab, prefix) {
+    var filter = tab && tab.filter;
+    var values = [];
+    if (!filter) return values;
+
+    if (Array.isArray(filter.tagValues)) {
+      filter.tagValues.forEach(function(tv) {
+        if (!tv) return;
+        if (prefix && norm(tv.prefix || '') !== norm(prefix)) return;
+        var part = getISODatePart(tv.value);
+        if (part && values.indexOf(part) === -1) values.push(part);
+      });
+    }
+
+    if (filter.tags && prefix && filter.tags[prefix]) {
+      var part = getISODatePart(filter.tags[prefix]);
+      if (part && values.indexOf(part) === -1) values.push(part);
+    }
+
+    return values;
+  }
+
+  function resolveDefaultTabIndex(fc, cfg) {
+    var tabs = Array.isArray(fc && fc.tabs) ? fc.tabs : [];
+    if (!tabs.length) return 0;
+
+    var fallback = Number(fc.defaultTab != null ? fc.defaultTab : 0);
+    if (!Number.isFinite(fallback) || fallback < 0 || fallback >= tabs.length) fallback = 0;
+
+    var rule = fc.defaultTabByDate || fc.defaultTabByToday || null;
+    if (!rule) return fallback;
+
+    var options = rule === true ? {} : rule;
+    var prefix = options.prefix || fc.datePrefix || 'Date';
+    var today = getISODatePart(options.date) || getTodayDatePart(cfg);
+
+    for (var i = 0; i < tabs.length; i++) {
+      if (getTabDateParts(tabs[i], prefix).indexOf(today) !== -1) {
+        return i;
+      }
+    }
+
+    return fallback;
+  }
+
   function formatGroupDate(dateStr, locale, groupLabelFormat) {
     var m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (!m) return dateStr;
@@ -2312,7 +2378,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
     if (tabs.length) {
       var tabGroup = el('div', { class: CLS_FILTER_GROUP + ' ' + CLS_FILTER_GROUP_TABS });
-      var defIdx = Number(fc.defaultTab != null ? fc.defaultTab : 0);
+      var defIdx = resolveDefaultTabIndex(fc, cfg);
 
       tabs.forEach(function(tab, idx) {
         var active = idx === defIdx;
@@ -2912,7 +2978,7 @@ requestAnimationFrame(function() {
     var ioInfinite = null;
 
     if (Array.isArray(fc.tabs) && fc.tabs.length) {
-      var di = Number(fc.defaultTab != null ? fc.defaultTab : 0);
+      var di = resolveDefaultTabIndex(fc, cfg);
       if (fc.tabs[di]) activeFilters.tab = fc.tabs[di].filter || null;
     }
 
@@ -3068,7 +3134,7 @@ requestAnimationFrame(function() {
     }
 
     if (Array.isArray(fc.tabs) && fc.tabs.length) {
-      var initTab = fc.tabs[Number(fc.defaultTab != null ? fc.defaultTab : 0)];
+      var initTab = fc.tabs[resolveDefaultTabIndex(fc, cfg)];
 
       if (initTab) {
         updateTabClass(initTab.label || '');
