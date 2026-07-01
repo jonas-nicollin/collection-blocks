@@ -841,7 +841,9 @@ var isPriority = options.priority === true || imgIndex < 3;
       var locale = (def && def.locale) || null;
       var rawVals = getTagValuesByPrefix(item, prefix);
       var vals = displayFmt
-        ? rawVals.map(function(v) { return formatISOTag(v, displayFmt, locale); })
+        ? formatISOValues(rawVals, displayFmt, locale, {
+            compactSameDayTimes: def && def.compactSameDayTimes
+          })
         : rawVals;
 
       if (!vals.length) return null;
@@ -849,7 +851,10 @@ var isPriority = options.priority === true || imgIndex < 3;
       if (utilsTag && typeof utilsTag.buildTagField === 'function') {
         return utilsTag.buildTagField(item, {
           prefix: prefix,
-          values: vals,
+          values: rawVals,
+          displayFormat: displayFmt,
+          locale: locale,
+          compactSameDayTimes: def && def.compactSameDayTimes,
           label: labelIcon ? '' : label,
           labelIcon: labelIcon,
           iconClassName: 'ui-icon cb-card__tag-icon qb-card__tag-icon',
@@ -1399,6 +1404,46 @@ var isPriority = options.priority === true || imgIndex < 3;
     } catch (_) {
       return str;
     }
+  }
+
+  function isoDayKey(parsed) {
+    if (!parsed) return '';
+    return parsed.year + '-' + String(parsed.month + 1).padStart(2, '0') + '-' + String(parsed.day).padStart(2, '0');
+  }
+
+  function canCompactSameDayTimes(format) {
+    if (format === 'time') return false;
+    if (format === 'day' || format === 'date' || format === 'short' || format === 'numeric') return false;
+    if (format && typeof format === 'object') {
+      return format.hour != null || format.minute != null;
+    }
+    return true;
+  }
+
+  function formatISOValues(values, format, locale, options) {
+    var utils = getCollectionUtils();
+    if (utils && typeof utils.formatISOValues === 'function') {
+      return utils.formatISOValues(values, format, locale, options);
+    }
+
+    var list = Array.isArray(values) ? values : [];
+    var compact = !options || options.compactSameDayTimes !== false;
+    var shouldCompact = compact && format != null && canCompactSameDayTimes(format);
+    var previousDay = '';
+
+    return list.map(function(value) {
+      if (format == null) return cleanText(value);
+      var raw = String(value || '').trim();
+      var parsed = parseISO(raw);
+      var dayKey = isoDayKey(parsed);
+      var useTimeOnly = shouldCompact && parsed && parsed.hour !== null && dayKey && dayKey === previousDay;
+      var formatted = useTimeOnly
+        ? formatISOTag(raw, 'time', locale)
+        : formatISOTag(raw, format, locale);
+
+      previousDay = parsed && dayKey ? dayKey : '';
+      return formatted;
+    }).filter(Boolean);
   }
 
   function getISODatePart(str) {
