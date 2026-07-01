@@ -247,6 +247,38 @@
             return s;
         }
     }
+    function isoDayKey(parsed) {
+        if (!parsed) return "";
+        return `${parsed.year}-${String(parsed.month + 1).padStart(2, "0")}-${String(parsed.day).padStart(2, "0")}`;
+    }
+    function canCompactSameDayTimes(fmt) {
+        if (fmt === "time") return false;
+        if (fmt === "day" || fmt === "date" || fmt === "short" || fmt === "numeric") return false;
+        if (fmt && typeof fmt === "object") return fmt.hour != null || fmt.minute != null;
+        return true;
+    }
+    function formatISOValues(values, fmt, locale, options) {
+        const utils = getCollectionUtils();
+        if (utils && typeof utils.formatISOValues === "function") {
+            return utils.formatISOValues(values, fmt, locale, options);
+        }
+        const list = Array.isArray(values) ? values : [];
+        const compact = !options || options.compactSameDayTimes !== false;
+        const shouldCompact = compact && fmt != null && canCompactSameDayTimes(fmt);
+        let previousDay = "";
+        return list.map(value => {
+            if (fmt == null) return cleanText(value);
+            const raw = String(value || "").trim();
+            const parsed = parseISO(raw);
+            const dayKey = isoDayKey(parsed);
+            const useTimeOnly = shouldCompact && parsed && parsed.hour !== null && dayKey && dayKey === previousDay;
+            const formatted = useTimeOnly
+                ? formatISOTag(raw, "time", locale)
+                : formatISOTag(raw, fmt, locale);
+            previousDay = parsed && dayKey ? dayKey : "";
+            return formatted;
+        }).filter(Boolean);
+    }
     /**
    * Retourne le timestamp de tri à partir d'une valeur de tag ISO.
    * Utilisé pour le tri { type: 'tagPrefix', prefix: 'Date' }.
@@ -927,6 +959,7 @@
                 joinWith,
                 displayFormat,
                 locale,
+                compactSameDayTimes: fieldConfig.compactSameDayTimes,
                 className: fieldConfig.className,
                 icon: fieldConfig.icon,
                 iconType: fieldConfig.iconType,
@@ -935,7 +968,11 @@
                 prefix: "rb-card"
             });
         }
-        const formattedValues = values.map(v => displayFormat !== null ? formatISOTag(v, displayFormat, locale) : v).filter(Boolean);
+        const formattedValues = displayFormat !== null
+            ? formatISOValues(values, displayFormat, locale, {
+                compactSameDayTimes: fieldConfig.compactSameDayTimes
+            })
+            : values.filter(Boolean);
         const text = formattedValues.join(joinWith);
         const fullText = label ? label + " " + text : text;
         // Icône optionnelle
