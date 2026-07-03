@@ -18,8 +18,9 @@
 :where(.cb-card__img-wrap) {
   display: block;
   width: 100%;
-  aspect-ratio: 3 / 2;
+  aspect-ratio: var(--cb-card-image-ratio, 3 / 2);
   overflow: hidden;
+  background: var(--cb-card-image-placeholder, rgba(0, 0, 0, 0.045));
 }
 
 :where(.cb-card__img) {
@@ -43,14 +44,16 @@
 
 /* ─────────────────────────────────────────────
    BADGE ÉDITEUR
-   Classe qb-block sur le conteneur HTML.
    Visible uniquement en mode édition Squarespace.
-   Exemple HTML : <div id="sqb-membres"
-                       data-cb-label="Query Block — Membres"></div>
+   Fonctionne sur les mounts non initialisés et les blocs initialisés.
    ───────────────────────────────────────────── */
 
-.sqs-edit-mode-active :where(.cb-block).qb-block[data-cb-label]::before {
-  content: attr(data-cb-label);
+.sqs-edit-mode-active :where(.cb-target)[data-cb-label]::before,
+.sqs-edit-mode-active :where(.cb-block)[data-cb-label]::before,
+.sqs-edit-mode-active :where(.qb-target)[data-qb-label]::before,
+.sqs-edit-mode-active :where(.qb-block)[data-qb-label]::before,
+.sqs-edit-mode-active :where(.lb-target)[data-lb-label]::before,
+.sqs-edit-mode-active :where(.lb-block)[data-lb-label]::before {
   display: block;
   background: #0050ff;
   color: #fff;
@@ -62,7 +65,27 @@
   margin-bottom: 0.75rem;
 }
 
-body:not(.sqs-edit-mode-active) :where(.cb-block).qb-block[data-cb-label]::before {
+.sqs-edit-mode-active :where(.cb-target)[data-cb-label]::before,
+.sqs-edit-mode-active :where(.cb-block)[data-cb-label]::before {
+  content: attr(data-cb-label);
+}
+
+.sqs-edit-mode-active :where(.qb-target)[data-qb-label]::before,
+.sqs-edit-mode-active :where(.qb-block)[data-qb-label]::before {
+  content: attr(data-qb-label);
+}
+
+.sqs-edit-mode-active :where(.lb-target)[data-lb-label]::before,
+.sqs-edit-mode-active :where(.lb-block)[data-lb-label]::before {
+  content: attr(data-lb-label);
+}
+
+body:not(.sqs-edit-mode-active) :where(.cb-target)[data-cb-label]::before,
+body:not(.sqs-edit-mode-active) :where(.cb-block)[data-cb-label]::before,
+body:not(.sqs-edit-mode-active) :where(.qb-target)[data-qb-label]::before,
+body:not(.sqs-edit-mode-active) :where(.qb-block)[data-qb-label]::before,
+body:not(.sqs-edit-mode-active) :where(.lb-target)[data-lb-label]::before,
+body:not(.sqs-edit-mode-active) :where(.lb-block)[data-lb-label]::before {
   display: none;
 }
 
@@ -314,16 +337,24 @@ body:not(.sqs-edit-mode-active) :where(.cb-block).qb-block[data-cb-label]::befor
    RECHERCHE
    ───────────────────────────────────────────── */
 
-:where(.cb-filter-group--search).qb-filter-group--search { display: inline-flex; }
+:where(.cb-filter-group--search),
+:where(.cb-filter-group--search).qb-filter-group--search,
+:where(.cb-filter-group--search).lb-filter-group--search { display: inline-flex; }
 
-:where(.cb-filter-search).qb-filter-search {
+:where(.cb-filter-search),
+:where(.cb-filter-search).qb-filter-search,
+:where(.cb-filter-search).lb-filter-search {
   border: 1px solid var(--paragraphMediumColor);
   background: var(--siteBackgroundColor); color: var(--paragraphMediumColor);
   font: inherit; font-size: 0.9em; padding: 0.3em 0.9em;
   border-radius: 2em; min-width: 10em; max-width: 16em; opacity: 0.6;
 }
-:where(.cb-filter-search).qb-filter-search::placeholder { color: var(--paragraphMediumColor); opacity: 0.5; }
-:where(.cb-filter-search).qb-filter-search:focus { outline: 2px solid var(--paragraphMediumColor); outline-offset: 2px; opacity: 1; }
+:where(.cb-filter-search)::placeholder,
+:where(.cb-filter-search).qb-filter-search::placeholder,
+:where(.cb-filter-search).lb-filter-search::placeholder { color: var(--paragraphMediumColor); opacity: 0.5; }
+:where(.cb-filter-search):focus,
+:where(.cb-filter-search).qb-filter-search:focus,
+:where(.cb-filter-search).lb-filter-search:focus { outline: 2px solid var(--paragraphMediumColor); outline-offset: 2px; opacity: 1; }
 
 /* ─────────────────────────────────────────────
    MOBILE — bouton Filtrer
@@ -549,8 +580,13 @@ body:where(.cb-panel-open).qb-panel-open { overflow: hidden; }
 }
 
 :where(.cb-card__img-wrap).qb-card__img-wrap {
-  overflow: hidden; width: 100%; aspect-ratio: 3 / 2;
-  background: color-mix(in srgb, var(--paragraphMediumColor) 8%, var(--siteBackgroundColor));
+  overflow: hidden;
+  width: 100%;
+  aspect-ratio: var(--cb-card-image-ratio, 3 / 2);
+  background: var(
+    --cb-card-image-placeholder,
+    color-mix(in srgb, var(--paragraphMediumColor) 8%, var(--siteBackgroundColor))
+  );
 }
 :where(.cb-card__img).qb-card__img {
   display: block; width: 100%; height: 100%; object-fit: cover;
