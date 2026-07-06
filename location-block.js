@@ -1,5 +1,5 @@
 /*!
- * Location Block v4.0.0-dev.8
+ * Location Block v4.0.0-dev.9
  * github.com/jonas-nicollin/squarespace-blocks
  *
  * Affiche les informations d'un lieu sur une page Squarespace.
@@ -28,7 +28,7 @@
 'use strict';
 
 var FOUR_HOURS = 4 * 60 * 60 * 1000;
-var VERSION = '4.0.0-dev.8';
+var VERSION = '4.0.0-dev.9';
 var DEFAULT_MOUNT = '.location-block';
 var DEFAULT_COUNTRY = 'Suisse';
 var DATA_CACHE_PREFIX = 'location_block_v4_data_';
@@ -53,6 +53,12 @@ var DEFAULT_COLUMNS = {
   latitude: ['Latitude','Lat'],
   longitude: ['Longitude','Lng','Long'],
   instagram: ['Instagram'],
+  facebook: ['Facebook'],
+  x: ['X','Twitter'],
+  youtube: ['Youtube','YouTube'],
+  linkedin: ['Linkedin','LinkedIn'],
+  vimeo: ['Vimeo'],
+  artsy: ['Artsy'],
   monday: ['Monday','Lundi','lundi'],
   tuesday: ['Tuesday','Mardi','mardi'],
   wednesday: ['Wednesday','Mercredi','mercredi'],
@@ -75,6 +81,25 @@ var FIELD_TO_DAY = {
   sunday: 'dimanche'
 };
 
+var DEFAULT_FIELD_DEFS = {
+  phone: {key: 'phone', label: 'Téléphone', icon: 'call', type: 'phone'},
+  email: {key: 'email', label: 'Email', icon: 'mail', type: 'email'},
+  website: {key: 'website', label: 'Website', icon: 'language', type: 'url'},
+  instagram: {key: 'instagram', label: 'Instagram', icon: 'alternate_email', type: 'instagram'},
+  facebook: {key: 'facebook', label: 'Facebook', icon: 'public', type: 'url'},
+  x: {key: 'x', label: 'X', icon: 'alternate_email', type: 'x'},
+  youtube: {key: 'youtube', label: 'Youtube', icon: 'smart_display', type: 'url'},
+  linkedin: {key: 'linkedin', label: 'LinkedIn', icon: 'business_center', type: 'url'},
+  vimeo: {key: 'vimeo', label: 'Vimeo', icon: 'smart_display', type: 'url'},
+  artsy: {key: 'artsy', label: 'Artsy', icon: 'palette', type: 'url'}
+};
+
+var DEFAULT_SECTIONS = [
+  {id: 'address', type: 'address', icon: 'location_on'},
+  {id: 'hours', type: 'hours', icon: 'schedule'},
+  {id: 'contact', type: 'fields', icon: 'contact_page', fields: ['phone','email','website']}
+];
+
 var DEFAULT_CONFIG = {
   id: '',
   mount: DEFAULT_MOUNT,
@@ -96,11 +121,22 @@ var DEFAULT_CONFIG = {
   },
   showMap: true,
   mapQuery: 'coordinates-first',
+  mapZoom: 14,
+  mapLang: 'fr',
+  mapInfoWindow: false,
   lazyMap: false,
   lazyMapRootMargin: '400px',
   lazyMapPlaceholder: 'Carte',
   showMapLink: true,
   mapLinkUrl: 'auto',
+  mapLinkLabel: '',
+  labels: {
+    hoursToggle: 'Tous les horaires',
+    mapLink: 'Voir sur la carte'
+  },
+  sectionTitleTag: 'h4',
+  sections: null,
+  fieldLabelMode: 'none',
   showStatus: true,
   showSocialLinks: false,
   collapseHours: true,
@@ -203,6 +239,8 @@ function normalizeConfig(raw, index){
   cfg.columns = mergeColumns(DEFAULT_COLUMNS, raw.columns || raw.columnMap || {});
   cfg.match = normalizeMatch(raw.match, raw);
   cfg.cache = mergeObjects(DEFAULT_CONFIG.cache, raw.cache || {});
+  cfg.labels = mergeObjects(DEFAULT_CONFIG.labels, raw.labels || {});
+  cfg.sections = Array.isArray(raw.sections) ? raw.sections : null;
   if(raw.cacheTTL != null) cfg.cache.ttl = raw.cacheTTL;
   if(raw.noCache != null) cfg.noCache = !!raw.noCache;
   return cfg;
@@ -378,6 +416,12 @@ function normLieu(row, cfg){
     email: getField(row, cfg, 'email'),
     website: getField(row, cfg, 'website'),
     instagram: getField(row, cfg, 'instagram'),
+    facebook: getField(row, cfg, 'facebook'),
+    x: getField(row, cfg, 'x'),
+    youtube: getField(row, cfg, 'youtube'),
+    linkedin: getField(row, cfg, 'linkedin'),
+    vimeo: getField(row, cfg, 'vimeo'),
+    artsy: getField(row, cfg, 'artsy'),
     image: getField(row, cfg, 'image'),
     imagePosition: getField(row, cfg, 'imagePosition')
   };
@@ -488,7 +532,7 @@ function buildIndex(lieux){
 }
 
 function getMetaMatch(cfg){
-  var meta = document.querySelector('meta[name="location-block-key"]');
+  var meta = document.querySelector('meta[name="location-block-key"], meta[name="location-block-slug"]');
   if(!meta) return null;
   var c = (meta.getAttribute('content') || '').trim();
   if(!c) return null;
@@ -500,7 +544,7 @@ function getMetaMatch(cfg){
 }
 
 function getCardMatch(card, cfg){
-  var value = card.dataset.locationKey || card.getAttribute('data-location-key') || '';
+  var value = card.dataset.locationKey || card.getAttribute('data-location-key') || card.dataset.locationSlug || card.getAttribute('data-location-slug') || '';
   if(!value) return null;
   return normalizeMatchValue(value, cfg.match.normalize);
 }
@@ -657,7 +701,186 @@ async function getPageMatch(card, cfg){
   }
 }
 
-function buildHours(lieu, now, cfg){
+function getSections(cfg){
+  if(Array.isArray(cfg.sections) && cfg.sections.length) return cfg.sections;
+  var sections = DEFAULT_SECTIONS.map(function(section){
+    var copy = mergeObjects({}, section);
+    if(Array.isArray(section.fields)) copy.fields = section.fields.slice();
+    return copy;
+  });
+  if(cfg.showSocialLinks){
+    sections.forEach(function(section){
+      if(section.id === 'contact' && Array.isArray(section.fields) && section.fields.indexOf('instagram') === -1){
+        section.fields.push('instagram');
+      }
+    });
+  }
+  return sections;
+}
+
+function safeTag(tag, fallback){
+  var t = String(tag || fallback || 'h4').toLowerCase();
+  return /^(h1|h2|h3|h4|h5|h6|p|span|div)$/i.test(t) ? t : (fallback || 'h4');
+}
+
+function getTitleText(title, count){
+  if(!title) return '';
+  if(typeof title === 'string') return title;
+  if(typeof title !== 'object') return '';
+  if(title.text) return title.text;
+  if(count === 1 && title.singular) return title.singular;
+  return title.plural || title.singular || '';
+}
+
+function buildSectionTitle(section, count, cfg){
+  var title = section.title;
+  var text = getTitleText(title, count);
+  if(!text) return '';
+  var tag = safeTag((title && typeof title === 'object' && title.tag) || section.titleTag, cfg.sectionTitleTag || 'h4');
+  return '<' + tag + ' class="locb-card__section-title">' + escHtml(text) + '</' + tag + '>';
+}
+
+function buildSectionIcon(section){
+  if(section.icon === false || section.icon === '') return '';
+  var icon = section.icon || 'info';
+  return '<span class="ui-icon locb-card__section-icon locb-card__icon" aria-hidden="true">' + escHtml(icon) + '</span>';
+}
+
+function buildSection(section, bodyHtml, count, cfg){
+  if(!bodyHtml) return '';
+  var id = toSlug(section.id || section.type || 'section') || 'section';
+  var type = toSlug(section.type || section.id || 'section') || 'section';
+  var titleHtml = buildSectionTitle(section, count, cfg);
+  var iconHtml = buildSectionIcon(section);
+  var classes = [
+    'cb-card__group',
+    'locb-card__section',
+    'locb-card__section--' + id,
+    'locb-card__section-type--' + type
+  ];
+  if(titleHtml) classes.push('has-title');
+  if(!iconHtml) classes.push('has-no-icon');
+  return '<section class="' + classes.join(' ') + '">' +
+    '<div class="locb-card__section-head">' + iconHtml + titleHtml + '</div>' +
+    '<div class="locb-card__section-body locb-card__content">' + bodyHtml + '</div>' +
+  '</section>';
+}
+
+function getRawField(lieu, cfg, key){
+  if(lieu[key] != null && String(lieu[key]).trim() !== '') return String(lieu[key]).trim();
+  if(lieu.raw){
+    return getByColumn(lieu.raw, (cfg.columns && cfg.columns[key]) || key);
+  }
+  return '';
+}
+
+function normalizeFieldDef(field){
+  var key = typeof field === 'string' ? field : (field && field.key);
+  key = key || '';
+  var base = mergeObjects({key: key, label: key, icon: 'info', type: 'text'}, DEFAULT_FIELD_DEFS[key] || {});
+  if(field && typeof field === 'object') base = mergeObjects(base, field);
+  return base;
+}
+
+function cleanUrlDisplay(value){
+  return String(value || '')
+    .replace(/^https?:\/\//i, '')
+    .replace(/^www\./i, 'www.')
+    .replace(/\/$/, '');
+}
+
+function socialHandle(value, service){
+  var v = String(value || '').trim();
+  if(!v) return '';
+  if(v.charAt(0) === '@') return v;
+  try{
+    var url = new URL(/^https?:\/\//i.test(v) ? v : 'https://' + v);
+    var parts = url.pathname.split('/').filter(Boolean);
+    if(parts.length) return '@' + parts[parts.length - 1].replace(/^@/, '');
+  }catch(_){}
+  if(service === 'instagram' || service === 'x') return '@' + v.replace(/^@/, '');
+  return v;
+}
+
+function socialHref(value, service){
+  var v = String(value || '').trim();
+  if(!v) return '';
+  if(/^https?:\/\//i.test(v)) return v;
+  if(service === 'instagram') return 'https://instagram.com/' + v.replace(/^@/, '');
+  if(service === 'x') return 'https://x.com/' + v.replace(/^@/, '');
+  return normUrl(v);
+}
+
+function fieldValueHtml(def, rawValue){
+  var value = String(rawValue || '').trim();
+  if(!value || value === '-') return '';
+  var type = def.type || 'text';
+  var href = '';
+  var display = value;
+
+  if(type === 'phone'){
+    href = telHref(value);
+  }else if(type === 'email'){
+    href = 'mailto:' + value;
+  }else if(type === 'url'){
+    href = normUrl(value);
+    display = def.display === 'clean-url' ? cleanUrlDisplay(value) : value;
+  }else if(type === 'instagram' || type === 'x'){
+    href = socialHref(value, type);
+    display = def.display === 'raw' ? value : socialHandle(value, type);
+  }
+
+  if(href){
+    var target = /^https?:\/\//i.test(href) ? ' target="_blank" rel="noopener noreferrer"' : '';
+    return '<a href="' + escHtml(href) + '"' + target + '>' + escHtml(display) + '</a>';
+  }
+  return escHtml(display);
+}
+
+function buildFieldRow(def, valueHtml, labelMode){
+  if(!valueHtml) return '';
+  labelMode = def.labelMode || labelMode || 'none';
+  var labelHtml = '';
+  var classes = ['locb-card__field', 'locb-card__field--' + toSlug(def.key), 'locb-card__contact-line'];
+
+  if((labelMode === 'icon' || labelMode === 'both') && def.icon){
+    classes.push('has-icon');
+    labelHtml += '<span class="ui-icon locb-card__field-icon locb-card__icon" aria-hidden="true">' + escHtml(def.icon) + '</span>';
+  }
+  if((labelMode === 'text' || labelMode === 'both') && def.label){
+    classes.push('has-label');
+    labelHtml += '<span class="locb-card__field-label">' + escHtml(def.label) + '</span>';
+  }
+
+  return '<div class="' + classes.join(' ') + '">' +
+    labelHtml +
+    '<span class="locb-card__field-value">' + valueHtml + '</span>' +
+  '</div>';
+}
+
+function buildFields(lieu, cfg, section){
+  var fields = Array.isArray(section.fields) ? section.fields : [];
+  var labelMode = section.fieldLabelMode || cfg.fieldLabelMode || 'none';
+  var rows = [];
+  fields.forEach(function(field){
+    var def = normalizeFieldDef(field);
+    var rawValue = getRawField(lieu, cfg, def.key);
+    var valueHtml = fieldValueHtml(def, rawValue);
+    var row = buildFieldRow(def, valueHtml, labelMode);
+    if(row) rows.push(row);
+  });
+  return {html: rows.join(''), count: rows.length};
+}
+
+function buildAddress(lieu){
+  var addr = [lieu.address1, lieu.address2, lieu.address3].filter(Boolean).map(escHtml).join('<br>');
+  if(!addr) return '';
+  return lieu.mapUrl
+    ? '<a class="cb-card__link locb-card__address-link" href="' + escHtml(lieu.mapUrl) + '" target="_blank" rel="noopener noreferrer">' + addr + '</a>'
+    : '<div class="locb-card__address">' + addr + '</div>';
+}
+
+function buildHours(lieu, now, cfg, section){
   var dk = now.dayKey;
   var nm = now.nowMinutes;
   var ti = DAY_KEYS.indexOf(dk);
@@ -673,8 +896,9 @@ function buildHours(lieu, now, cfg){
     var hiddenClass = (!isToday && cfg.collapseHours) ? ' is-hidden' : '';
     return '<div class="locb-card__hours-row' + (isToday ? ' is-today' : '') + hiddenClass + '"><span class="locb-card__hours-day">' + escHtml(DAY_FULL[day]) + '</span><span class="locb-card__hours-value">' + escHtml(displayValue) + status + '</span></div>';
   });
+  var toggleLabel = (section && section.toggleLabel) || cfg.hoursToggleLabel || cfg.labels.hoursToggle || 'Tous les horaires';
   var toggle = cfg.collapseHours
-    ? '<button class="locb-card__hours-toggle" type="button" aria-expanded="false"><span class="locb-card__hours-toggle-label">Tous les horaires</span><span class="ui-icon locb-card__icon" aria-hidden="true">expand_more</span></button>'
+    ? '<button class="locb-card__hours-toggle" type="button" aria-expanded="false"><span class="locb-card__hours-toggle-label">' + escHtml(toggleLabel) + '</span><span class="ui-icon locb-card__icon" aria-hidden="true">expand_more</span></button>'
     : '';
   return '<div class="locb-card__hours-panel">' + rows.join('') + toggle + '</div>';
 }
@@ -687,16 +911,27 @@ function validCoordinate(value, min, max){
 function getMapSrc(lieu, cfg){
   var lat = validCoordinate(lieu.latitude, -90, 90);
   var lng = validCoordinate(lieu.longitude, -180, 180);
+  var addressQuery = [lieu.title, lieu.address1, lieu.address2, lieu.address3].filter(Boolean).join(', ');
+  var coordinateQuery = lat !== null && lng !== null ? (lat + ',' + lng) : '';
+  var mode = cfg.mapQuery || 'coordinates-first';
   var query;
 
-  if(cfg.mapQuery !== 'address' && lat !== null && lng !== null){
-    query = lat + ',' + lng;
+  if(mode === 'address'){
+    query = addressQuery || coordinateQuery;
+  }else if(mode === 'address-first'){
+    query = addressQuery || coordinateQuery;
+  }else if(mode === 'coordinates'){
+    query = coordinateQuery || addressQuery;
+  }else if(mode !== 'address' && coordinateQuery){
+    query = coordinateQuery;
   }else{
-    query = lieu.title + ', ' + [lieu.address1, lieu.address2, lieu.address3].filter(Boolean).join(', ');
+    query = addressQuery;
   }
 
   var q = encodeURIComponent(query);
-  return 'https://maps.google.com/maps?q=' + q + '&output=embed&hl=fr&z=14&iwloc=B';
+  var src = 'https://maps.google.com/maps?q=' + q + '&output=embed&hl=' + encodeURIComponent(cfg.mapLang || 'fr') + '&z=' + encodeURIComponent(cfg.mapZoom || 14);
+  if(cfg.mapInfoWindow) src += '&iwloc=B';
+  return src;
 }
 
 function buildMapIframe(src, title){
@@ -712,24 +947,7 @@ function buildMap(lieu, cfg){
   return '<div class="locb-card__map">' + buildMapIframe(src, title) + '</div>';
 }
 
-function buildCard(lieu, cfg){
-  var now = getNow(cfg);
-  var imgTag = buildImgTag(lieu);
-  var titleHtml = lieu.title ? '<div class="cb-card__title locb-card__title">' + escHtml(lieu.title) + '</div>' : '';
-  var mediaHtml = imgTag ? '<div class="cb-card__media locb-card__media">' + imgTag + titleHtml + '</div>' : '';
-  var addr = [lieu.address1, lieu.address2, lieu.address3].filter(Boolean).map(escHtml).join('<br>');
-  var addrHtml = lieu.mapUrl
-    ? '<a class="cb-card__link locb-card__address-link" href="' + escHtml(lieu.mapUrl) + '" target="_blank" rel="noopener noreferrer">' + addr + '</a>'
-    : '<div class="locb-card__address">' + addr + '</div>';
-  var phoneHref = telHref(lieu.phone);
-  var phoneHtml = (lieu.phone && phoneHref) ? '<div class="locb-card__contact-line"><a href="' + escHtml(phoneHref) + '">' + escHtml(lieu.phone) + '</a></div>' : '';
-  var emailHtml = lieu.email ? '<div class="locb-card__contact-line"><a href="mailto:' + escHtml(lieu.email) + '">' + escHtml(lieu.email) + '</a></div>' : '';
-  var websiteUrl = normUrl(lieu.website);
-  var websiteHtml = websiteUrl ? '<div class="locb-card__contact-line"><a href="' + escHtml(websiteUrl) + '" target="_blank" rel="noopener noreferrer">' + escHtml(lieu.website) + '</a></div>' : '';
-  var instagramUrl = lieu.instagram ? 'https://instagram.com/' + lieu.instagram.replace(/^@/,'') : '';
-  var instagramHtml = (cfg.showSocialLinks && instagramUrl) ? '<div class="locb-card__contact-line"><a href="' + escHtml(instagramUrl) + '" target="_blank" rel="noopener noreferrer">@' + escHtml(lieu.instagram.replace(/^@/,'')) + '</a></div>' : '';
-  var hasContact = lieu.phone || lieu.email || lieu.website || (cfg.showSocialLinks && lieu.instagram);
-
+function buildMapLink(lieu, cfg){
   var mapLinkTarget = '';
   var mapLinkHref = '';
   if(cfg.showMapLink){
@@ -740,16 +958,48 @@ function buildCard(lieu, cfg){
       mapLinkTarget = ' target="_blank" rel="noopener noreferrer"';
     }
   }
-  var mapLink = (cfg.showMapLink && mapLinkHref)
-    ? '<div class="locb-card__maplink-wrap"><a class="cb-card__link locb-card__maplink" href="' + mapLinkHref + '"' + mapLinkTarget + '><span>Voir sur la carte</span><span class="ui-icon locb-card__icon" aria-hidden="true">chevron_right</span></a></div>'
-    : '';
+  if(!cfg.showMapLink || !mapLinkHref) return '';
+  var label = cfg.mapLinkLabel || cfg.labels.mapLink || 'Voir sur la carte';
+  return '<div class="locb-card__maplink-wrap"><a class="cb-card__link locb-card__maplink" href="' + mapLinkHref + '"' + mapLinkTarget + '><span>' + escHtml(label) + '</span><span class="ui-icon locb-card__icon" aria-hidden="true">chevron_right</span></a></div>';
+}
+
+function buildConfiguredSection(lieu, cfg, section, now){
+  section = section || {};
+  var type = section.type || section.id || '';
+  if(type === 'address'){
+    var addressHtml = buildAddress(lieu);
+    return buildSection(section, addressHtml, addressHtml ? 1 : 0, cfg);
+  }
+  if(type === 'hours'){
+    return buildSection(section, buildHours(lieu, now, cfg, section), DAY_KEYS.length, cfg);
+  }
+  if(type === 'fields' || type === 'contact' || type === 'social'){
+    var built = buildFields(lieu, cfg, section);
+    return buildSection(section, built.html, built.count, cfg);
+  }
+  if(type === 'maplink'){
+    return buildMapLink(lieu, cfg);
+  }
+  return '';
+}
+
+function buildCard(lieu, cfg){
+  var now = getNow(cfg);
+  var imgTag = buildImgTag(lieu);
+  var titleHtml = lieu.title ? '<div class="cb-card__title locb-card__title">' + escHtml(lieu.title) + '</div>' : '';
+  var mediaHtml = imgTag ? '<div class="cb-card__media locb-card__media">' + imgTag + titleHtml + '</div>' : '';
+  var hasMapLinkSection = false;
+  var sectionsHtml = getSections(cfg).map(function(section){
+    var type = section && (section.type || section.id);
+    if(type === 'maplink') hasMapLinkSection = true;
+    return buildConfiguredSection(lieu, cfg, section, now);
+  }).filter(Boolean).join('');
+  var mapLink = hasMapLinkSection ? '' : buildMapLink(lieu, cfg);
 
   return '<article class="cb-card locb-card">' +
     mediaHtml +
     '<div class="cb-card__body locb-card__body">' +
-      '<div class="cb-card__group locb-card__section"><span class="ui-icon locb-card__icon" aria-hidden="true">location_on</span><div class="locb-card__content">' + addrHtml + '</div></div>' +
-      '<div class="cb-card__group locb-card__section"><span class="ui-icon locb-card__icon" aria-hidden="true">schedule</span><div class="locb-card__content">' + buildHours(lieu, now, cfg) + '</div></div>' +
-      (hasContact ? '<div class="cb-card__group locb-card__section"><span class="ui-icon locb-card__icon" aria-hidden="true">contact_page</span><div class="locb-card__content">' + phoneHtml + emailHtml + websiteHtml + instagramHtml + '</div></div>' : '') +
+      sectionsHtml +
       mapLink +
     '</div>' +
     (cfg.showMap ? buildMap(lieu, cfg) : '') +
@@ -849,7 +1099,10 @@ async function renderCard(card, index, cfg, getFreshIndex){
 }
 
 async function initConfig(cfg){
-  var cards = Array.from(document.querySelectorAll(cfg.mount || DEFAULT_MOUNT));
+  var cards = Array.from(document.querySelectorAll(cfg.mount || DEFAULT_MOUNT)).filter(function(card){
+    var configId = card.dataset.locationConfig || card.getAttribute('data-location-config') || '';
+    return !configId || configId === cfg.id;
+  });
   if(!cards.length) return;
   var lieux;
   try{
