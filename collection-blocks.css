@@ -44,16 +44,14 @@
 
 /* ─────────────────────────────────────────────
    BADGE ÉDITEUR
+   Classe qb-block sur le conteneur HTML.
    Visible uniquement en mode édition Squarespace.
-   Fonctionne sur les mounts non initialisés et les blocs initialisés.
+   Exemple HTML : <div id="sqb-membres"
+                       data-cb-label="Query Block — Membres"></div>
    ───────────────────────────────────────────── */
 
-.sqs-edit-mode-active :where(.cb-target)[data-cb-label]::before,
-.sqs-edit-mode-active :where(.cb-block)[data-cb-label]::before,
-.sqs-edit-mode-active :where(.qb-target)[data-qb-label]::before,
-.sqs-edit-mode-active :where(.qb-block)[data-qb-label]::before,
-.sqs-edit-mode-active :where(.lb-target)[data-lb-label]::before,
-.sqs-edit-mode-active :where(.lb-block)[data-lb-label]::before {
+.sqs-edit-mode-active :where(.cb-block).qb-block[data-cb-label]::before {
+  content: attr(data-cb-label);
   display: block;
   background: #0050ff;
   color: #fff;
@@ -65,27 +63,7 @@
   margin-bottom: 0.75rem;
 }
 
-.sqs-edit-mode-active :where(.cb-target)[data-cb-label]::before,
-.sqs-edit-mode-active :where(.cb-block)[data-cb-label]::before {
-  content: attr(data-cb-label);
-}
-
-.sqs-edit-mode-active :where(.qb-target)[data-qb-label]::before,
-.sqs-edit-mode-active :where(.qb-block)[data-qb-label]::before {
-  content: attr(data-qb-label);
-}
-
-.sqs-edit-mode-active :where(.lb-target)[data-lb-label]::before,
-.sqs-edit-mode-active :where(.lb-block)[data-lb-label]::before {
-  content: attr(data-lb-label);
-}
-
-body:not(.sqs-edit-mode-active) :where(.cb-target)[data-cb-label]::before,
-body:not(.sqs-edit-mode-active) :where(.cb-block)[data-cb-label]::before,
-body:not(.sqs-edit-mode-active) :where(.qb-target)[data-qb-label]::before,
-body:not(.sqs-edit-mode-active) :where(.qb-block)[data-qb-label]::before,
-body:not(.sqs-edit-mode-active) :where(.lb-target)[data-lb-label]::before,
-body:not(.sqs-edit-mode-active) :where(.lb-block)[data-lb-label]::before {
+body:not(.sqs-edit-mode-active) :where(.cb-block).qb-block[data-cb-label]::before {
   display: none;
 }
 
@@ -166,7 +144,10 @@ body:not(.sqs-edit-mode-active) :where(.lb-block)[data-lb-label]::before {
   display: flex;
   flex-wrap: nowrap;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
+  overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   border-bottom: 1px solid var(--tweak-line-block-line-color, var(--paragraphMediumColor));
@@ -209,7 +190,9 @@ body:not(.sqs-edit-mode-active) :where(.lb-block)[data-lb-label]::before {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  min-width: 0;
   gap: 1rem;
+  position: relative;
   border-bottom: 1px solid var(--tweak-line-block-line-color, var(--paragraphMediumColor));
   margin-bottom: 1.25rem;
 }
@@ -218,6 +201,10 @@ body:not(.sqs-edit-mode-active) :where(.lb-block)[data-lb-label]::before {
   border-bottom: none;
   margin-bottom: 0;
   flex: 1;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 :where(.cb-tabs-row).qb-tabs-row :where(.cb-mobile-toggle).qb-mobile-toggle {
@@ -279,6 +266,34 @@ body:not(.sqs-edit-mode-active) :where(.lb-block)[data-lb-label]::before {
   gap: 0.3rem;
 }
 
+:where(.cb-filter-group).qb-filter-group:where(.cb-filter-group--tabs).qb-filter-group--tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  width: 100%;
+  max-width: 100%;
+}
+
+@media (max-width: 767px) {
+  :where(.cb-tabs-row).qb-tabs-row::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 1px;
+    width: 2.5rem;
+    pointer-events: none;
+    background: linear-gradient(to left, var(--siteBackgroundColor, #fff), transparent);
+    z-index: 1;
+  }
+
+  :where(.cb-tabs-row).qb-tabs-row :where(.cb-mobile-toggle).qb-mobile-toggle {
+    position: relative;
+    z-index: 2;
+  }
+}
+
 /* ─────────────────────────────────────────────
    PILLS — label inline + boutons toggle
    ───────────────────────────────────────────── */
@@ -337,24 +352,16 @@ body:not(.sqs-edit-mode-active) :where(.lb-block)[data-lb-label]::before {
    RECHERCHE
    ───────────────────────────────────────────── */
 
-:where(.cb-filter-group--search),
-:where(.cb-filter-group--search).qb-filter-group--search,
-:where(.cb-filter-group--search).lb-filter-group--search { display: inline-flex; }
+:where(.cb-filter-group--search).qb-filter-group--search { display: inline-flex; }
 
-:where(.cb-filter-search),
-:where(.cb-filter-search).qb-filter-search,
-:where(.cb-filter-search).lb-filter-search {
+:where(.cb-filter-search).qb-filter-search {
   border: 1px solid var(--paragraphMediumColor);
   background: var(--siteBackgroundColor); color: var(--paragraphMediumColor);
   font: inherit; font-size: 0.9em; padding: 0.3em 0.9em;
   border-radius: 2em; min-width: 10em; max-width: 16em; opacity: 0.6;
 }
-:where(.cb-filter-search)::placeholder,
-:where(.cb-filter-search).qb-filter-search::placeholder,
-:where(.cb-filter-search).lb-filter-search::placeholder { color: var(--paragraphMediumColor); opacity: 0.5; }
-:where(.cb-filter-search):focus,
-:where(.cb-filter-search).qb-filter-search:focus,
-:where(.cb-filter-search).lb-filter-search:focus { outline: 2px solid var(--paragraphMediumColor); outline-offset: 2px; opacity: 1; }
+:where(.cb-filter-search).qb-filter-search::placeholder { color: var(--paragraphMediumColor); opacity: 0.5; }
+:where(.cb-filter-search).qb-filter-search:focus { outline: 2px solid var(--paragraphMediumColor); outline-offset: 2px; opacity: 1; }
 
 /* ─────────────────────────────────────────────
    MOBILE — bouton Filtrer
