@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.7';
+  var VERSION = '0.8';
   var STORE_KEY_PREFIX = 'collection-blocks::v0.6::';
 
   var memoryCache = new Map();
@@ -37,7 +37,12 @@
     stripFields: []
   };
 
-  var SRCSET_WIDTHS = [300, 500, 750, 1000, 1500];
+  var SRCSET_WIDTHS = [300, 500, 750, 1000, 1200, 1500, 2000, 2500];
+  var IMAGE_SIZE_PRESETS = {
+    standard: '(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw',
+    wide: '100vw'
+  };
+  var DEFAULT_IMAGE_SIZES = IMAGE_SIZE_PRESETS.standard;
 
   function now() {
     return Date.now();
@@ -903,6 +908,42 @@
     }
   }
 
+  function isoDayKey(parsed) {
+    if (!parsed) return '';
+    return parsed.year + '-' + String(parsed.month + 1).padStart(2, '0') + '-' + String(parsed.day).padStart(2, '0');
+  }
+
+  function canCompactSameDayTimes(format) {
+    if (format === 'time') return false;
+    if (format === 'day' || format === 'date' || format === 'short' || format === 'numeric') return false;
+    if (format && typeof format === 'object') {
+      return format.hour != null || format.minute != null;
+    }
+    return true;
+  }
+
+  function formatISOValues(values, format, locale, options) {
+    var list = Array.isArray(values) ? values : [];
+    var compact = !options || options.compactSameDayTimes !== false;
+    var shouldCompact = compact && format != null && canCompactSameDayTimes(format);
+    var previousDay = '';
+
+    return list.map(function(value) {
+      if (format == null) return cleanHTML(value);
+
+      var raw = String(value || '').trim();
+      var parsed = parseISO(raw);
+      var dayKey = isoDayKey(parsed);
+      var useTimeOnly = shouldCompact && parsed && parsed.hour !== null && dayKey && dayKey === previousDay;
+      var formatted = useTimeOnly
+        ? formatISOTag(raw, 'time', locale)
+        : formatISOTag(raw, format, locale);
+
+      previousDay = parsed && dayKey ? dayKey : '';
+      return formatted;
+    }).filter(Boolean);
+  }
+
   function getISODatePart(str) {
     var m = String(str || '').match(/^(\d{4}-\d{2}-\d{2})/);
     return m ? m[1] : null;
@@ -938,6 +979,13 @@
     return list.map(function(width) {
       return base + '?format=' + width + 'w ' + width + 'w';
     }).join(', ');
+  }
+
+  function getImageSizes(options) {
+    options = options || {};
+    if (options.sizes || options.imageSizes) return options.sizes || options.imageSizes;
+    var preset = options.imagePreset || options.preset || 'standard';
+    return IMAGE_SIZE_PRESETS[preset] || DEFAULT_IMAGE_SIZES;
   }
 
   function escapeHTML(str) {
@@ -1183,11 +1231,9 @@
     if (descriptor.maxItems) rawValues = rawValues.slice(0, Number(descriptor.maxItems));
 
     var displayFormat = descriptor.displayFormat;
-    var values = rawValues.map(function(value) {
-      return displayFormat != null
-        ? formatISOTag(value, displayFormat, descriptor.locale)
-        : cleanHTML(value);
-    }).filter(Boolean);
+    var values = formatISOValues(rawValues, displayFormat, descriptor.locale, {
+      compactSameDayTimes: descriptor.compactSameDayTimes
+    });
 
     if (!values.length) return null;
 
@@ -1266,11 +1312,16 @@
 
     var wrapperClass = options.wrapperClass || 'cb-card__img-wrap';
     var imageClass = options.imageClass || 'cb-card__img';
-    var sizes = options.sizes || '(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw';
+    var sizes = getImageSizes(options);
     var fallbackWidth = Number(options.fallbackWidth || 750);
     var priority = options.priority === true;
 
     var wrap = createEl('div', { class: wrapperClass });
+
+    if (options.ratio) {
+      wrap.style.setProperty('--cb-card-image-ratio', String(options.ratio));
+    }
+
     var img = createEl('img', {
       class: imageClass,
       src: base + '?format=' + fallbackWidth + 'w',
@@ -1294,7 +1345,7 @@
     if (!base) return '';
 
     var imageClass = options.imageClass || options.className || 'cb-card__img';
-    var sizes = options.sizes || '(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw';
+    var sizes = getImageSizes(options);
     var fallbackWidth = Number(options.fallbackWidth || 750);
     var priority = options.priority === true;
     var fallback = base + '?format=' + fallbackWidth + 'w';
@@ -1525,6 +1576,9 @@
         wrapperClass: cardClass('img-wrap', prefix, descriptor.className),
         imageClass: cardClass('img', prefix, descriptor.imageClassName),
         sizes: descriptor.sizes || options.imageSizes,
+        widths: descriptor.widths || descriptor.srcsetWidths || options.srcsetWidths,
+        imagePreset: descriptor.imagePreset || options.imagePreset,
+        ratio: descriptor.ratio || descriptor.imageRatio || options.imageRatio,
         priority: descriptor.priority || options.priorityImage === true
       });
     }
@@ -1638,6 +1692,7 @@
     getTagValuesByPrefix: getTagValuesByPrefix,
     parseISO: parseISO,
     formatISOTag: formatISOTag,
+    formatISOValues: formatISOValues,
     getISODatePart: getISODatePart,
     focalPoint: focalPoint,
     getImageBase: getImageBase,
@@ -1676,6 +1731,7 @@
     truncate: truncate,
     parseISO: parseISO,
     formatISOTag: formatISOTag,
+    formatISOValues: formatISOValues,
     getTagValuesByPrefix: getTagValuesByPrefix,
     buildSrcset: buildSrcset,
     escapeHTML: escapeHTML,
