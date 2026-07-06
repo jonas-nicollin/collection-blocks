@@ -247,6 +247,38 @@
             return s;
         }
     }
+    function isoDayKey(parsed) {
+        if (!parsed) return "";
+        return `${parsed.year}-${String(parsed.month + 1).padStart(2, "0")}-${String(parsed.day).padStart(2, "0")}`;
+    }
+    function canCompactSameDayTimes(fmt) {
+        if (fmt === "time") return false;
+        if (fmt === "day" || fmt === "date" || fmt === "short" || fmt === "numeric") return false;
+        if (fmt && typeof fmt === "object") return fmt.hour != null || fmt.minute != null;
+        return true;
+    }
+    function formatISOValues(values, fmt, locale, options) {
+        const utils = getCollectionUtils();
+        if (utils && typeof utils.formatISOValues === "function") {
+            return utils.formatISOValues(values, fmt, locale, options);
+        }
+        const list = Array.isArray(values) ? values : [];
+        const compact = !options || options.compactSameDayTimes !== false;
+        const shouldCompact = compact && fmt != null && canCompactSameDayTimes(fmt);
+        let previousDay = "";
+        return list.map(value => {
+            if (fmt == null) return cleanText(value);
+            const raw = String(value || "").trim();
+            const parsed = parseISO(raw);
+            const dayKey = isoDayKey(parsed);
+            const useTimeOnly = shouldCompact && parsed && parsed.hour !== null && dayKey && dayKey === previousDay;
+            const formatted = useTimeOnly
+                ? formatISOTag(raw, "time", locale)
+                : formatISOTag(raw, fmt, locale);
+            previousDay = parsed && dayKey ? dayKey : "";
+            return formatted;
+        }).filter(Boolean);
+    }
     /**
    * Retourne le timestamp de tri à partir d'une valeur de tag ISO.
    * Utilisé pour le tri { type: 'tagPrefix', prefix: 'Date' }.
@@ -927,6 +959,7 @@
                 joinWith,
                 displayFormat,
                 locale,
+                compactSameDayTimes: fieldConfig.compactSameDayTimes,
                 className: fieldConfig.className,
                 icon: fieldConfig.icon,
                 iconType: fieldConfig.iconType,
@@ -935,7 +968,11 @@
                 prefix: "rb-card"
             });
         }
-        const formattedValues = values.map(v => displayFormat !== null ? formatISOTag(v, displayFormat, locale) : v).filter(Boolean);
+        const formattedValues = displayFormat !== null
+            ? formatISOValues(values, displayFormat, locale, {
+                compactSameDayTimes: fieldConfig.compactSameDayTimes
+            })
+            : values.filter(Boolean);
         const text = formattedValues.join(joinWith);
         const fullText = label ? label + " " + text : text;
         // Icône optionnelle
@@ -1154,9 +1191,26 @@
             if (group?.inline === true) {
                 addClasses(wrapper, role === "body" ? "cb-card__body--inline rb-card__body--inline" : "cb-card__group--inline rb-card__group--inline");
             }
-            children.forEach(child => {
-                buildContentNodesByType(child, item, CFG, { insideMedia: role === "media" }).forEach(node => wrapper.appendChild(node));
-            });
+            if (group?.inline === true) {
+                const separator = group.separator !== undefined ? group.separator : " ";
+                const nodes = [];
+                children.forEach(child => {
+                    buildContentNodesByType(child, item, CFG, { insideMedia: role === "media" }).forEach(node => nodes.push(node));
+                });
+                nodes.forEach((node, index) => {
+                    wrapper.appendChild(node);
+                    if (index < nodes.length - 1 && separator) {
+                        const sepNode = document.createElement("span");
+                        sepNode.className = "cb-inline-sep rb-inline-sep";
+                        sepNode.textContent = separator;
+                        wrapper.appendChild(sepNode);
+                    }
+                });
+            } else {
+                children.forEach(child => {
+                    buildContentNodesByType(child, item, CFG, { insideMedia: role === "media" }).forEach(node => wrapper.appendChild(node));
+                });
+            }
             if (wrapper.childNodes.length) {
                 fragment.appendChild(wrapper);
                 hasContent = true;
@@ -1515,10 +1569,16 @@
         if (guard.bodyId && document.body.id !== guard.bodyId) return false;
         return true;
     }
-    function matchesRequiredBodyClasses(required) {
+    function matchesBodyClassGroup(group) {
+        return Array.isArray(group) && group.every(cls => document.body.classList.contains(cls));
+    }
+    function matchesRequiredBodyClasses(required, anyRequired) {
+        if (Array.isArray(anyRequired) && anyRequired.length) {
+            return anyRequired.some(matchesBodyClassGroup);
+        }
         if (!Array.isArray(required) || !required.length) return true;
         if (Array.isArray(required[0])) {
-            return required.some(group => Array.isArray(group) && group.every(cls => document.body.classList.contains(cls)));
+            return required.some(matchesBodyClassGroup);
         }
         return required.every(cls => document.body.classList.contains(cls));
     }
@@ -1566,6 +1626,7 @@
                 enabled: false
             },
             requiredBodyClasses: [],
+            requiredBodyClassesAny: [],
             sourceCollection: {
                 path: ""
             },
@@ -1654,7 +1715,7 @@
         }, CFG || {});
         if (CFG.enabled === false) return null;
         if (!matchesDevGuard(CFG)) return null;
-        if (!matchesRequiredBodyClasses(CFG.requiredBodyClasses)) return null;
+        if (!matchesRequiredBodyClasses(CFG.requiredBodyClasses, CFG.requiredBodyClassesAny)) return null;
         let observer = null;
         function getInitialMaxPages(CFG) {
   return CFG.performance?.maxPages || 1;
@@ -1861,7 +1922,7 @@ finalItems = applyFallbackFill(finalItems, items, currentItem, {
         CONFIGS.forEach(CFG => {
             if (!CFG || CFG.enabled === false) return;
             if (!matchesDevGuard(CFG)) return;
-            if (!matchesRequiredBodyClasses(CFG.requiredBodyClasses)) return;
+            if (!matchesRequiredBodyClasses(CFG.requiredBodyClasses, CFG.requiredBodyClassesAny)) return;
             if (CFG.preload?.enabled !== true) return;
             const maxPages = CFG.preload?.maxPages || CFG.performance?.maxPages || 5;
             (Array.isArray(CFG.preload?.collections) ? CFG.preload.collections : []).forEach(col => {
