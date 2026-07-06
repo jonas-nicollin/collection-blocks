@@ -408,6 +408,16 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
     });
   }
 
+  function matchesTagValue(value, expected) {
+    var expectedDatePart = getISODatePart(expected);
+    if (expectedDatePart) {
+      var valueDatePart = getISODatePart(value);
+      if (valueDatePart && valueDatePart === expectedDatePart) return true;
+    }
+
+    return norm(value) === norm(expected);
+  }
+
   function applyPreFilter(items, pf) {
     if (!pf) return items;
 
@@ -419,7 +429,16 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
         for (var i = 0; i < pf.tagValues.length; i++) {
           var tv = pf.tagValues[i];
           if (!getTagValuesByPrefix(item, tv.prefix).some(function(v) {
-            return norm(v) === norm(tv.value);
+            return matchesTagValue(v, tv.value);
+          })) return false;
+        }
+      }
+
+      if (pf.excludeTagValues) {
+        for (var j = 0; j < pf.excludeTagValues.length; j++) {
+          var xtv = pf.excludeTagValues[j];
+          if (getTagValuesByPrefix(item, xtv.prefix).some(function(v) {
+            return matchesTagValue(v, xtv.value);
           })) return false;
         }
       }
@@ -439,7 +458,16 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
         for (var i = 0; i < tf.tagValues.length; i++) {
           var tv = tf.tagValues[i];
           if (!getTagValuesByPrefix(item, tv.prefix).some(function(v) {
-            return norm(v) === norm(tv.value);
+            return matchesTagValue(v, tv.value);
+          })) return false;
+        }
+      }
+
+      if (tf.excludeTagValues) {
+        for (var j = 0; j < tf.excludeTagValues.length; j++) {
+          var xtv = tf.excludeTagValues[j];
+          if (getTagValuesByPrefix(item, xtv.prefix).some(function(v) {
+            return matchesTagValue(v, xtv.value);
           })) return false;
         }
       }
@@ -542,29 +570,42 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
       }, { rootMargin: '300px 0px' })
     : null;
 
-  var SRCSET_WIDTHS = [300, 500, 750, 1000, 1500];
+  var SRCSET_WIDTHS = [300, 500, 750, 1000, 1200, 1500, 2000, 2500];
+var IMAGE_SIZE_PRESETS = {
+  standard: '(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw',
+  wide: '100vw'
+};
+var DEFAULT_IMAGE_SIZES = IMAGE_SIZE_PRESETS.standard;
 var QB_RENDER_IMAGE_INDEX = 0;
 
-  function buildImg(assetUrl, focalPoint, alt, priority) {
+  function buildImg(assetUrl, focalPoint, alt, options) {
+  if (typeof options === 'boolean') options = { priority: options };
+  options = options || {};
   var imgIndex = QB_RENDER_IMAGE_INDEX++;
-var isPriority = priority === true || imgIndex < 3;
+var isPriority = options.priority === true || imgIndex < 3;
   var utils = getCollectionUtils();
   var base = String(assetUrl || '').split('?')[0];
+  var widths = Array.isArray(options.widths) && options.widths.length
+    ? options.widths
+    : SRCSET_WIDTHS;
+  var preset = options.imagePreset || options.preset || 'standard';
+  var sizes = options.sizes || options.imageSizes || IMAGE_SIZE_PRESETS[preset] || DEFAULT_IMAGE_SIZES;
 
   var srcset = (utils && typeof utils.buildSrcset === 'function')
-    ? utils.buildSrcset(base, SRCSET_WIDTHS)
-    : SRCSET_WIDTHS.map(function(w) {
+    ? utils.buildSrcset(base, widths)
+    : widths.map(function(w) {
       return base + '?format=' + w + 'w ' + w + 'w';
     }).join(', ');
 
-  var fallbackSrc = base + '?format=750w';
+  var fallbackSrc = base + '?format=' + Number(options.fallbackWidth || 750) + 'w';
 
   var wrap = el('div', { class: qCardClass('cb-card__img-wrap', 'qb-card__img-wrap') });
+  if (options.ratio) wrap.style.setProperty('--cb-card-image-ratio', String(options.ratio));
 
   var img = el('img', {
     class: qCardClass('cb-card__img', 'qb-card__img'),
     alt: alt || '',
-    sizes: '(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw',
+    sizes: sizes,
     decoding: 'async',
   });
 
@@ -675,11 +716,20 @@ var isPriority = priority === true || imgIndex < 3;
     return node;
   }
 
-  function buildChild(def, item, cardIndex) {
+  function buildChild(def, item, cardIndex, cfg) {
     var type = typeof def === 'string' ? def : (def && def.type);
 
     if (type === 'image') {
-      return item.assetUrl ? buildImg(item.assetUrl, item.focalPoint, item.title, cardIndex < 3) : null;
+      var display = cfg && cfg.display ? cfg.display : {};
+      var descriptor = def && typeof def === 'object' ? def : {};
+      return item.assetUrl ? buildImg(item.assetUrl, item.focalPoint, item.title, {
+        priority: descriptor.priority === true || cardIndex < 3,
+        sizes: descriptor.sizes || descriptor.imageSizes || display.imageSizes,
+        widths: descriptor.widths || descriptor.srcsetWidths || display.srcsetWidths,
+        imagePreset: descriptor.imagePreset || display.imagePreset,
+        ratio: descriptor.ratio || descriptor.imageRatio || display.imageRatio,
+        fallbackWidth: descriptor.fallbackWidth || display.imageFallbackWidth
+      }) : null;
     }
 
     if (type === 'categories') {
@@ -750,6 +800,32 @@ var isPriority = priority === true || imgIndex < 3;
       return pl;
     }
 
+    if (type === 'link' || type === 'cta') {
+      if (!item.fullUrl) return null;
+
+      var dispLink = (cfg && cfg.display) || {};
+      var labelText = (def && (def.label || def.text)) || dispLink.linkLabel || 'Voir la page';
+      var linkClasses = qCardClass('cb-card__link', 'qb-card__link');
+      if (def && def.className) linkClasses += ' ' + def.className;
+
+      if (dispLink.cardLink !== false) {
+        var spanLink = el('span', { class: linkClasses });
+        spanLink.textContent = labelText;
+        return spanLink;
+      }
+
+      var cardLink = el('a', { class: linkClasses, href: item.fullUrl });
+      cardLink.textContent = labelText;
+
+      var openInNewTab = dispLink.openInNewTab === true || (cfg && cfg.openInNewTab === true);
+      if (openInNewTab) {
+        cardLink.target = '_blank';
+        cardLink.rel = 'noopener noreferrer';
+      }
+
+      return cardLink;
+    }
+
     if (type === 'tagPrefix') {
       var prefix = (def && def.prefix) || '';
       var label = (def && def.label != null) ? def.label : '';
@@ -765,7 +841,9 @@ var isPriority = priority === true || imgIndex < 3;
       var locale = (def && def.locale) || null;
       var rawVals = getTagValuesByPrefix(item, prefix);
       var vals = displayFmt
-        ? rawVals.map(function(v) { return formatISOTag(v, displayFmt, locale); })
+        ? formatISOValues(rawVals, displayFmt, locale, {
+            compactSameDayTimes: def && def.compactSameDayTimes
+          })
         : rawVals;
 
       if (!vals.length) return null;
@@ -773,7 +851,10 @@ var isPriority = priority === true || imgIndex < 3;
       if (utilsTag && typeof utilsTag.buildTagField === 'function') {
         return utilsTag.buildTagField(item, {
           prefix: prefix,
-          values: vals,
+          values: rawVals,
+          displayFormat: displayFmt,
+          locale: locale,
+          compactSameDayTimes: def && def.compactSameDayTimes,
           label: labelIcon ? '' : label,
           labelIcon: labelIcon,
           iconClassName: 'ui-icon cb-card__tag-icon qb-card__tag-icon',
@@ -884,7 +965,7 @@ var isPriority = priority === true || imgIndex < 3;
           }
 
           var built = children.map(function(def) {
-            return buildChild(def, item, index);
+            return buildChild(def, item, index, cfg);
           }).filter(Boolean);
 
           built.forEach(function(node, ni) {
@@ -898,7 +979,7 @@ var isPriority = priority === true || imgIndex < 3;
           });
         } else {
           children.forEach(function(def) {
-            var node = buildChild(def, item, index);
+            var node = buildChild(def, item, index, cfg);
             if (node) wrapper.appendChild(node);
           });
         }
@@ -909,17 +990,24 @@ var isPriority = priority === true || imgIndex < 3;
       return card;
     }
 
-    if (item.assetUrl) card.appendChild(buildImg(item.assetUrl, item.focalPoint, item.title, index < 3));
+    if (item.assetUrl) card.appendChild(buildImg(item.assetUrl, item.focalPoint, item.title, {
+      priority: index < 3,
+      sizes: disp.imageSizes,
+      widths: disp.srcsetWidths,
+      imagePreset: disp.imagePreset,
+      ratio: disp.imageRatio,
+      fallbackWidth: disp.imageFallbackWidth
+    }));
 
     var body = el('div', { class: qCardClass('cb-card__body', 'qb-card__body') });
 
     if (item.categories.length) {
-      var meta = buildChild('categories', item, index);
+      var meta = buildChild('categories', item, index, cfg);
       if (meta) body.appendChild(meta);
     }
 
     if (item.title) {
-      var tt = buildChild('title', item, index);
+      var tt = buildChild('title', item, index, cfg);
       body.appendChild(tt);
     }
 
@@ -930,7 +1018,7 @@ var isPriority = priority === true || imgIndex < 3;
         label: f.label,
         labelIcon: f.labelIcon,
         joinWith: f.joinWith,
-      }, item);
+      }, item, index, cfg);
 
       if (node) body.appendChild(node);
     });
@@ -941,7 +1029,7 @@ var isPriority = priority === true || imgIndex < 3;
     }
 
     if (disp.location && item.location) {
-      var lp = buildChild('location', item, index);
+      var lp = buildChild('location', item, index, cfg);
       body.appendChild(lp);
     }
 
@@ -1037,7 +1125,7 @@ var isPriority = priority === true || imgIndex < 3;
         var descriptor = typeof child === 'string' ? { type: child } : Object.assign({}, child || {});
         if (descriptor.type === 'excerpt' && descriptor.max === undefined) descriptor.max = false;
 
-        var node = buildChild(descriptor, item, 0);
+        var node = buildChild(descriptor, item, 0, cfg);
         if (node) wrapper.appendChild(decorateLightboxChild(node, descriptor));
       });
 
@@ -1318,9 +1406,105 @@ var isPriority = priority === true || imgIndex < 3;
     }
   }
 
+  function isoDayKey(parsed) {
+    if (!parsed) return '';
+    return parsed.year + '-' + String(parsed.month + 1).padStart(2, '0') + '-' + String(parsed.day).padStart(2, '0');
+  }
+
+  function canCompactSameDayTimes(format) {
+    if (format === 'time') return false;
+    if (format === 'day' || format === 'date' || format === 'short' || format === 'numeric') return false;
+    if (format && typeof format === 'object') {
+      return format.hour != null || format.minute != null;
+    }
+    return true;
+  }
+
+  function formatISOValues(values, format, locale, options) {
+    var utils = getCollectionUtils();
+    if (utils && typeof utils.formatISOValues === 'function') {
+      return utils.formatISOValues(values, format, locale, options);
+    }
+
+    var list = Array.isArray(values) ? values : [];
+    var compact = !options || options.compactSameDayTimes !== false;
+    var shouldCompact = compact && format != null && canCompactSameDayTimes(format);
+    var previousDay = '';
+
+    return list.map(function(value) {
+      if (format == null) return cleanText(value);
+      var raw = String(value || '').trim();
+      var parsed = parseISO(raw);
+      var dayKey = isoDayKey(parsed);
+      var useTimeOnly = shouldCompact && parsed && parsed.hour !== null && dayKey && dayKey === previousDay;
+      var formatted = useTimeOnly
+        ? formatISOTag(raw, 'time', locale)
+        : formatISOTag(raw, format, locale);
+
+      previousDay = parsed && dayKey ? dayKey : '';
+      return formatted;
+    }).filter(Boolean);
+  }
+
   function getISODatePart(str) {
     var m = String(str || '').match(/^(\d{4}-\d{2}-\d{2})/);
     return m ? m[1] : null;
+  }
+
+  function getTodayDatePart(cfg) {
+    var dbg = cfg && cfg.debug;
+    var now = (dbg && typeof dbg === 'object' && dbg.mockDate)
+      ? new Date(dbg.mockDate + 'T00:00:00')
+      : new Date();
+
+    return now.getFullYear() + '-' +
+      String(now.getMonth() + 1).padStart(2, '0') + '-' +
+      String(now.getDate()).padStart(2, '0');
+  }
+
+  function getTabDateParts(tab, prefix) {
+    var filter = tab && tab.filter;
+    var values = [];
+    if (!filter) return values;
+
+    if (Array.isArray(filter.tagValues)) {
+      filter.tagValues.forEach(function(tv) {
+        if (!tv) return;
+        if (prefix && norm(tv.prefix || '') !== norm(prefix)) return;
+        var part = getISODatePart(tv.value);
+        if (part && values.indexOf(part) === -1) values.push(part);
+      });
+    }
+
+    if (filter.tags && prefix && filter.tags[prefix]) {
+      var part = getISODatePart(filter.tags[prefix]);
+      if (part && values.indexOf(part) === -1) values.push(part);
+    }
+
+    return values;
+  }
+
+  function resolveDefaultTabIndex(fc, cfg) {
+    var tabs = Array.isArray(fc && fc.tabs) ? fc.tabs : [];
+    if (!tabs.length) return 0;
+
+    var fallback = Number(fc.defaultTab != null ? fc.defaultTab : 0);
+    if (!Number.isFinite(fallback) || fallback < 0 || fallback >= tabs.length) fallback = 0;
+
+    var rule = fc.defaultTabByDate || fc.defaultTabByToday || null;
+    if (!rule) return fallback;
+
+    var options = rule === true ? {} : rule;
+    var prefix = options.prefix || fc.datePrefix || 'Date';
+    var today = getISODatePart(options.date) || getTodayDatePart(cfg);
+
+    for (var i = 0; i < tabs.length; i++) {
+      if (getTabDateParts(tabs[i], prefix).indexOf(today) !== -1) {
+        return i;
+      }
+    }
+
+    return fallback;
   }
 
   function formatGroupDate(dateStr, locale, groupLabelFormat) {
@@ -1899,6 +2083,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       tags: {},
       search: '',
     };
+    var activeTabConfig = null;
 
     var secondaryEl = null;
     var mobileObj = null;
@@ -2010,6 +2195,18 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       state.search = '';
     }
 
+    function getTabSetting(name, fallback) {
+      if (activeTabConfig && activeTabConfig[name] !== undefined) {
+        return activeTabConfig[name];
+      }
+
+      return fallback;
+    }
+
+    function areSecondaryFiltersDisabled() {
+      return activeTabConfig && activeTabConfig.filters === false;
+    }
+
     function buildPillGroup(vals, displayVals, label, showLabel, getCurrent, onSelect) {
       var wrap = el('div', { class: CLS_FILTER_GROUP + ' ' + CLS_FILTER_GROUP_PILLS });
 
@@ -2084,8 +2281,12 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     }
 
     function appendSecondary(pool, container) {
-      if (fc.categories !== false) {
-        var catsCfg = (fc.categories && typeof fc.categories === 'object') ? fc.categories : {};
+      if (areSecondaryFiltersDisabled()) return;
+
+      var categoriesSetting = getTabSetting('categories', fc.categories);
+
+      if (categoriesSetting !== false) {
+        var catsCfg = (categoriesSetting && typeof categoriesSetting === 'object') ? categoriesSetting : {};
         var catsOrder = catsCfg.order || null;
         var catsShowLbl = catsCfg.showLabel !== false;
         var catsLabel = catsCfg.label || 'Cat\u00e9gorie';
@@ -2185,7 +2386,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         container.appendChild(grp);
       });
 
-      if (fc.search !== false) {
+      if (getTabSetting('search', fc.search) !== false) {
         var sg = el('div', { class: CLS_FILTER_GROUP + ' ' + CLS_FILTER_GROUP_SEARCH });
 
         var inp = el('input', {
@@ -2222,7 +2423,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
     if (tabs.length) {
       var tabGroup = el('div', { class: CLS_FILTER_GROUP + ' ' + CLS_FILTER_GROUP_TABS });
-      var defIdx = Number(fc.defaultTab != null ? fc.defaultTab : 0);
+      var defIdx = resolveDefaultTabIndex(fc, cfg);
 
       tabs.forEach(function(tab, idx) {
         var active = idx === defIdx;
@@ -2241,6 +2442,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         }
 
         if (active) {
+          activeTabConfig = tab;
           state.tab = tab.filter || null;
           if (onTabChange) onTabChange(tab);
         }
@@ -2254,6 +2456,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
           addUiClasses(btn, CLS_TAB_BTN_ACTIVE);
 
+          activeTabConfig = tab;
           state.tab = tab.filter || null;
           resetSec();
 
@@ -2472,7 +2675,22 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     if (pag.endLabel !== undefined) i18n.endLabel = pag.endLabel;
 
     var mode = pag.mode || 'load-more';
-    var perPage = mode === 'none' ? Infinity : Number(pag.perPage || 12);
+    var hasPerPage = pag.perPage !== undefined && pag.perPage !== null && pag.perPage !== false;
+    var hasMaxItems = pag.maxItems !== undefined && pag.maxItems !== null && pag.maxItems !== false;
+
+    var perPage = hasPerPage
+      ? Number(pag.perPage)
+      : (mode === 'none' ? Infinity : 12);
+
+    if (!isFinite(perPage) || perPage <= 0) perPage = Infinity;
+
+    var maxItems = hasMaxItems ? Number(pag.maxItems) : Infinity;
+    if (!isFinite(maxItems) || maxItems <= 0) maxItems = Infinity;
+
+    if (!hasMaxItems && mode === 'none' && hasPerPage) {
+      maxItems = perPage;
+    }
+
     var dispLayout = disp.layout || 'grid';
 
     target.classList.add('cb-block');
@@ -2805,7 +3023,7 @@ requestAnimationFrame(function() {
     var ioInfinite = null;
 
     if (Array.isArray(fc.tabs) && fc.tabs.length) {
-      var di = Number(fc.defaultTab != null ? fc.defaultTab : 0);
+      var di = resolveDefaultTabIndex(fc, cfg);
       if (fc.tabs[di]) activeFilters.tab = fc.tabs[di].filter || null;
     }
 
@@ -2961,7 +3179,7 @@ requestAnimationFrame(function() {
     }
 
     if (Array.isArray(fc.tabs) && fc.tabs.length) {
-      var initTab = fc.tabs[Number(fc.defaultTab != null ? fc.defaultTab : 0)];
+      var initTab = fc.tabs[resolveDefaultTabIndex(fc, cfg)];
 
       if (initTab) {
         updateTabClass(initTab.label || '');
@@ -3004,8 +3222,8 @@ requestAnimationFrame(function() {
         return matchesUIFilters(item, activeFilters);
       });
 
-      var total = filtered.length;
-      var shown = filtered.slice(0, currentPage * perPage);
+      var total = Math.min(filtered.length, maxItems);
+      var shown = filtered.slice(0, Math.min(currentPage * perPage, maxItems));
 
             var prevCardCount = fromPagination
         ? grid.querySelectorAll('.qb-card').length
@@ -3104,7 +3322,8 @@ if (canAppendIncrementally) {
         if (!existing) root.appendChild(headingResult.ctaBelowEl);
       }
 
-      var hasMore = shown.length < total || canFetchMorePages();
+      var reachedMaxItems = isFinite(maxItems) && shown.length >= maxItems;
+      var hasMore = !reachedMaxItems && (shown.length < total || canFetchMorePages());
 
       if (!hasMore) {
         if (i18n.endLabel !== false && i18n.endLabel) {
