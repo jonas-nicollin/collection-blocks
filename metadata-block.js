@@ -14,6 +14,8 @@
   const JSON_FORMAT_SUFFIX = '?format=json';
   let MB_IS_STARTING = false;
   let MB_LAST_RUN_PATH = '';
+  let MB_EDIT_OBSERVER = null;
+  let MB_EDIT_TIMER = null;
 
   /* ════════════════════════════════════
    * UTILITAIRES TEXTE
@@ -73,6 +75,14 @@
 
   function uniq(values) {
     return Array.from(new Set(values));
+  }
+
+  function comparableText(value) {
+    return cleanText(value)
+      .toLocaleLowerCase()
+      .replace(/[’']/g, "'")
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   function normalizeClassList(classes) {
@@ -142,6 +152,10 @@
         ? [settings.bodyClassConfiguration]
         : [];
     return list.every(cls => document.body.classList.contains(cls));
+  }
+
+  function isSquarespaceEditMode() {
+    return document.body.classList.contains('sqs-edit-mode-active');
   }
 
   /* ════════════════════════════════════
@@ -316,6 +330,51 @@
       }
       return dayStr;
     } catch (_) { return s; }
+  }
+
+  function getISODateKey(parsed) {
+    if (!parsed) return '';
+    return parsed.year + '-' +
+      String(parsed.month + 1).padStart(2, '0') + '-' +
+      String(parsed.day).padStart(2, '0');
+  }
+
+  function formatDateValues(values, block) {
+    if (!block.compactSameDayTimes) {
+      return values.map(value =>
+        isISODate(value)
+          ? formatISOTag(value, block.dateFormat || 'datetime', block.dateLocale || null)
+          : value
+      );
+    }
+
+    let previousDateKey = '';
+
+    return values.map(value => {
+      if (!isISODate(value)) {
+        previousDateKey = '';
+        return value;
+      }
+
+      if (String(value).indexOf('/') !== -1) {
+        previousDateKey = '';
+        return formatISOTag(value, block.dateFormat || 'datetime', block.dateLocale || null);
+      }
+
+      const parsed = parseISO(value);
+      const dateKey = getISODateKey(parsed);
+      if (!parsed || !dateKey) {
+        previousDateKey = '';
+        return value;
+      }
+
+      if (dateKey === previousDateKey && parsed.hasTime) {
+        return formatISOTag(value, 'time', block.dateLocale || null);
+      }
+
+      previousDateKey = dateKey;
+      return formatISOTag(value, block.dateFormat || 'datetime', block.dateLocale || null);
+    });
   }
 
   /* ════════════════════════════════════
@@ -507,6 +566,34 @@ async function fetchPageJson(settings) {
     return { wrapper, container };
   }
 
+  function getExpectedMetadataTarget(settings) {
+    const fallbackTarget = document.querySelector('.blog-item-top-wrapper');
+    const targetSelector = settings.target || settings.moveToDestination;
+    const explicitTarget = targetSelector
+      ? document.querySelector(targetSelector)
+      : null;
+    const anchorAfter = settings.insertAfter
+      ? document.querySelector(settings.insertAfter)
+      : null;
+    const anchorBefore = settings.insertBefore
+      ? document.querySelector(settings.insertBefore)
+      : null;
+    return anchorAfter?.parentElement || anchorBefore?.parentElement || explicitTarget || fallbackTarget;
+  }
+
+  function hasCurrentMetadataMounts() {
+    const activeSettings = SETTINGS_LIST.filter(matchesBodyClasses);
+    if (!activeSettings.length) return false;
+    return activeSettings.every(settings => {
+      const targetSelector = settings.target || settings.moveToDestination;
+      const target = getExpectedMetadataTarget(settings);
+      if (!target) return false;
+      const wrapper = findMetadataWrapper(target, getMountKey(settings, targetSelector));
+      if (!wrapper) return false;
+      return isSquarespaceEditMode() || !!wrapper.querySelector('.mb-block');
+    });
+  }
+
   /* ════════════════════════════════════
    * LOGIQUE DES BLOCS
    * ════════════════════════════════════ */
@@ -621,11 +708,7 @@ async function fetchPageJson(settings) {
 
     // 5. Formatage des dates
     if (block.formatDates) {
-      normalized = normalized.map(value =>
-        isISODate(value)
-          ? formatISOTag(value, block.dateFormat || 'datetime', block.dateLocale || null)
-          : value
-      );
+      normalized = formatDateValues(normalized, block);
     }
 
     // 6. Limiter le nombre de valeurs
@@ -700,6 +783,17 @@ async function fetchPageJson(settings) {
     sep.setAttribute('aria-hidden', 'true');
     sep.textContent = separatorText;
     return sep;
+  }
+
+  function removeExistingGroupDuplicates(content, values) {
+    const wanted = new Set(values.map(comparableText).filter(Boolean));
+    if (!wanted.size) return;
+
+    Array.from(content.querySelectorAll('.mb-value')).forEach(element => {
+      if (wanted.has(comparableText(element.textContent))) {
+        element.remove();
+      }
+    });
   }
 
   function createMetadataBlockWrapper(block, orderMap, valueCount) {
@@ -811,6 +905,9 @@ async function fetchPageJson(settings) {
       const rawValues = getRawValuesForBlock(block, itemData);
       const values    = normalizeBlockValues(rawValues, block);
       if (!values.length) return;
+      if (block.dedupeGroupValues !== false) {
+        removeExistingGroupDuplicates(targetContent, values);
+      }
 
       const mapsUrl       = block.useGoogleMapsLink ? getGoogleMapsUrl(itemData) : '';
       const groupSep      = block.groupSeparator ?? ',\u00A0';
@@ -884,9 +981,21 @@ async function fetchPageJson(settings) {
     if (!mount?.container) return;
 
     buildMetadataBlocks(settings, currentItem, mount.container);
-    if (!mount.container.querySelector('.mb-block')) {
+    if (!mount.container.querySelector('.mb-block') && !isSquarespaceEditMode()) {
       mount.wrapper?.remove();
     }
+  }
+
+  function setupEditModeObserver() {
+    if (MB_EDIT_OBSERVER || !window.MutationObserver || !isSquarespaceEditMode()) return;
+    MB_EDIT_OBSERVER = new MutationObserver(() => {
+      window.clearTimeout(MB_EDIT_TIMER);
+      MB_EDIT_TIMER = window.setTimeout(startAll, 150);
+    });
+    MB_EDIT_OBSERVER.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
   }
 
   async function startAll() {
@@ -894,10 +1003,7 @@ async function fetchPageJson(settings) {
     
     if (MB_IS_STARTING) return;
 
-  if (
-    MB_LAST_RUN_PATH === currentPath &&
-    document.querySelector('.mb-wrapper .mb-block')
-  ) {
+  if (MB_LAST_RUN_PATH === currentPath && hasCurrentMetadataMounts()) {
     return;
   }
 
@@ -913,6 +1019,7 @@ async function fetchPageJson(settings) {
     }
 
     MB_LAST_RUN_PATH = currentPath;
+    setupEditModeObserver();
   } finally {
     MB_IS_STARTING = false;
   }
