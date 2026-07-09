@@ -408,16 +408,6 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
     });
   }
 
-  function matchesTagValue(value, expected) {
-    var expectedDatePart = getISODatePart(expected);
-    if (expectedDatePart) {
-      var valueDatePart = getISODatePart(value);
-      if (valueDatePart && valueDatePart === expectedDatePart) return true;
-    }
-
-    return norm(value) === norm(expected);
-  }
-
   function applyPreFilter(items, pf) {
     if (!pf) return items;
 
@@ -429,16 +419,7 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
         for (var i = 0; i < pf.tagValues.length; i++) {
           var tv = pf.tagValues[i];
           if (!getTagValuesByPrefix(item, tv.prefix).some(function(v) {
-            return matchesTagValue(v, tv.value);
-          })) return false;
-        }
-      }
-
-      if (pf.excludeTagValues) {
-        for (var j = 0; j < pf.excludeTagValues.length; j++) {
-          var xtv = pf.excludeTagValues[j];
-          if (getTagValuesByPrefix(item, xtv.prefix).some(function(v) {
-            return matchesTagValue(v, xtv.value);
+            return norm(v) === norm(tv.value);
           })) return false;
         }
       }
@@ -458,16 +439,7 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
         for (var i = 0; i < tf.tagValues.length; i++) {
           var tv = tf.tagValues[i];
           if (!getTagValuesByPrefix(item, tv.prefix).some(function(v) {
-            return matchesTagValue(v, tv.value);
-          })) return false;
-        }
-      }
-
-      if (tf.excludeTagValues) {
-        for (var j = 0; j < tf.excludeTagValues.length; j++) {
-          var xtv = tf.excludeTagValues[j];
-          if (getTagValuesByPrefix(item, xtv.prefix).some(function(v) {
-            return matchesTagValue(v, xtv.value);
+            return norm(v) === norm(tv.value);
           })) return false;
         }
       }
@@ -798,32 +770,6 @@ var isPriority = options.priority === true || imgIndex < 3;
       var pl = el('p', { class: qCardClass('cb-card__location', 'qb-card__location') });
       pl.textContent = item.location;
       return pl;
-    }
-
-    if (type === 'link' || type === 'cta') {
-      if (!item.fullUrl) return null;
-
-      var dispLink = (cfg && cfg.display) || {};
-      var labelText = (def && (def.label || def.text)) || dispLink.linkLabel || 'Voir la page';
-      var linkClasses = qCardClass('cb-card__link', 'qb-card__link');
-      if (def && def.className) linkClasses += ' ' + def.className;
-
-      if (dispLink.cardLink !== false) {
-        var spanLink = el('span', { class: linkClasses });
-        spanLink.textContent = labelText;
-        return spanLink;
-      }
-
-      var cardLink = el('a', { class: linkClasses, href: item.fullUrl });
-      cardLink.textContent = labelText;
-
-      var openInNewTab = dispLink.openInNewTab === true || (cfg && cfg.openInNewTab === true);
-      if (openInNewTab) {
-        cardLink.target = '_blank';
-        cardLink.rel = 'noopener noreferrer';
-      }
-
-      return cardLink;
     }
 
     if (type === 'tagPrefix') {
@@ -1451,62 +1397,6 @@ var isPriority = options.priority === true || imgIndex < 3;
     return m ? m[1] : null;
   }
 
-  function getTodayDatePart(cfg) {
-    var dbg = cfg && cfg.debug;
-    var now = (dbg && typeof dbg === 'object' && dbg.mockDate)
-      ? new Date(dbg.mockDate + 'T00:00:00')
-      : new Date();
-
-    return now.getFullYear() + '-' +
-      String(now.getMonth() + 1).padStart(2, '0') + '-' +
-      String(now.getDate()).padStart(2, '0');
-  }
-
-  function getTabDateParts(tab, prefix) {
-    var filter = tab && tab.filter;
-    var values = [];
-    if (!filter) return values;
-
-    if (Array.isArray(filter.tagValues)) {
-      filter.tagValues.forEach(function(tv) {
-        if (!tv) return;
-        if (prefix && norm(tv.prefix || '') !== norm(prefix)) return;
-        var part = getISODatePart(tv.value);
-        if (part && values.indexOf(part) === -1) values.push(part);
-      });
-    }
-
-    if (filter.tags && prefix && filter.tags[prefix]) {
-      var part = getISODatePart(filter.tags[prefix]);
-      if (part && values.indexOf(part) === -1) values.push(part);
-    }
-
-    return values;
-  }
-
-  function resolveDefaultTabIndex(fc, cfg) {
-    var tabs = Array.isArray(fc && fc.tabs) ? fc.tabs : [];
-    if (!tabs.length) return 0;
-
-    var fallback = Number(fc.defaultTab != null ? fc.defaultTab : 0);
-    if (!Number.isFinite(fallback) || fallback < 0 || fallback >= tabs.length) fallback = 0;
-
-    var rule = fc.defaultTabByDate || fc.defaultTabByToday || null;
-    if (!rule) return fallback;
-
-    var options = rule === true ? {} : rule;
-    var prefix = options.prefix || fc.datePrefix || 'Date';
-    var today = getISODatePart(options.date) || getTodayDatePart(cfg);
-
-    for (var i = 0; i < tabs.length; i++) {
-      if (getTabDateParts(tabs[i], prefix).indexOf(today) !== -1) {
-        return i;
-      }
-    }
-
-    return fallback;
-  }
-
   function formatGroupDate(dateStr, locale, groupLabelFormat) {
     var m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (!m) return dateStr;
@@ -2083,7 +1973,6 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       tags: {},
       search: '',
     };
-    var activeTabConfig = null;
 
     var secondaryEl = null;
     var mobileObj = null;
@@ -2195,18 +2084,6 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       state.search = '';
     }
 
-    function getTabSetting(name, fallback) {
-      if (activeTabConfig && activeTabConfig[name] !== undefined) {
-        return activeTabConfig[name];
-      }
-
-      return fallback;
-    }
-
-    function areSecondaryFiltersDisabled() {
-      return activeTabConfig && activeTabConfig.filters === false;
-    }
-
     function buildPillGroup(vals, displayVals, label, showLabel, getCurrent, onSelect) {
       var wrap = el('div', { class: CLS_FILTER_GROUP + ' ' + CLS_FILTER_GROUP_PILLS });
 
@@ -2281,12 +2158,8 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     }
 
     function appendSecondary(pool, container) {
-      if (areSecondaryFiltersDisabled()) return;
-
-      var categoriesSetting = getTabSetting('categories', fc.categories);
-
-      if (categoriesSetting !== false) {
-        var catsCfg = (categoriesSetting && typeof categoriesSetting === 'object') ? categoriesSetting : {};
+      if (fc.categories !== false) {
+        var catsCfg = (fc.categories && typeof fc.categories === 'object') ? fc.categories : {};
         var catsOrder = catsCfg.order || null;
         var catsShowLbl = catsCfg.showLabel !== false;
         var catsLabel = catsCfg.label || 'Cat\u00e9gorie';
@@ -2386,7 +2259,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         container.appendChild(grp);
       });
 
-      if (getTabSetting('search', fc.search) !== false) {
+      if (fc.search !== false) {
         var sg = el('div', { class: CLS_FILTER_GROUP + ' ' + CLS_FILTER_GROUP_SEARCH });
 
         var inp = el('input', {
@@ -2423,7 +2296,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
     if (tabs.length) {
       var tabGroup = el('div', { class: CLS_FILTER_GROUP + ' ' + CLS_FILTER_GROUP_TABS });
-      var defIdx = resolveDefaultTabIndex(fc, cfg);
+      var defIdx = Number(fc.defaultTab != null ? fc.defaultTab : 0);
 
       tabs.forEach(function(tab, idx) {
         var active = idx === defIdx;
@@ -2442,7 +2315,6 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         }
 
         if (active) {
-          activeTabConfig = tab;
           state.tab = tab.filter || null;
           if (onTabChange) onTabChange(tab);
         }
@@ -2456,7 +2328,6 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
           addUiClasses(btn, CLS_TAB_BTN_ACTIVE);
 
-          activeTabConfig = tab;
           state.tab = tab.filter || null;
           resetSec();
 
@@ -2675,22 +2546,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     if (pag.endLabel !== undefined) i18n.endLabel = pag.endLabel;
 
     var mode = pag.mode || 'load-more';
-    var hasPerPage = pag.perPage !== undefined && pag.perPage !== null && pag.perPage !== false;
-    var hasMaxItems = pag.maxItems !== undefined && pag.maxItems !== null && pag.maxItems !== false;
-
-    var perPage = hasPerPage
-      ? Number(pag.perPage)
-      : (mode === 'none' ? Infinity : 12);
-
-    if (!isFinite(perPage) || perPage <= 0) perPage = Infinity;
-
-    var maxItems = hasMaxItems ? Number(pag.maxItems) : Infinity;
-    if (!isFinite(maxItems) || maxItems <= 0) maxItems = Infinity;
-
-    if (!hasMaxItems && mode === 'none' && hasPerPage) {
-      maxItems = perPage;
-    }
-
+    var perPage = mode === 'none' ? Infinity : Number(pag.perPage || 12);
     var dispLayout = disp.layout || 'grid';
 
     target.classList.add('cb-block');
@@ -2737,6 +2593,7 @@ requestAnimationFrame(function() {
         var rawItems = [];
     var filterItems = [];
     var filterIndexLoaded = false;
+    var filterIndexComplete = false;
     var filterIndexPromise = null;
     var sourceList = Array.isArray(cfg.sources) ? cfg.sources : [];
 
@@ -2845,6 +2702,7 @@ requestAnimationFrame(function() {
       if (!shouldLoadCompleteFilterIndex()) {
         filterItems = rawItems;
         filterIndexLoaded = true;
+        filterIndexComplete = false;
         return filterItems;
       }
 
@@ -2856,11 +2714,13 @@ requestAnimationFrame(function() {
       }).then(function(items) {
         filterItems = items && items.length ? items : rawItems;
         filterIndexLoaded = true;
+        filterIndexComplete = true;
         return filterItems;
       }).catch(function(err) {
         if (cfg.debug) console.warn('[QueryBlock]', cfg.key, 'filter index failed', err);
         filterItems = rawItems;
         filterIndexLoaded = true;
+        filterIndexComplete = false;
         return filterItems;
       }).finally(function() {
         filterIndexPromise = null;
@@ -2877,7 +2737,9 @@ requestAnimationFrame(function() {
 
       try {
         rawItems = await loadSources(loadedMaxPages);
-        filterItems = rawItems;
+        if (!filterIndexComplete) {
+          filterItems = rawItems;
+        }
         if (filterWrapper && typeof filterWrapper.qbRebuildSecondary === 'function') {
           filterWrapper.qbRebuildSecondary();
         }
@@ -3023,7 +2885,7 @@ requestAnimationFrame(function() {
     var ioInfinite = null;
 
     if (Array.isArray(fc.tabs) && fc.tabs.length) {
-      var di = resolveDefaultTabIndex(fc, cfg);
+      var di = Number(fc.defaultTab != null ? fc.defaultTab : 0);
       if (fc.tabs[di]) activeFilters.tab = fc.tabs[di].filter || null;
     }
 
@@ -3179,7 +3041,7 @@ requestAnimationFrame(function() {
     }
 
     if (Array.isArray(fc.tabs) && fc.tabs.length) {
-      var initTab = fc.tabs[resolveDefaultTabIndex(fc, cfg)];
+      var initTab = fc.tabs[Number(fc.defaultTab != null ? fc.defaultTab : 0)];
 
       if (initTab) {
         updateTabClass(initTab.label || '');
@@ -3222,8 +3084,8 @@ requestAnimationFrame(function() {
         return matchesUIFilters(item, activeFilters);
       });
 
-      var total = Math.min(filtered.length, maxItems);
-      var shown = filtered.slice(0, Math.min(currentPage * perPage, maxItems));
+      var total = filtered.length;
+      var shown = filtered.slice(0, currentPage * perPage);
 
             var prevCardCount = fromPagination
         ? grid.querySelectorAll('.qb-card').length
@@ -3322,8 +3184,7 @@ if (canAppendIncrementally) {
         if (!existing) root.appendChild(headingResult.ctaBelowEl);
       }
 
-      var reachedMaxItems = isFinite(maxItems) && shown.length >= maxItems;
-      var hasMore = !reachedMaxItems && (shown.length < total || canFetchMorePages());
+      var hasMore = shown.length < total || canFetchMorePages();
 
       if (!hasMore) {
         if (i18n.endLabel !== false && i18n.endLabel) {
