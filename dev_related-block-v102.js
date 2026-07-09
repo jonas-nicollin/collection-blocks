@@ -507,6 +507,22 @@
     function getTagObjects(item) {
         return buildTagObjects(item.tags || []);
     }
+    function currentItemMatchesCondition(currentItem, condition) {
+        if (!condition || typeof condition !== "object") return true;
+        const includeCategories = Array.isArray(condition.categories) ? condition.categories : [];
+        const excludeCategories = Array.isArray(condition.excludeCategories) ? condition.excludeCategories : [];
+        const includeTags = Array.isArray(condition.tags) ? condition.tags : Array.isArray(condition.exactTags) ? condition.exactTags : Array.isArray(condition.includeExactTags) ? condition.includeExactTags : [];
+        const excludeTags = Array.isArray(condition.excludeTags) ? condition.excludeTags : Array.isArray(condition.excludeExactTags) ? condition.excludeExactTags : [];
+        const includePrefixes = Array.isArray(condition.tagPrefixes) ? condition.tagPrefixes : Array.isArray(condition.prefixes) ? condition.prefixes : [];
+        const excludePrefixes = Array.isArray(condition.excludeTagPrefixes) ? condition.excludeTagPrefixes : [];
+        if (includeCategories.length && !itemHasAnyCategory(currentItem, includeCategories)) return false;
+        if (excludeCategories.length && itemHasAnyCategory(currentItem, excludeCategories)) return false;
+        if (includeTags.length && !itemHasAnyExactTag(currentItem, includeTags)) return false;
+        if (excludeTags.length && itemHasAnyExactTag(currentItem, excludeTags)) return false;
+        if (includePrefixes.length && !includePrefixes.some(prefix => getTagValuesByPrefix(currentItem, prefix).length)) return false;
+        if (excludePrefixes.length && excludePrefixes.some(prefix => getTagValuesByPrefix(currentItem, prefix).length)) return false;
+        return true;
+    }
     function getCurrentTagObjectsByPrefixes(currentItem, prefixes) {
         const prefixSet = new Set((Array.isArray(prefixes) ? prefixes : []).map(normalize));
         return getTagObjects(currentItem).filter(t => prefixSet.has(t.prefixNorm));
@@ -636,6 +652,7 @@
         const groups = Array.isArray(selection?.match?.groups) ? selection.match.groups : [];
         if (!groups.length) return true;
         return groups.some(group => {
+            if (!currentItemMatchesCondition(currentItem, group.whenCurrent || group.currentItem || group.ifCurrent)) return false;
             const rules = Array.isArray(group.rules) ? group.rules : [];
             if (!rules.length) return false;
             const logic = String(group.logic || "or").toLowerCase();
@@ -1191,26 +1208,9 @@
             if (group?.inline === true) {
                 addClasses(wrapper, role === "body" ? "cb-card__body--inline rb-card__body--inline" : "cb-card__group--inline rb-card__group--inline");
             }
-            if (group?.inline === true) {
-                const separator = group.separator !== undefined ? group.separator : " ";
-                const nodes = [];
-                children.forEach(child => {
-                    buildContentNodesByType(child, item, CFG, { insideMedia: role === "media" }).forEach(node => nodes.push(node));
-                });
-                nodes.forEach((node, index) => {
-                    wrapper.appendChild(node);
-                    if (index < nodes.length - 1 && separator) {
-                        const sepNode = document.createElement("span");
-                        sepNode.className = "cb-inline-sep rb-inline-sep";
-                        sepNode.textContent = separator;
-                        wrapper.appendChild(sepNode);
-                    }
-                });
-            } else {
-                children.forEach(child => {
-                    buildContentNodesByType(child, item, CFG, { insideMedia: role === "media" }).forEach(node => wrapper.appendChild(node));
-                });
-            }
+            children.forEach(child => {
+                buildContentNodesByType(child, item, CFG, { insideMedia: role === "media" }).forEach(node => wrapper.appendChild(node));
+            });
             if (wrapper.childNodes.length) {
                 fragment.appendChild(wrapper);
                 hasContent = true;
