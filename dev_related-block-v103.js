@@ -1726,6 +1726,19 @@ function getProgressiveMaxPages(CFG) {
   return v === undefined ? 'all' : v;
 }
 
+function shouldLoadCompleteSelectionIndex(CFG) {
+  const perf = CFG.performance || {};
+  if (perf.selectionIndex === false || perf.selectionIndex === 'progressive') return false;
+  if (perf.selectionIndex === true || perf.selectionIndex === 'complete') return true;
+  return CFG.selection?.requiresCompleteIndex === true || CFG.selection?.score?.enabled === true;
+}
+
+function getSelectionIndexMaxPages(CFG) {
+  const perf = CFG.performance || {};
+  if (perf.selectionIndexMaxPages !== undefined) return perf.selectionIndexMaxPages;
+  return getProgressiveMaxPages(CFG);
+}
+
 function canLoadMorePages(currentPages, maxPages) {
   if (maxPages === 'all') return true;
   return Number(currentPages || 1) < Number(maxPages || 1);
@@ -1810,6 +1823,29 @@ if (currentSourcePath === sourcePath && currentItemSourceState) {
 }
             let sourceLoadedPages = currentSourcePath === sourcePath ? currentItemLoadedPages : getInitialMaxPages(CFG);
             let sourceComplete = !!(sourceState && (sourceState.complete || sourceState.fetchError));
+
+if (
+    shouldLoadCompleteSelectionIndex(CFG) &&
+    !sourceComplete &&
+    canLoadMorePages(sourceLoadedPages, getSelectionIndexMaxPages(CFG))
+) {
+    const selectionIndexMaxPages = getSelectionIndexMaxPages(CFG);
+
+    try {
+        sourceState = await fetchCollectionState(CFG, selectionIndexMaxPages);
+        const indexedItems = sourceState.items || [];
+        sourceComplete = !!(sourceState.complete || sourceState.fetchError);
+
+        if (Array.isArray(indexedItems) && indexedItems.length) {
+            items = indexedItems;
+            sourceLoadedPages = selectionIndexMaxPages === 'all'
+                ? Number(sourceState.pagesLoaded || sourceLoadedPages || 1)
+                : selectionIndexMaxPages;
+        }
+    } catch (e) {
+        if (CFG.debug) console.warn("[RB]", CFG.key, "selection index fetch failed", e);
+    }
+}
 
 function computeFinalItems(allItems) {
     const candidates = [];
