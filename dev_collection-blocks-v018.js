@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.8';
+  var VERSION = '0.9';
   var STORE_KEY_PREFIX = 'collection-blocks::v0.6::';
 
   var memoryCache = new Map();
@@ -56,10 +56,39 @@
     }
   }
 
+  function getGlobalConfig() {
+    if (typeof window === 'undefined') return {};
+
+    var config = window.COLLECTION_BLOCKS_CONFIG ||
+      window.CollectionBlocksConfig ||
+      {};
+
+    return config && typeof config === 'object' ? config : {};
+  }
+
+  function isDevMode(options) {
+    options = options || {};
+
+    if (options.devMode === true) return true;
+
+    try {
+      if (window.COLLECTION_BLOCKS_DEV_MODE === true) return true;
+
+      var config = getGlobalConfig();
+      if (config.devMode === true) return true;
+
+      var dataConfig = window.COLLECTION_DATA;
+      if (dataConfig && typeof dataConfig === 'object' && dataConfig.devMode === true) return true;
+    } catch (_) {}
+
+    return false;
+  }
+
   function shouldBypassCache(options) {
     options = options || {};
 
     return (
+      isDevMode(options) ||
       isPerfTest() ||
       options.noCache === true ||
       options.cache === false ||
@@ -99,8 +128,38 @@
     return path || '/';
   }
 
-  function getDataSourceRegistry() {
+  function addQueryParam(url, key, value) {
+    if (!url) return url;
+
+    var hash = '';
+    var hashIndex = url.indexOf('#');
+
+    if (hashIndex !== -1) {
+      hash = url.slice(hashIndex);
+      url = url.slice(0, hashIndex);
+    }
+
+    var sep = url.indexOf('?') !== -1 ? '&' : '?';
+    return url + sep + encodeURIComponent(key) + '=' + encodeURIComponent(value) + hash;
+  }
+
+  function buildFetchUrl(url, options, offset) {
+    url = ensureJson(url);
+
+    if (offset != null) {
+      url = addQueryParam(url, 'offset', offset);
+    }
+
+    if (shouldBypassCache(options)) {
+      url = addQueryParam(url, '_cb', now());
+    }
+
+    return url;
+  }
+
+  function getDataSourceRegistry(options) {
     if (typeof window === 'undefined') return null;
+    if (isDevMode(options)) return null;
 
     var canonical = window.COLLECTION_DATA;
 
@@ -122,9 +181,11 @@
   function resolveDataSource(path, options) {
     options = options || {};
 
+    if (isDevMode(options) && options.useStaticInDevMode !== true) return null;
+
     var explicit = options.dataUrl || options.jsonUrl || options.staticUrl || options.sourceUrl;
     var source = explicit || null;
-    var registry = getDataSourceRegistry();
+    var registry = getDataSourceRegistry(options);
     var cleanPath = normalizePath(path);
     var trimmedPath = trimTrailingSlash(cleanPath);
 
@@ -353,11 +414,11 @@
     var url = state.nextUrl || null;
 
     if (!url && state.nextOffset != null) {
-      url = ensureJson(sourcePath) + '&offset=' + encodeURIComponent(state.nextOffset);
+      url = buildFetchUrl(sourcePath, options, state.nextOffset);
     }
 
     if (!url && page === 0) {
-      url = ensureJson(sourcePath);
+      url = buildFetchUrl(sourcePath, options);
     }
 
     state.fetchError = null;
@@ -391,9 +452,9 @@
         state.complete = !(state.nextUrl || state.nextOffset != null);
 
         if (state.nextUrl) {
-          url = state.nextUrl;
+          url = buildFetchUrl(state.nextUrl, options);
         } else if (state.nextOffset != null) {
-          url = ensureJson(sourcePath) + '&offset=' + encodeURIComponent(state.nextOffset);
+          url = buildFetchUrl(sourcePath, options, state.nextOffset);
         } else {
           url = null;
         }
@@ -406,7 +467,7 @@
           dataSource = null;
           sourcePath = cleanPath;
           sourceCredentials = options.credentials || DEFAULTS.credentials;
-          url = ensureJson(cleanPath);
+          url = buildFetchUrl(cleanPath, options);
           state.fetchError = null;
           state.source = { type: 'squarespace', path: cleanPath, fallbackFrom: 'static' };
           continue;
@@ -605,7 +666,8 @@
       memoryKeys: Array.from(memoryCache.keys()),
       pendingKeys: Array.from(pendingFetches.keys()),
       pendingIdlePreloads: Array.from(pendingIdlePreloads),
-      perfTest: isPerfTest()
+      perfTest: isPerfTest(),
+      devMode: isDevMode()
     };
   }
 
@@ -1678,6 +1740,7 @@
     getState: getState,
     getCurrentPage: getCurrentPage,
     getCurrentPageState: getCurrentPageState,
+    isDevMode: isDevMode,
     idlePreload: idlePreload,
     clear: clear,
     stats: stats
@@ -1722,6 +1785,7 @@
     utils: utilsApi,
     get: get,
     getState: getState,
+    isDevMode: isDevMode,
     idlePreload: idlePreload,
     clear: clear,
     stats: stats,
