@@ -2546,7 +2546,15 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     if (pag.endLabel !== undefined) i18n.endLabel = pag.endLabel;
 
     var mode = pag.mode || 'load-more';
-    var perPage = mode === 'none' ? Infinity : Number(pag.perPage || 12);
+    var noneModeLimit = pag.maxItems !== undefined ? pag.maxItems : pag.perPage;
+    var hasNoneModeLimit =
+      noneModeLimit !== undefined &&
+      noneModeLimit !== null &&
+      noneModeLimit !== false &&
+      noneModeLimit !== '';
+    var perPage = mode === 'none'
+      ? (hasNoneModeLimit ? Math.max(0, Number(noneModeLimit) || 0) : Infinity)
+      : Number(pag.perPage || 12);
     var dispLayout = disp.layout || 'grid';
 
     target.classList.add('cb-block');
