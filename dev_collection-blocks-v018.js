@@ -866,7 +866,7 @@
           }
 
           return dt1.toLocaleDateString(loc, { day: 'numeric', month: 'long' }) +
-            '\u00a0\u2013\u00a0' +
+            '\u2013' +
             dt2.toLocaleDateString(loc, { day: 'numeric', month: 'long', year: 'numeric' });
         } catch (_) {
           return s;
