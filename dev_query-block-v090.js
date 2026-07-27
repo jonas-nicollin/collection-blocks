@@ -330,25 +330,54 @@
       : (url.indexOf('?') !== -1 ? url + '&format=json' : url + '?format=json');
   }
 
-function buildCollectionOptions(maxPages, useSession, ttl, stripFields) {
-  return {
+function pickCollectionOptions(obj) {
+  var out = {};
+  var allowed = [
+    'devMode',
+    'useStaticInDevMode',
+    'dataUrl',
+    'jsonUrl',
+    'staticUrl',
+    'sourceUrl',
+    'cache',
+    'noCache',
+    'forceRefresh',
+    'refresh',
+    'bypassCache',
+    'bustCache',
+    'memoryCache',
+    'sessionCache',
+    'credentials',
+  ];
+
+  if (!obj || typeof obj !== 'object') return out;
+
+  allowed.forEach(function(key) {
+    if (obj[key] !== undefined) out[key] = obj[key];
+  });
+
+  return out;
+}
+
+function buildCollectionOptions(maxPages, useSession, ttl, stripFields, extraOptions) {
+  return Object.assign({
     maxPages: maxPages || 1,
     ttl: ttl || 300,
     memoryCache: true,
     sessionCache: useSession !== false,
     credentials: 'same-origin',
     stripFields: stripFields || [],
-  };
+  }, extraOptions || {});
 }
 
-async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields) {
+async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields, extraOptions) {
   var dataApi = getCollectionBlocksDataAPI();
 
   if (!dataApi || typeof dataApi.get !== 'function') {
     throw new Error('CollectionBlocks requis pour Query Block');
   }
 
-  var options = buildCollectionOptions(maxPages, useSession, ttl, stripFields);
+  var options = buildCollectionOptions(maxPages, useSession, ttl, stripFields, extraOptions);
 
   if (typeof dataApi.getState === 'function') {
     return dataApi.getState(path, options);
@@ -2661,12 +2690,20 @@ requestAnimationFrame(function() {
         if (stripFields === undefined) stripFields = perf.stripFields;
         if (stripFields === undefined) stripFields = ['body'];
 
+        var sourceOptions = Object.assign(
+          {},
+          pickCollectionOptions(cfg),
+          pickCollectionOptions(perf),
+          pickCollectionOptions(src)
+        );
+
         return fetchCollectionState(
           src.path,
           maxPagesValue,
           perf.sessionCache === true,
           perf.sessionCacheTTL || 300,
-          stripFields
+          stripFields,
+          sourceOptions
         ).then(function(state) {
           return {
             state: state,
@@ -2837,16 +2874,23 @@ requestAnimationFrame(function() {
         if (stripFields === undefined) stripFields = perf.stripFields;
         if (stripFields === undefined) stripFields = ['body'];
 
-        return {
-          path: src.path,
-          maxPages: maxPages,
-          options: {
+        var sourceOptions = Object.assign(
+          {
             ttl: perf.sessionCacheTTL || 300,
             memoryCache: true,
             sessionCache: perf.sessionCache === true,
             credentials: 'same-origin',
             stripFields: stripFields,
           },
+          pickCollectionOptions(cfg),
+          pickCollectionOptions(perf),
+          pickCollectionOptions(src)
+        );
+
+        return {
+          path: src.path,
+          maxPages: maxPages,
+          options: sourceOptions,
         };
       }), {
         timeout: perf.idlePreloadTimeout || 2500,
