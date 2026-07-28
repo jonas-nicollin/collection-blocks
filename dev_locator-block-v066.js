@@ -74,7 +74,8 @@ function setupLocatorBlock(rawConfig){
 rawConfig=normalizeConfig(rawConfig);
 var cfg=Object.assign({
   key:'locator',
-  sourceCollection:{path:''},category:'',tagNumero:'Numéro',tagLieu:'Lieu',tagZone:'Zone',
+  sourceCollection:{path:''},category:'',preFilter:{},
+  tagNumero:'Numéro',tagLieu:'Lieu',tagZone:'Zone',
   layout:'list',display:{},apiKey:'',mapCenter:null,mapZoom:null,
   mapZoomOnSelect:16,mapStyle:null,mapId:null,mapOptions:{},map:{},
   filterMode:'dropdown',
@@ -390,6 +391,36 @@ function getCollectionOptions(maxPages){
 
   log('Brut:', all.length);
 
+  function asArray(value){
+    if(value == null)return [];
+    return Array.isArray(value)?value:[value];
+  }
+
+  function itemCategories(item){
+    return normalizeCategories(item && item.categories).map(function(category){
+      return String(category).trim().toLowerCase();
+    });
+  }
+
+  function hasCategory(item, category){
+    var needle = String(category || '').trim().toLowerCase();
+    return needle ? itemCategories(item).indexOf(needle) !== -1 : false;
+  }
+
+  function hasAnyCategory(item, categories){
+    return asArray(categories).some(function(category){return hasCategory(item, category);});
+  }
+
+  function passesPreFilter(item){
+    var preFilter = cfg.preFilter || {};
+    var includeCategories = asArray(preFilter.categories || preFilter.includeCategories);
+    var excludeCategories = asArray(preFilter.excludeCategories);
+
+    if(includeCategories.length && !hasAnyCategory(item, includeCategories))return false;
+    if(excludeCategories.length && hasAnyCategory(item, excludeCategories))return false;
+    return true;
+  }
+
   var filtered = all.filter(function(item){
     var c = getCoords(item.location);
 
@@ -399,14 +430,17 @@ function getCollectionOptions(maxPages){
     }
 
     if(cfg.category){
-      var cats = normalizeCategories(item.categories).map(function(c){
-        return String(c).toLowerCase();
-      });
+      var cats = itemCategories(item);
 
-      if(cats.indexOf(cfg.category.toLowerCase()) === -1){
+      if(cats.indexOf(String(cfg.category).trim().toLowerCase()) === -1){
         log('Hors cat:', item.title);
         return false;
       }
+    }
+
+    if(!passesPreFilter(item)){
+      log('Hors preFilter:', item.title);
+      return false;
     }
 
     return true;
