@@ -263,6 +263,13 @@
             const monthName = dt1.toLocaleDateString(loc, { month: 'long' });
             return `${d1.day}\u2013${d2.day}\u00A0${monthName}\u00A0${d1.year}`;
           }
+          if (d1.year !== d2.year) {
+            return (
+              dt1.toLocaleDateString(loc, { day: 'numeric', month: 'long', year: 'numeric' }) +
+              '\u2013' +
+              dt2.toLocaleDateString(loc, { day: 'numeric', month: 'long', year: 'numeric' })
+            );
+          }
           return (
             dt1.toLocaleDateString(loc, { day: 'numeric', month: 'long' }) +
             '\u2013' +
