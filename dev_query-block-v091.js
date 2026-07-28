@@ -1296,8 +1296,14 @@ var isPriority = options.priority === true || imgIndex < 3;
             return d1.day + '\u2013' + d2.day + '\u00a0' + m + '\u00a0' + y;
           }
 
+          if (d1.year !== d2.year) {
+            return dt1.toLocaleDateString(loc, { day: 'numeric', month: 'long', year: 'numeric' }) +
+              '\u2013' +
+              dt2.toLocaleDateString(loc, { day: 'numeric', month: 'long', year: 'numeric' });
+          }
+
           return dt1.toLocaleDateString(loc, { day: 'numeric', month: 'long' }) +
-            '\u00a0\u2013\u00a0' +
+            '\u2013' +
             dt2.toLocaleDateString(loc, { day: 'numeric', month: 'long', year: 'numeric' });
         } catch (_) {
           return str;
