@@ -437,6 +437,20 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
     });
   }
 
+  function matchesConfiguredTagValue(item, tagValue) {
+    if (!tagValue || !tagValue.prefix) return false;
+
+    var expectedDatePart = getISODatePart(tagValue.value);
+    return getTagValuesByPrefix(item, tagValue.prefix).some(function(value) {
+      if (expectedDatePart) {
+        var valueDatePart = getISODatePart(value);
+        if (valueDatePart && valueDatePart === expectedDatePart) return true;
+      }
+
+      return norm(value) === norm(tagValue.value);
+    });
+  }
+
   function applyPreFilter(items, pf) {
     if (!pf) return items;
 
@@ -447,9 +461,7 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
       if (pf.tagValues) {
         for (var i = 0; i < pf.tagValues.length; i++) {
           var tv = pf.tagValues[i];
-          if (!getTagValuesByPrefix(item, tv.prefix).some(function(v) {
-            return norm(v) === norm(tv.value);
-          })) return false;
+          if (!matchesConfiguredTagValue(item, tv)) return false;
         }
       }
 
@@ -467,9 +479,7 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
       if (tf.tagValues) {
         for (var i = 0; i < tf.tagValues.length; i++) {
           var tv = tf.tagValues[i];
-          if (!getTagValuesByPrefix(item, tv.prefix).some(function(v) {
-            return norm(v) === norm(tv.value);
-          })) return false;
+          if (!matchesConfiguredTagValue(item, tv)) return false;
         }
       }
 
