@@ -191,6 +191,10 @@
   var CLS_MOBILE_TOGGLE = 'cb-mobile-toggle qb-mobile-toggle';
   var CLS_MOBILE_TOGGLE_BADGE = 'cb-mobile-toggle__badge qb-mobile-toggle__badge';
   var CLS_TABS_ROW = 'cb-tabs-row qb-tabs-row';
+  var CLS_TAB_INTRO = 'cb-tab-intro qb-tab-intro';
+  var CLS_TAB_INTRO_HEADING = 'cb-tab-intro__heading qb-tab-intro__heading';
+  var CLS_TAB_INTRO_TEXT = 'cb-tab-intro__text qb-tab-intro__text';
+  var CLS_TAB_INTRO_LINK = 'cb-tab-intro__link qb-tab-intro__link';
   var CLS_MOBILE_FILTER_ROW = 'cb-mobile-filter-row qb-mobile-filter-row';
 
   function parseTag(tag) {
@@ -1240,6 +1244,68 @@ var isPriority = options.priority === true || imgIndex < 3;
     }
 
     return { headingEl: wrap, ctaBelowEl: ctaBelow };
+  }
+
+  function updateTabIntro(introEl, introCfg) {
+    if (!introEl) return;
+
+    introEl.innerHTML = '';
+
+    if (!introCfg || typeof introCfg !== 'object') {
+      introEl.hidden = true;
+      return;
+    }
+
+    var heading = cleanTextSpacing(introCfg.heading || '');
+    var text = cleanTextSpacing(introCfg.text || '', true);
+    var linkCfg = introCfg.link;
+    var linkHref = '';
+    var linkText = '';
+    var linkNewTab = false;
+
+    if (typeof linkCfg === 'string') {
+      linkHref = linkCfg.trim();
+      linkText = linkHref;
+    } else if (linkCfg && typeof linkCfg === 'object') {
+      linkHref = String(linkCfg.href || linkCfg.url || '').trim();
+      linkText = cleanTextSpacing(linkCfg.text || linkCfg.label || linkHref);
+      linkNewTab = linkCfg.newTab === true || linkCfg.target === '_blank';
+    }
+
+    if (!heading && !text && !linkHref) {
+      introEl.hidden = true;
+      return;
+    }
+
+    if (heading) {
+      var headingEl = el('h3', { class: CLS_TAB_INTRO_HEADING });
+      headingEl.textContent = heading;
+      introEl.appendChild(headingEl);
+    }
+
+    if (text) {
+      var textEl = el('p', { class: CLS_TAB_INTRO_TEXT });
+      textEl.textContent = text;
+      introEl.appendChild(textEl);
+    }
+
+    if (linkHref) {
+      var linkEl = el('a', {
+        class: CLS_TAB_INTRO_LINK,
+        href: linkHref,
+      });
+
+      linkEl.textContent = linkText;
+
+      if (linkNewTab) {
+        linkEl.target = '_blank';
+        linkEl.rel = 'noopener noreferrer';
+      }
+
+      introEl.appendChild(linkEl);
+    }
+
+    introEl.hidden = false;
   }
 
   /* ════════════════════════════════════
@@ -2965,6 +3031,13 @@ requestAnimationFrame(function() {
     var headingResult = buildHeading(cfg.heading || null);
     if (headingResult.headingEl) root.appendChild(headingResult.headingEl);
 
+    var hasTabIntros = Array.isArray(fc.tabs) && fc.tabs.some(function(tab) {
+      return !!(tab && tab.intro);
+    });
+    var tabIntroEl = hasTabIntros
+      ? el('div', { class: CLS_TAB_INTRO, hidden: true })
+      : null;
+
     var scrollOnFilter = fc.scrollOnFilter !== false;
 
     function scrollToGrid() {
@@ -3030,6 +3103,7 @@ requestAnimationFrame(function() {
 
     function onTabChange(tab) {
       updateTabClass(tab.labelIcon ? (tab.label || '') : (tab.label || ''));
+      updateTabIntro(tabIntroEl, tab.intro);
 
       if (tab.sort !== undefined) currentSort = tab.sort;
       else currentSort = cfg.sort || null;
@@ -3091,6 +3165,8 @@ requestAnimationFrame(function() {
     var footer = el('div', { class: 'cb-footer qb-footer' });
 
     if (filterWrapper) root.appendChild(filterWrapper);
+
+    if (tabIntroEl) root.appendChild(tabIntroEl);
 
     root.appendChild(grid);
 
