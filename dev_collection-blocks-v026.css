@@ -209,6 +209,34 @@ body:not(.sqs-edit-mode-active) :where(
 :where(.cb-tab-btn).qb-tab-btn:hover   { opacity: 0.8; }
 :where(.cb-tab-btn--active).qb-tab-btn--active { opacity: 1; border-bottom-color: var(--paragraphMediumColor); }
 
+/* ─────────────────────────────────────────────
+   INTRO DU TAB ACTIF
+   ───────────────────────────────────────────── */
+
+:where(.cb-tab-intro).qb-tab-intro {
+  display: grid;
+  gap: 0.4rem;
+  margin-bottom: 2rem;
+}
+
+:where(.cb-tab-intro__heading).qb-tab-intro__heading {
+  font-size: 1.2em;
+  line-height: 1.25;
+}
+
+:where(.cb-tab-intro__text).qb-tab-intro__text {
+  font-size: 1em;
+  line-height: 1.5;
+}
+
+:where(.cb-tab-intro__link).qb-tab-intro__link {
+  display: inline-block;
+  width: fit-content;
+  margin-top: 0.25rem;
+  font-size: 0.9em;
+  line-height: 1.4;
+}
+
 
 /* ─────────────────────────────────────────────
    TABS + BOUTON FILTRER sur la même ligne
