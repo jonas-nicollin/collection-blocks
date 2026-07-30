@@ -1278,13 +1278,13 @@ var isPriority = options.priority === true || imgIndex < 3;
     }
 
     if (heading) {
-      var headingEl = el('h3', { class: CLS_TAB_INTRO_HEADING });
+      var headingEl = el('div', { class: CLS_TAB_INTRO_HEADING });
       headingEl.textContent = heading;
       introEl.appendChild(headingEl);
     }
 
     if (text) {
-      var textEl = el('p', { class: CLS_TAB_INTRO_TEXT });
+      var textEl = el('div', { class: CLS_TAB_INTRO_TEXT });
       textEl.textContent = text;
       introEl.appendChild(textEl);
     }
@@ -2609,6 +2609,10 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       ? (raw.classes.card || raw.classes.cards || raw.classes.item || '')
       : (raw && raw.cardClassName ? raw.cardClassName : '');
 
+    cfg.gridClassName = (raw && raw.classes && typeof raw.classes === 'object')
+      ? (raw.classes.grid || '')
+      : (raw && raw.gridClassName ? raw.gridClassName : '');
+
     if (cfg.openInNewTab !== undefined) {
       cfg.display = Object.assign({}, cfg.display || {});
       if (cfg.display.openInNewTab === undefined) cfg.display.openInNewTab = cfg.openInNewTab;
@@ -3066,6 +3070,8 @@ requestAnimationFrame(function() {
     var currentTagPrefixes = null;
     var baseCardClassName = cfg.cardClassName || '';
     var currentCardClassName = baseCardClassName;
+    var baseGridClassName = cfg.gridClassName || '';
+    var currentGridClassName = baseGridClassName;
 
     function getTabCardClassName(tab) {
       if (!tab) return '';
@@ -3077,6 +3083,26 @@ requestAnimationFrame(function() {
 
     function mergeCardClassName(tab) {
       return [baseCardClassName, getTabCardClassName(tab)].filter(Boolean).join(' ');
+    }
+
+    function getTabGridClassName(tab) {
+      if (!tab) return '';
+      if (tab.classes && typeof tab.classes === 'object') {
+        return tab.classes.grid || '';
+      }
+      return tab.gridClassName || tab.gridClass || '';
+    }
+
+    function mergeGridClassName(tab) {
+      return [baseGridClassName, getTabGridClassName(tab)].filter(Boolean).join(' ');
+    }
+
+    function buildGridClassName(layout) {
+      var layoutClasses = layout === 'list'
+        ? 'cb-grid qb-grid cb-grid--list qb-grid--list'
+        : 'cb-grid qb-grid cb-grid--grid qb-grid--grid';
+
+      return [layoutClasses, currentGridClassName].filter(Boolean).join(' ');
     }
 
     function updateTabClass(tabLabel) {
@@ -3124,6 +3150,7 @@ requestAnimationFrame(function() {
       else currentTagPrefixes = null;
 
       currentCardClassName = mergeCardClassName(tab);
+      currentGridClassName = mergeGridClassName(tab);
     }
 
     var filterWrapper = buildFilterBar(
@@ -3151,11 +3178,7 @@ requestAnimationFrame(function() {
       }
     );
 
-    var gridClass = dispLayout === 'list'
-      ? 'cb-grid qb-grid cb-grid--list qb-grid--list'
-      : 'cb-grid qb-grid cb-grid--grid qb-grid--grid';
-
-    var grid = el('div', { class: gridClass });
+    var grid = el('div', { class: buildGridClassName(currentLayout) });
 
     var counter = el('p', {
       class: 'cb-counter qb-counter',
@@ -3197,6 +3220,7 @@ requestAnimationFrame(function() {
         if (initTab.groupOrder !== undefined) currentGroupOrder = initTab.groupOrder;
         if (initTab.tagPrefixes !== undefined) currentTagPrefixes = initTab.tagPrefixes;
         currentCardClassName = mergeCardClassName(initTab);
+        currentGridClassName = mergeGridClassName(initTab);
       }
     }
 
@@ -3209,9 +3233,7 @@ requestAnimationFrame(function() {
         ioInfinite = null;
       }
 
-      grid.className = currentLayout === 'list'
-        ? 'cb-grid qb-grid cb-grid--list qb-grid--list'
-        : 'cb-grid qb-grid cb-grid--grid qb-grid--grid';
+      grid.className = buildGridClassName(currentLayout);
 
       target.classList.toggle('cb-block--list', currentLayout === 'list');
       target.classList.toggle('qb-block--list', currentLayout === 'list');
