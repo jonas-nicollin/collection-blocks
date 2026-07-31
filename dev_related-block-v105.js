@@ -487,6 +487,7 @@
             title: cleanText(item.title || ""),
             urlId: item.urlId || "",
             fullUrl: item.fullUrl || "",
+            sourceUrl: item.sourceUrl || "",
             assetUrl: getAssetUrl(item),
             mediaFocalPoint: item.mediaFocalPoint || null,
             categories: Array.isArray(item.categories) ? item.categories.map(c => cleanText(c)).filter(Boolean) : [],
@@ -499,6 +500,9 @@
             tagPrefixValues: tagPrefixValues,
             rawItem: item
         };
+    }
+    function getItemLink(item) {
+        return item?.sourceUrl || item?.fullUrl || "";
     }
     // ════════════════════════════════════════════════════════════════
     // RÈGLES DE MATCHING
@@ -855,6 +859,7 @@
             'id',
             'title',
             'fullUrl',
+            'sourceUrl',
             'urlId',
             'assetUrl',
             'mediaFocalPoint',
@@ -1373,10 +1378,11 @@
             const location = buildLocationElement(item);
             if (location) content.appendChild(addLightboxClass(location, "cb-lightbox__location rb-lightbox__location"));
         }
-        if (options.showLink !== false && item.fullUrl) {
+        const itemLink = getItemLink(item);
+        if (options.showLink !== false && itemLink) {
             const link = document.createElement("a");
             link.className = "cb-lightbox__link rb-lightbox__link";
-            link.href = item.fullUrl;
+            link.href = itemLink;
             link.textContent = options.linkLabel;
             if (CFG.display?.openInNewTab === true || CFG.openInNewTab === true) {
                 link.target = "_blank";
@@ -1437,7 +1443,7 @@
         const card = document.createElement("a");
         card.className = "cb-card rb-card";
         String(CFG.classes?.card || CFG.classes?.cards || CFG.classes?.item || "").split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => card.classList.add(cls));
-        card.href = item.fullUrl || CFG.sourceCollection.path + "/" + item.urlId;
+        card.href = getItemLink(item) || CFG.sourceCollection.path + "/" + item.urlId;
         if (getLightboxOptions(CFG)) {
             card.dataset.rbLightboxKey = getLightboxItemKey(item, index);
             card.setAttribute("aria-haspopup", "dialog");
