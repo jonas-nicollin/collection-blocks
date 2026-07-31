@@ -342,6 +342,7 @@ function getCollectionOptions(maxPages){
       'id',
       'title',
       'fullUrl',
+      'sourceUrl',
       'urlId',
       'assetUrl',
       'mediaFocalPoint',
@@ -452,7 +453,7 @@ function getCollectionOptions(maxPages){
 
     return {
       id: item.id || item.urlId || '',
-      url: item.fullUrl || item.url || '',
+      url: item.sourceUrl || item.fullUrl || item.url || '',
       title: item.title || '',
       tags: item.tags || [],
       numero: getTag(item.tags, cfg.tagNumero),
