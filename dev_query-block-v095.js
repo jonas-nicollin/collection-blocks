@@ -416,6 +416,7 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
       id:           raw.id,
       title:        cleanHTML(raw.title || ''),
       fullUrl:      raw.fullUrl || (sourcePath + '/' + (raw.urlId || '')),
+      sourceUrl:    raw.sourceUrl || '',
       urlId:        raw.urlId || '',
       assetUrl:     assetUrl,
       focalPoint:   focalPoint,
@@ -427,6 +428,10 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
       displayIndex: Number(raw.displayIndex != null ? raw.displayIndex : 999999),
       timestamp:    Number(raw.startDate || raw.publishOn || raw.addedOn || raw.updatedOn || 0),
     };
+  }
+
+  function getItemLink(item) {
+    return item && (item.sourceUrl || item.fullUrl) || '';
   }
 
   /* ════════════════════════════════════
@@ -901,7 +906,7 @@ var isPriority = options.priority === true || imgIndex < 3;
     }
 
     if (link) {
-      card.href = item.fullUrl;
+      card.href = getItemLink(item);
       var openInNewTab = disp.openInNewTab === true || cfg.openInNewTab === true;
       if (openInNewTab) {
         card.target = '_blank';
@@ -1121,8 +1126,9 @@ var isPriority = options.priority === true || imgIndex < 3;
       if (wrapper.hasChildNodes()) fragment.appendChild(wrapper);
     });
 
-    if (options.showLink !== false && item.fullUrl) {
-      var link = el('a', { class: 'cb-lightbox__link qb-lightbox__link', href: item.fullUrl });
+    var itemLink = getItemLink(item);
+    if (options.showLink !== false && itemLink) {
+      var link = el('a', { class: 'cb-lightbox__link qb-lightbox__link', href: itemLink });
       link.textContent = options.linkLabel;
       if ((cfg.display && cfg.display.openInNewTab === true) || cfg.openInNewTab === true) {
         link.target = '_blank';
