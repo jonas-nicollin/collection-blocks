@@ -12,6 +12,7 @@
     'id',
     'title',
     'fullUrl',
+    'sourceUrl',
     'urlId',
     'assetUrl',
     'mediaFocalPoint',
@@ -1714,7 +1715,7 @@
     options = options || {};
 
     var prefix = options.prefix || 'cb-card';
-    var href = item && (item.fullUrl || item.url);
+    var href = item && (item.sourceUrl || item.fullUrl || item.url);
     var tag = href && options.link !== false ? 'a' : 'article';
     var card = createEl(tag, { class: cardClass(null, prefix, options.className) });
 
