@@ -146,6 +146,46 @@
                 try {
                     const dt1 = new Date(d1.year, d1.month, d1.day);
                     const dt2 = new Date(d2.year, d2.month, d2.day);
+                    const sameDay = d1.day === d2.day && d1.month === d2.month && d1.year === d2.year;
+                    const formatIncludesTime = !fmt || fmt === "datetime" || fmt === "short-time" || fmt === "time" ||
+                        typeof fmt === "object" && (fmt.hour != null || fmt.minute != null);
+                    const hasRangeTime = d1.hour !== null || d2.hour !== null;
+                    const formatRangeTime = (point, date) => {
+                        if (point.hour === null) return "";
+                        return date.toLocaleTimeString(loc, Object.assign({
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            hour12: false
+                        }, tzOpt));
+                    };
+                    const formatRangeEndpoint = (point, date) => {
+                        const label = date.toLocaleDateString(loc, {
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric"
+                        });
+                        const time = formatRangeTime(point, date);
+                        return time ? `${label}, ${time}` : label;
+                    };
+                    if (sameDay) {
+                        const dateLabel = dt1.toLocaleDateString(loc, {
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric"
+                        });
+                        if (formatIncludesTime && hasRangeTime) {
+                            const startTime = formatRangeTime(d1, new Date(d1.year, d1.month, d1.day, d1.hour ?? 0, d1.min ?? 0));
+                            const endTime = formatRangeTime(d2, new Date(d2.year, d2.month, d2.day, d2.hour ?? 0, d2.min ?? 0));
+                            const timeLabel = startTime && endTime ? `${startTime}\u2013${endTime}` : startTime || endTime;
+                            return fmt === "time" ? timeLabel : dateLabel + (timeLabel ? `, ${timeLabel}` : "");
+                        }
+                        return dateLabel;
+                    }
+                    if (formatIncludesTime && hasRangeTime) {
+                        return formatRangeEndpoint(d1, new Date(d1.year, d1.month, d1.day, d1.hour ?? 0, d1.min ?? 0)) +
+                            "\u2013" +
+                            formatRangeEndpoint(d2, new Date(d2.year, d2.month, d2.day, d2.hour ?? 0, d2.min ?? 0));
+                    }
                     if (d1.month === d2.month && d1.year === d2.year) {
                         const mth = dt1.toLocaleDateString(loc, {
                             month: "long"
