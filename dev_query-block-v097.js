@@ -1375,6 +1375,53 @@ var isPriority = options.priority === true || imgIndex < 3;
         try {
           var dt1 = new Date(d1.year, d1.month, d1.day);
           var dt2 = new Date(d2.year, d2.month, d2.day);
+          var tzOpt = QUERY_TZ ? { timeZone: QUERY_TZ } : {};
+          var sameDay = d1.day === d2.day && d1.month === d2.month && d1.year === d2.year;
+          var formatIncludesTime = !format || format === 'datetime' || format === 'short-time' || format === 'time' ||
+            (typeof format === 'object' && (format.hour != null || format.minute != null));
+          var hasRangeTime = d1.hour !== null || d2.hour !== null;
+
+          function formatRangeTime(point, date) {
+            if (point.hour === null) return '';
+            return date.toLocaleTimeString(loc, Object.assign({
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            }, tzOpt));
+          }
+
+          function formatRangeEndpoint(point, date) {
+            var label = date.toLocaleDateString(loc, {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric',
+            });
+            var time = formatRangeTime(point, date);
+            return time ? label + ', ' + time : label;
+          }
+
+          if (sameDay) {
+            var dateLabel = dt1.toLocaleDateString(loc, {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric',
+            });
+
+            if (formatIncludesTime && hasRangeTime) {
+              var startTime = formatRangeTime(d1, new Date(d1.year, d1.month, d1.day, d1.hour || 0, d1.min || 0));
+              var endTime = formatRangeTime(d2, new Date(d2.year, d2.month, d2.day, d2.hour || 0, d2.min || 0));
+              var timeLabel = startTime && endTime ? startTime + '\u2013' + endTime : startTime || endTime;
+              return format === 'time' ? timeLabel : dateLabel + (timeLabel ? ', ' + timeLabel : '');
+            }
+
+            return dateLabel;
+          }
+
+          if (formatIncludesTime && hasRangeTime) {
+            return formatRangeEndpoint(d1, new Date(d1.year, d1.month, d1.day, d1.hour || 0, d1.min || 0)) +
+              '\u2013' +
+              formatRangeEndpoint(d2, new Date(d2.year, d2.month, d2.day, d2.hour || 0, d2.min || 0));
+          }
 
           if (d1.month === d2.month && d1.year === d2.year) {
             var m = dt1.toLocaleDateString(loc, { month: 'long' });
