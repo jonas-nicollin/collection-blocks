@@ -899,6 +899,10 @@ var isPriority = options.priority === true || imgIndex < 3;
       'data-cb-index': String(index),
       'data-qb-index': String(index),
     });
+    var dateUtils = getCollectionUtils();
+    if (dateUtils && typeof dateUtils.applyDateStatusClass === 'function') {
+      dateUtils.applyDateStatusClass(card, item);
+    }
 
     if (getLightboxOptions(cfg)) {
       card.dataset.qbLightboxKey = getLightboxItemKey(item, index);
