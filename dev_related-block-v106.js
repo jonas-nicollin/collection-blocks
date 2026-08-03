@@ -1443,6 +1443,10 @@
         const card = document.createElement("a");
         card.className = "cb-card rb-card";
         String(CFG.classes?.card || CFG.classes?.cards || CFG.classes?.item || "").split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => card.classList.add(cls));
+        const dateUtils = getCollectionUtils();
+        if (dateUtils && typeof dateUtils.applyDateStatusClass === "function") {
+            dateUtils.applyDateStatusClass(card, item);
+        }
         card.href = getItemLink(item) || CFG.sourceCollection.path + "/" + item.urlId;
         if (getLightboxOptions(CFG)) {
             card.dataset.rbLightboxKey = getLightboxItemKey(item, index);
