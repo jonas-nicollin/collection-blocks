@@ -216,7 +216,8 @@ function normalizeCategories(cats){
   return (Array.isArray(cats)?cats:[]).map(getCategoryLabel).filter(Boolean);
 }
 function customCardClass(){return cfg.classes&&(cfg.classes.card||cfg.classes.cards||cfg.classes.item)||'';}
-function cardClass(clickable){return addClassNames(clickable?CLS_CARD_CLICKABLE:CLS_CARD,customCardClass());}
+function dateStatusClass(item){var utils=getCollectionUtils();if(!utils||typeof utils.getDateStatus!=='function')return'';var status=utils.getDateStatus(item);return status?'is-'+status:'';}
+function cardClass(clickable,item){return addClassNames(addClassNames(clickable?CLS_CARD_CLICKABLE:CLS_CARD,customCardClass()),dateStatusClass(item));}
 function tagRe(p){return new RegExp('^'+p.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+':\\s*','i');}
 function getTag(tags,p){var utils=getCollectionUtils();if(utils&&typeof utils.getTagValuesByPrefix==='function'){var vals=utils.getTagValuesByPrefix({tags:tags||[]},p);return vals[0]||'';}if(!Array.isArray(tags))return'';var re=tagRe(p),t=tags.find(function(x){return re.test(String(x));});return t?String(t).replace(re,'').trim():'';}
 function getTags(tags,p){var utils=getCollectionUtils();if(utils&&typeof utils.getTagValuesByPrefix==='function')return utils.getTagValuesByPrefix({tags:tags||[]},p);if(!Array.isArray(tags))return[];var re=tagRe(p);return tags.filter(function(x){return re.test(String(x));}).map(function(x){return String(x).replace(re,'').trim();});}
@@ -569,7 +570,7 @@ function buildCardHTML(item){
     if(cfg.display.cardLink!==false&&item.url){var lt=cfg.display.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';clHtml='<a class="'+escHtml(CLS_LINK)+'" href="'+escHtml(item.url)+'"'+lt+' aria-label="Voir '+escHtml(item.title)+'"><span class="ui-icon" aria-hidden="true">arrow_forward</span></a>';}
     if(cfg.display.cardClickable&&item.url){
       var lt=cfg.display.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
-      return'<a class="'+escHtml(cardClass(true))+'" href="'+escHtml(item.url)+'"'+lt+' data-item-id="'+escHtml(item.id)+'">'+html+'</a>';
+      return'<a class="'+escHtml(cardClass(true,item))+'" href="'+escHtml(item.url)+'"'+lt+' data-item-id="'+escHtml(item.id)+'">'+html+'</a>';
     }
     /* cardLink : si true et cardClickable=false, ajouter la flèche
        même si 'cardLink' n'est pas dans les children des groups */
@@ -577,7 +578,7 @@ function buildCardHTML(item){
       var lt2=cfg.display.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
       html+='<a class="'+escHtml(CLS_LINK)+'" href="'+escHtml(item.url)+'"'+lt2+' aria-label="Voir '+escHtml(item.title)+'"><span class="ui-icon" aria-hidden="true">arrow_forward</span></a>';
     }
-    return'<div class="'+escHtml(cardClass(false))+'" data-item-id="'+escHtml(item.id)+'">'+html+'</div>';
+    return'<div class="'+escHtml(cardClass(false,item))+'" data-item-id="'+escHtml(item.id)+'">'+html+'</div>';
   }
 
   /* Comportement par défaut : media (image seule) + body (tous les champs texte) */
@@ -593,7 +594,7 @@ function buildCardHTML(item){
   var clHtml='';
   if(cfg.display.cardLink!==false&&item.url){var lt=cfg.display.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';clHtml='<a class="'+escHtml(CLS_LINK)+'" href="'+escHtml(item.url)+'"'+lt+' aria-label="Voir '+escHtml(item.title)+'"><span class="ui-icon" aria-hidden="true">arrow_forward</span></a>';}
 
-  return'<div class="'+escHtml(cardClass(false))+'" data-item-id="'+escHtml(item.id)+'">'+mediaHtml+(bodyHtml?'<div class="'+escHtml(CLS_BODY)+'">'+bodyHtml+clHtml+'</div>':'')+'</div>';
+  return'<div class="'+escHtml(cardClass(false,item))+'" data-item-id="'+escHtml(item.id)+'">'+mediaHtml+(bodyHtml?'<div class="'+escHtml(CLS_BODY)+'">'+bodyHtml+clHtml+'</div>':'')+'</div>';
 }
 
 /* ── Popup OverlayView ── */
