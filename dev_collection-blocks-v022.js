@@ -845,6 +845,173 @@
     };
   }
 
+  function parseTemporalPoint(str) {
+    var s = String(str || '').trim();
+    var m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (!m) return null;
+
+    var point = {
+      year: parseInt(m[1], 10),
+      month: parseInt(m[2], 10) - 1,
+      day: parseInt(m[3], 10),
+      hour: m[4] != null ? parseInt(m[4], 10) : 0,
+      min: m[5] != null ? parseInt(m[5], 10) : 0,
+      second: m[6] != null ? parseInt(m[6], 10) : 0,
+      hasTime: m[4] != null
+    };
+
+    var check = new Date(Date.UTC(
+      point.year,
+      point.month,
+      point.day,
+      point.hour,
+      point.min,
+      point.second
+    ));
+
+    if (
+      check.getUTCFullYear() !== point.year ||
+      check.getUTCMonth() !== point.month ||
+      check.getUTCDate() !== point.day ||
+      check.getUTCHours() !== point.hour ||
+      check.getUTCMinutes() !== point.min ||
+      check.getUTCSeconds() !== point.second
+    ) return null;
+
+    return point;
+  }
+
+  function getTimeZoneOffset(timestamp, timeZone) {
+    var date = new Date(timestamp);
+    var parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23'
+    }).formatToParts(date);
+    var values = {};
+
+    parts.forEach(function(part) {
+      if (part.type !== 'literal') values[part.type] = parseInt(part.value, 10);
+    });
+
+    return Date.UTC(
+      values.year,
+      values.month - 1,
+      values.day,
+      values.hour,
+      values.minute,
+      values.second
+    ) - Math.floor(timestamp / 1000) * 1000;
+  }
+
+  function temporalPointTimestamp(point, timeZone, endOfDay) {
+    var hour = endOfDay ? 23 : point.hour;
+    var minute = endOfDay ? 59 : point.min;
+    var second = endOfDay ? 59 : point.second;
+    var millisecond = endOfDay ? 999 : 0;
+
+    if (!timeZone || typeof Intl === 'undefined' || !Intl.DateTimeFormat) {
+      return new Date(
+        point.year,
+        point.month,
+        point.day,
+        hour,
+        minute,
+        second,
+        millisecond
+      ).getTime();
+    }
+
+    try {
+      var utcGuess = Date.UTC(
+        point.year,
+        point.month,
+        point.day,
+        hour,
+        minute,
+        second,
+        millisecond
+      );
+      var offset = getTimeZoneOffset(utcGuess, timeZone);
+      var timestamp = utcGuess - offset;
+      var adjustedOffset = getTimeZoneOffset(timestamp, timeZone);
+
+      if (adjustedOffset !== offset) timestamp = utcGuess - adjustedOffset;
+      return timestamp;
+    } catch (_) {
+      return new Date(
+        point.year,
+        point.month,
+        point.day,
+        hour,
+        minute,
+        second,
+        millisecond
+      ).getTime();
+    }
+  }
+
+  function getDateStatus(item, options) {
+    options = options || {};
+
+    var values = getTagValuesByPrefix(item, options.prefix || 'Date');
+    if (!values.length) return null;
+
+    var timeZone = options.timeZone !== undefined ? options.timeZone : getSiteTimeZone();
+    var now = options.now instanceof Date
+      ? options.now.getTime()
+      : (typeof options.now === 'number' ? options.now : Date.now());
+    var hasValidDate = false;
+    var hasFutureDate = false;
+    var hasCurrentRange = false;
+
+    values.forEach(function(value) {
+      var parts = String(value || '').split('/');
+
+      if (parts.length === 2) {
+        var rangeStart = parseTemporalPoint(parts[0]);
+        var rangeEnd = parseTemporalPoint(parts[1]);
+        if (!rangeStart || !rangeEnd) return;
+
+        var startTimestamp = temporalPointTimestamp(rangeStart, timeZone, false);
+        var endTimestamp = temporalPointTimestamp(rangeEnd, timeZone, !rangeEnd.hasTime);
+        if (endTimestamp < startTimestamp) return;
+
+        hasValidDate = true;
+        if (now >= startTimestamp && now <= endTimestamp) hasCurrentRange = true;
+        if (now < startTimestamp) hasFutureDate = true;
+        return;
+      }
+
+      if (parts.length !== 1) return;
+
+      var occurrence = parseTemporalPoint(parts[0]);
+      if (!occurrence) return;
+
+      hasValidDate = true;
+      if (now <= temporalPointTimestamp(occurrence, timeZone, true)) hasFutureDate = true;
+    });
+
+    if (!hasValidDate) return null;
+    if (hasCurrentRange) return 'current';
+    if (hasFutureDate) return 'upcoming';
+    return 'past';
+  }
+
+  function applyDateStatusClass(node, item, options) {
+    if (!node || !node.classList) return null;
+
+    node.classList.remove('is-past', 'is-current', 'is-upcoming');
+    var status = getDateStatus(item, options);
+    if (status) node.classList.add('is-' + status);
+    return status;
+  }
+
   function formatISOTag(str, format, locale) {
     var s = String(str || '').trim();
     var loc = getLocale(locale);
@@ -1761,6 +1928,8 @@
     parseTag: parseTag,
     getTagValuesByPrefix: getTagValuesByPrefix,
     parseISO: parseISO,
+    getDateStatus: getDateStatus,
+    applyDateStatusClass: applyDateStatusClass,
     formatISOTag: formatISOTag,
     formatISOValues: formatISOValues,
     getISODatePart: getISODatePart,
@@ -1801,6 +1970,8 @@
     cleanHTML: cleanHTML,
     truncate: truncate,
     parseISO: parseISO,
+    getDateStatus: getDateStatus,
+    applyDateStatusClass: applyDateStatusClass,
     formatISOTag: formatISOTag,
     formatISOValues: formatISOValues,
     getTagValuesByPrefix: getTagValuesByPrefix,
