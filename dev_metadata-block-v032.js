@@ -228,35 +228,47 @@
           const dt1 = new Date(d1.year, d1.month, d1.day, d1.hour || 0, d1.min || 0);
           const dt2 = new Date(d2.year, d2.month, d2.day, d2.hour || 0, d2.min || 0);
           const sameDay = d1.day === d2.day && d1.month === d2.month && d1.year === d2.year;
-          const timeOptions = Object.assign(
-            { hour: '2-digit', minute: '2-digit', hour12: false },
-            tzOpt
-          );
+          const formatIncludesTime = !format || format === 'datetime' || format === 'short-time' || format === 'time' ||
+            typeof format === 'object' && (format.hour != null || format.minute != null);
+          const hasRangeTime = d1.hasTime || d2.hasTime;
+
+          const formatRangeTime = (point, date) => {
+            if (!point.hasTime) return '';
+            return date.toLocaleTimeString(loc, Object.assign(
+              { hour: '2-digit', minute: '2-digit', hour12: false },
+              tzOpt
+            ));
+          };
+
+          const formatRangeEndpoint = (point, date) => {
+            const label = date.toLocaleDateString(loc, {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric'
+            });
+            const time = formatRangeTime(point, date);
+            return time ? `${label}, ${time}` : label;
+          };
 
           if (sameDay) {
-            if (format === 'time') {
-              if (!d1.hasTime) return s;
-              const t1 = dt1.toLocaleTimeString(loc, timeOptions);
-              const t2 = d2.hasTime ? dt2.toLocaleTimeString(loc, timeOptions) : '';
-              return t2 ? `${t1}\u2013${t2}` : t1;
+            const dateLabel = dt1.toLocaleDateString(loc, {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric'
+            });
+
+            if (formatIncludesTime && hasRangeTime) {
+              const startTime = formatRangeTime(d1, dt1);
+              const endTime = formatRangeTime(d2, dt2);
+              const timeLabel = startTime && endTime ? `${startTime}\u2013${endTime}` : startTime || endTime;
+              return format === 'time' ? timeLabel : dateLabel + (timeLabel ? `, ${timeLabel}` : '');
             }
 
-            const dateOptions = format === 'short-time'
-              ? { weekday: 'short', day: 'numeric', month: 'short' }
-              : format === 'date'
-                ? { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }
-                : { weekday: 'long', day: 'numeric', month: 'long' };
-            const dayStr = capitalize(dt1.toLocaleDateString(
-              loc,
-              Object.assign({}, dateOptions, tzOpt)
-            ));
+            return dateLabel;
+          }
 
-            if (d1.hasTime) {
-              const t1 = dt1.toLocaleTimeString(loc, timeOptions);
-              const t2 = d2.hasTime ? dt2.toLocaleTimeString(loc, timeOptions) : '';
-              return `${dayStr}, ${t2 ? `${t1}\u2013${t2}` : t1}`;
-            }
-            return dayStr;
+          if (formatIncludesTime && hasRangeTime) {
+            return formatRangeEndpoint(d1, dt1) + '\u2013' + formatRangeEndpoint(d2, dt2);
           }
 
           if (d1.month === d2.month && d1.year === d2.year) {
