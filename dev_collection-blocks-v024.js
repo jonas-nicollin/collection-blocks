@@ -1,12 +1,14 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.9';
+  var VERSION = '0.10';
   var STORE_KEY_PREFIX = 'collection-blocks::v0.6::';
 
   var memoryCache = new Map();
   var pendingFetches = new Map();
   var pendingIdlePreloads = new Set();
+  var manifestCache = new Map();
+  var pendingManifests = new Map();
 
   var DEFAULT_FIELDS = [
     'id',
@@ -30,7 +32,7 @@
 
   var DEFAULTS = {
     maxPages: 10,
-    ttl: 900,
+    ttl: 600,
     sessionCache: true,
     memoryCache: true,
     credentials: 'same-origin',
@@ -179,8 +181,51 @@
     return window.COLLECTION_BLOCKS_DATA_SOURCES || null;
   }
 
+  function getManifestConfig(options, dataSource) {
+    options = options || {};
+
+    if (isDevMode(options) || options.manifest === false) return null;
+
+    var manifest = options.manifest || options.manifestUrl || null;
+    var canonical = typeof window !== 'undefined' ? window.COLLECTION_DATA : null;
+
+    if (!manifest && canonical && typeof canonical === 'object') {
+      manifest = canonical.manifest || null;
+    }
+
+    if (!manifest && typeof window !== 'undefined') {
+      manifest = window.COLLECTION_BLOCKS_DATA_MANIFEST || null;
+    }
+
+    if (!manifest && dataSource && dataSource.url) {
+      try {
+        var sourceUrl = new URL(dataSource.url, window.location.href);
+        var markerIndex = sourceUrl.pathname.indexOf('/data/collections/');
+        if (markerIndex !== -1) {
+          manifest = {
+            url: sourceUrl.origin + sourceUrl.pathname.slice(0, markerIndex) + '/data/manifest.json'
+          };
+        }
+      } catch (_) {}
+    }
+
+    if (typeof manifest === 'string') manifest = { url: manifest };
+    if (!manifest || typeof manifest !== 'object' || !manifest.url) return null;
+
+    return Object.assign({
+      ttl: 60,
+      credentials: 'omit'
+    }, manifest, {
+      url: normalizePath(manifest.url)
+    });
+  }
+
   function resolveDataSource(path, options) {
     options = options || {};
+
+    if (options._resolvedDataSource && options._resolvedDataSource.url) {
+      return Object.assign({}, options._resolvedDataSource);
+    }
 
     if (isDevMode(options) && options.useStaticInDevMode !== true) return null;
 
@@ -207,6 +252,88 @@
 
     return Object.assign({}, source, {
       url: normalizePath(source.url)
+    });
+  }
+
+  function deriveManifestKey(dataSource) {
+    if (!dataSource || !dataSource.url) return '';
+    if (dataSource.manifestKey) return normalizePath(dataSource.manifestKey).replace(/^\/+/, '');
+
+    try {
+      var pathname = new URL(dataSource.url, window.location.href).pathname;
+      var marker = '/data/collections/';
+      var markerIndex = pathname.indexOf(marker);
+      if (markerIndex === -1) return '';
+      return decodeURIComponent(pathname.slice(markerIndex + marker.length)).replace(/^\/+/, '');
+    } catch (_) {
+      return '';
+    }
+  }
+
+  async function fetchManifest(config, options) {
+    var cacheKey = config.url;
+    var cached = manifestCache.get(cacheKey);
+    var manifestTtl = config.ttl == null ? 60 : Number(config.ttl);
+    var ttlMs = Math.max(0, manifestTtl) * 1000;
+
+    if (!shouldBypassCache(options) && cached && now() - cached.ts <= ttlMs) {
+      return cached.data;
+    }
+
+    if (!shouldBypassCache(options) && pendingManifests.has(cacheKey)) {
+      return pendingManifests.get(cacheKey);
+    }
+
+    var promise = fetch(config.url, {
+      credentials: config.credentials || 'omit',
+      cache: 'no-store'
+    })
+      .then(function(response) {
+        if (!response.ok) {
+          throw new Error('HTTP ' + response.status + ' while fetching collection data manifest');
+        }
+        return response.json();
+      })
+      .then(function(manifest) {
+        if (!manifest || typeof manifest.files !== 'object') {
+          throw new Error('Invalid collection data manifest');
+        }
+        manifestCache.set(cacheKey, { data: manifest, ts: now() });
+        return manifest;
+      })
+      .catch(function(error) {
+        console.warn('[Collection Blocks] Manifest unavailable; using the configured data URL.', error);
+        manifestCache.set(cacheKey, { data: null, ts: now() });
+        return null;
+      })
+      .finally(function() {
+        pendingManifests.delete(cacheKey);
+      });
+
+    if (!shouldBypassCache(options)) pendingManifests.set(cacheKey, promise);
+    return promise;
+  }
+
+  async function resolveVersionedDataOptions(path, options) {
+    if (shouldBypassCache(options)) return options;
+
+    var dataSource = resolveDataSource(path, options);
+    var manifestConfig = getManifestConfig(options, dataSource);
+    var manifestKey = deriveManifestKey(dataSource);
+
+    if (!dataSource || !manifestConfig || !manifestKey) return options;
+
+    var manifest = await fetchManifest(manifestConfig, options);
+    var entry = manifest && manifest.files ? manifest.files[manifestKey] : null;
+
+    if (!entry || !entry.sourceHash) return options;
+
+    return Object.assign({}, options, {
+      _resolvedDataSource: Object.assign({}, dataSource, {
+        url: addQueryParam(dataSource.url, '_cv', entry.sourceHash),
+        manifestKey: manifestKey,
+        version: entry.sourceHash
+      })
     });
   }
 
@@ -303,6 +430,14 @@
     } catch (_) {
       return null;
     }
+  }
+
+  function isMemoryStateFresh(state, options) {
+    if (!state) return false;
+    if (!state.ts && !state.pagesLoaded && !state.complete && !state.fetchError) return true;
+
+    var ttl = Number(state.ttl || options.ttl || DEFAULTS.ttl) * 1000;
+    return !!state.ts && now() - Number(state.ts) <= ttl;
   }
 
   function writeSession(key, state, ttl, options) {
@@ -499,6 +634,7 @@
 
   async function resolveState(path, options) {
     options = Object.assign({}, DEFAULTS, options || {});
+    options = await resolveVersionedDataOptions(path, options);
 
     var key = makeCacheKey(path, options);
     var targetPages = options.maxPages || DEFAULTS.maxPages;
@@ -510,6 +646,10 @@
 
     if (useMemory && memoryCache.has(key)) {
       state = memoryCache.get(key);
+      if (!isMemoryStateFresh(state, options)) {
+        memoryCache.delete(key);
+        state = null;
+      }
     }
 
     if (!state && useSession) {
@@ -539,6 +679,8 @@
 
     var promise = fetchCollection(path, options, state, targetPages)
       .then(function(updatedState) {
+        updatedState.ts = now();
+        updatedState.ttl = Number(options.ttl || DEFAULTS.ttl);
         if (useMemory) memoryCache.set(key, updatedState);
         if (useSession) writeSession(key, updatedState, options.ttl, options);
         return updatedState;
@@ -634,6 +776,8 @@
     memoryCache.clear();
     pendingFetches.clear();
     pendingIdlePreloads.clear();
+    manifestCache.clear();
+    pendingManifests.clear();
 
     try {
       Object.keys(sessionStorage)
@@ -665,6 +809,7 @@
       version: VERSION,
       collections: collections,
       memoryKeys: Array.from(memoryCache.keys()),
+      manifestKeys: Array.from(manifestCache.keys()),
       pendingKeys: Array.from(pendingFetches.keys()),
       pendingIdlePreloads: Array.from(pendingIdlePreloads),
       perfTest: isPerfTest(),
