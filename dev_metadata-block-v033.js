@@ -16,6 +16,7 @@
   let MB_LAST_RUN_PATH = '';
   let MB_EDIT_OBSERVER = null;
   let MB_EDIT_TIMER = null;
+  const MB_CONDITION_RESULTS = new Map();
 
   /* ════════════════════════════════════
    * UTILITAIRES TEXTE
@@ -85,6 +86,56 @@
       .trim();
   }
 
+  function splitPrefixedValue(value) {
+    const text = cleanText(value);
+    const separatorIndex = text.indexOf(':');
+    if (separatorIndex === -1) {
+      return { prefix: '', value: text };
+    }
+    return {
+      prefix: text.slice(0, separatorIndex).trim(),
+      value: text.slice(separatorIndex + 1).trim()
+    };
+  }
+
+  function matchesItemConditions(itemData, conditions) {
+    if (!conditions || typeof conditions !== 'object') return true;
+
+    const categories = Array.isArray(itemData?.categories) ? itemData.categories : [];
+    const tags = Array.isArray(itemData?.tags) ? itemData.tags : [];
+    const comparableCategories = new Set(categories.map(comparableText));
+    const comparableTags = new Set(tags.map(comparableText));
+
+    if (Array.isArray(conditions.categories) && conditions.categories.length) {
+      const matchesCategories = conditions.categories.every(category =>
+        comparableCategories.has(comparableText(category))
+      );
+      if (!matchesCategories) return false;
+    }
+
+    if (Array.isArray(conditions.tags) && conditions.tags.length) {
+      const matchesTags = conditions.tags.every(tag =>
+        comparableTags.has(comparableText(tag))
+      );
+      if (!matchesTags) return false;
+    }
+
+    if (Array.isArray(conditions.tagValues) && conditions.tagValues.length) {
+      const parsedTags = tags.map(splitPrefixedValue);
+      const matchesTagValues = conditions.tagValues.every(condition => {
+        const expectedPrefix = comparableText(condition?.prefix).replace(/:$/, '');
+        const expectedValue = comparableText(condition?.value);
+        return parsedTags.some(tag =>
+          comparableText(tag.prefix) === expectedPrefix &&
+          comparableText(tag.value) === expectedValue
+        );
+      });
+      if (!matchesTagValues) return false;
+    }
+
+    return true;
+  }
+
   function normalizeClassList(classes) {
     if (!classes) return [];
     if (Array.isArray(classes)) {
@@ -125,6 +176,11 @@
       return settings.blocksOrder.join('-');
     }
     return targetSelector || settings.moveToDestination || 'metadata';
+  }
+
+  function getConditionResultKey(settings) {
+    const targetSelector = settings.target || settings.moveToDestination;
+    return `${getCurrentPath()}::${getMountKey(settings, targetSelector)}`;
   }
 
   function findMetadataWrapper(target, mountKey) {
@@ -604,6 +660,9 @@ async function fetchPageJson(settings) {
     const activeSettings = SETTINGS_LIST.filter(matchesBodyClasses);
     if (!activeSettings.length) return false;
     return activeSettings.every(settings => {
+      if (settings.showWhen && MB_CONDITION_RESULTS.get(getConditionResultKey(settings)) === false) {
+        return true;
+      }
       const targetSelector = settings.target || settings.moveToDestination;
       const target = getExpectedMetadataTarget(settings);
       if (!target) return false;
@@ -660,6 +719,9 @@ async function fetchPageJson(settings) {
   function getRawValuesForBlock(block, itemData) {
     if (block.isLocation) return getLocationValues(itemData, block);
     if (block.isExcerpt) return [];
+    if (block.source === 'static') {
+      return block.text == null ? [] : [block.text];
+    }
     const sourceKey = block.source || 'tags';
     return Array.isArray(itemData?.[sourceKey]) ? [...itemData[sourceKey]] : [];
   }
@@ -771,11 +833,13 @@ async function fetchPageJson(settings) {
   function appendValuesToContent(content, values, block, itemData) {
     const mapsUrl = block.isLocation && block.useGoogleMapsLink
       ? getGoogleMapsUrl(itemData) : '';
+    const href = block.href || mapsUrl || '';
+    const target = block.target || block.googleMapsTarget || '';
     values.forEach((value, index) => {
       const element = createMetadataValueElement(
         value,
         block.displayInline,
-        { href: mapsUrl || '', target: block.googleMapsTarget || '' }
+        { href, target }
       );
       if (block.displayInline && index < values.length - 1) {
         const separator = document.createElement('span');
@@ -929,6 +993,8 @@ async function fetchPageJson(settings) {
       }
 
       const mapsUrl       = block.useGoogleMapsLink ? getGoogleMapsUrl(itemData) : '';
+      const href          = block.href || mapsUrl || '';
+      const target        = block.target || block.googleMapsTarget || '';
       const groupSep      = block.groupSeparator ?? ',\u00A0';
       const isInline      = block.displayInline;
 
@@ -944,7 +1010,7 @@ async function fetchPageJson(settings) {
         // Valeurs en ordre inverse pour que l'insertBefore préserve l'ordre
         [...values].reverse().forEach(value => {
           const element = createMetadataValueElement(value, isInline, {
-            href: mapsUrl || '', target: block.googleMapsTarget || ''
+            href, target
           });
           targetContent.insertBefore(element, targetContent.firstChild);
         });
@@ -956,7 +1022,7 @@ async function fetchPageJson(settings) {
         }
         values.forEach((value, index) => {
           const element = createMetadataValueElement(value, isInline, {
-            href: mapsUrl || '', target: block.googleMapsTarget || ''
+            href, target
           });
           // Séparateur inline entre les valeurs du groupe greffé elles-mêmes
           if (isInline && index < values.length - 1) {
@@ -995,6 +1061,16 @@ async function fetchPageJson(settings) {
 
     const currentItem = resolveCurrentItemData(pageData);
     if (!currentItem) return;
+    const matchesConditions = matchesItemConditions(currentItem, settings.showWhen);
+    if (settings.showWhen) {
+      MB_CONDITION_RESULTS.set(getConditionResultKey(settings), matchesConditions);
+    }
+    if (!matchesConditions) {
+      const targetSelector = settings.target || settings.moveToDestination;
+      const target = getExpectedMetadataTarget(settings);
+      findMetadataWrapper(target, getMountKey(settings, targetSelector))?.remove();
+      return;
+    }
 
     const mount = prepareMetadataBlocksMount(settings);
     if (!mount?.container) return;
