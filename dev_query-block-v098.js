@@ -460,40 +460,39 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
     });
   }
 
+  function matchesConfiguredFilter(item, filter) {
+    if (!filter) return true;
+
+    if (!matchesCats(item, filter.categories)) return false;
+    if (filter.excludeCategories && matchesCats(item, filter.excludeCategories)) return false;
+
+    if (filter.tagValues) {
+      for (var i = 0; i < filter.tagValues.length; i++) {
+        if (!matchesConfiguredTagValue(item, filter.tagValues[i])) return false;
+      }
+    }
+
+    if (
+      Array.isArray(filter.tagValuesAny) &&
+      filter.tagValuesAny.length &&
+      !filter.tagValuesAny.some(function(tagValue) {
+        return matchesConfiguredTagValue(item, tagValue);
+      })
+    ) return false;
+
+    return true;
+  }
+
   function applyPreFilter(items, pf) {
     if (!pf) return items;
 
-    return items.filter(function(item) {
-      if (!matchesCats(item, pf.categories)) return false;
-      if (pf.excludeCategories && matchesCats(item, pf.excludeCategories)) return false;
-
-      if (pf.tagValues) {
-        for (var i = 0; i < pf.tagValues.length; i++) {
-          var tv = pf.tagValues[i];
-          if (!matchesConfiguredTagValue(item, tv)) return false;
-        }
-      }
-
-      return true;
-    });
+    return items.filter(function(item) { return matchesConfiguredFilter(item, pf); });
   }
 
   function applyTabFilter(items, tf) {
     if (!tf) return items;
 
-    return items.filter(function(item) {
-      if (!matchesCats(item, tf.categories)) return false;
-      if (tf.excludeCategories && matchesCats(item, tf.excludeCategories)) return false;
-
-      if (tf.tagValues) {
-        for (var i = 0; i < tf.tagValues.length; i++) {
-          var tv = tf.tagValues[i];
-          if (!matchesConfiguredTagValue(item, tv)) return false;
-        }
-      }
-
-      return true;
-    });
+    return items.filter(function(item) { return matchesConfiguredFilter(item, tf); });
   }
 
   function matchesUIFilters(item, state) {
@@ -891,11 +890,24 @@ var isPriority = options.priority === true || imgIndex < 3;
     return null;
   }
 
+  function getCardVariant(item, cfg) {
+    var variants = cfg && Array.isArray(cfg.cardVariants) ? cfg.cardVariants : [];
+
+    for (var i = 0; i < variants.length; i++) {
+      var variant = variants[i];
+      if (variant && matchesConfiguredFilter(item, variant.filter)) return variant;
+    }
+
+    return null;
+  }
+
   function buildCard(item, cfg, index) {
     var disp = cfg.display || {};
     var link = disp.cardLink !== false;
+    var variant = getCardVariant(item, cfg);
+    var configuredClasses = [cardClassName(cfg), cardClassName(variant)].filter(Boolean).join(' ');
     var card = el(link ? 'a' : 'div', {
-      class: qCardClass('cb-card', 'qb-card') + (cardClassName(cfg) ? ' ' + cardClassName(cfg) : ''),
+      class: qCardClass('cb-card', 'qb-card') + (configuredClasses ? ' ' + configuredClasses : ''),
       'data-cb-index': String(index),
       'data-qb-index': String(index),
     });
@@ -940,7 +952,10 @@ var isPriority = options.priority === true || imgIndex < 3;
       });
     }
 
-    var groups = Array.isArray(disp.groups) && disp.groups.length ? disp.groups : null;
+    var configuredGroups = variant && Object.prototype.hasOwnProperty.call(variant, 'groups')
+      ? variant.groups
+      : disp.groups;
+    var groups = Array.isArray(configuredGroups) && configuredGroups.length ? configuredGroups : null;
 
     if (groups) {
       groups.forEach(function(grp) {
