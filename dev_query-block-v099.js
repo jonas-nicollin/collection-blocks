@@ -1369,6 +1369,83 @@ var isPriority = options.priority === true || imgIndex < 3;
     }
   })();
 
+  function getCurrentDateKey(cfg) {
+    var dbg = cfg && cfg.debug;
+    var mockDate = dbg && typeof dbg === 'object' ? dbg.mockDate : null;
+    var mockDateKey = getISODatePart(mockDate);
+
+    if (mockDateKey) return mockDateKey;
+
+    var now = new Date();
+
+    if (
+      QUERY_TZ &&
+      typeof Intl !== 'undefined' &&
+      Intl.DateTimeFormat &&
+      typeof Intl.DateTimeFormat.prototype.formatToParts === 'function'
+    ) {
+      try {
+        var parts = new Intl.DateTimeFormat('en-CA', {
+          timeZone: QUERY_TZ,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).formatToParts(now);
+        var values = {};
+
+        parts.forEach(function(part) {
+          if (part.type !== 'literal') values[part.type] = part.value;
+        });
+
+        if (values.year && values.month && values.day) {
+          return values.year + '-' + values.month + '-' + values.day;
+        }
+      } catch (_) {}
+    }
+
+    return now.getFullYear() + '-' +
+      String(now.getMonth() + 1).padStart(2, '0') + '-' +
+      String(now.getDate()).padStart(2, '0');
+  }
+
+  function resolveDefaultTabIndex(filtersConfig, cfg) {
+    var fc = filtersConfig || {};
+    var tabs = Array.isArray(fc.tabs) ? fc.tabs : [];
+    var fallback = Number(fc.defaultTab != null ? fc.defaultTab : 0);
+
+    if (!Number.isFinite(fallback) || fallback < 0 || fallback >= tabs.length) fallback = 0;
+    fallback = Math.floor(fallback);
+
+    var byDate = fc.defaultTabByDate;
+    if (!byDate || !tabs.length) return fallback;
+
+    var prefix = typeof byDate === 'string'
+      ? byDate
+      : (byDate.prefix || 'Date');
+    var prefixKey = norm(String(prefix).replace(/:$/, ''));
+    var todayKey = getCurrentDateKey(cfg);
+    var matchedIndex = -1;
+
+    tabs.some(function(tab, index) {
+      var filter = tab && tab.filter ? tab.filter : {};
+      var tagValues = [];
+
+      if (Array.isArray(filter.tagValues)) tagValues = tagValues.concat(filter.tagValues);
+      if (Array.isArray(filter.tagValuesAny)) tagValues = tagValues.concat(filter.tagValuesAny);
+
+      var matchesToday = tagValues.some(function(tagValue) {
+        if (!tagValue || norm(String(tagValue.prefix).replace(/:$/, '')) !== prefixKey) return false;
+        return getISODatePart(tagValue.value) === todayKey;
+      });
+
+      if (!matchesToday) return false;
+      matchedIndex = index;
+      return true;
+    });
+
+    return matchedIndex >= 0 ? matchedIndex : fallback;
+  }
+
   function capitalize(s) {
     return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
   }
@@ -2121,7 +2198,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
    * 12. FILTRES UI
    * ════════════════════════════════════ */
 
-  function buildFilterBar(baseItemsOrGetter, cfg, onFilter, onTabChange, getTabPrefixes, ownerBlock, ensureFilterOptions) {
+  function buildFilterBar(baseItemsOrGetter, cfg, onFilter, onTabChange, getTabPrefixes, ownerBlock, ensureFilterOptions, defaultTabIndex) {
     if (cfg.filters === false) return null;
 
     var fc = cfg.filters || {};
@@ -2479,7 +2556,9 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
     if (tabs.length) {
       var tabGroup = el('div', { class: CLS_FILTER_GROUP + ' ' + CLS_FILTER_GROUP_TABS });
-      var defIdx = Number(fc.defaultTab != null ? fc.defaultTab : 0);
+      var defIdx = defaultTabIndex != null
+        ? defaultTabIndex
+        : resolveDefaultTabIndex(fc, cfg);
 
       tabs.forEach(function(tab, idx) {
         var active = idx === defIdx;
@@ -2718,6 +2797,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     var pag = cfg.pagination || {};
     var disp = cfg.display || {};
     var fc = (cfg.filters && cfg.filters !== false) ? cfg.filters : {};
+    var defaultTabIndex = resolveDefaultTabIndex(fc, cfg);
 
     var i18n = Object.assign({
       loading: false,
@@ -3095,7 +3175,7 @@ requestAnimationFrame(function() {
     var ioInfinite = null;
 
     if (Array.isArray(fc.tabs) && fc.tabs.length) {
-      var di = Number(fc.defaultTab != null ? fc.defaultTab : 0);
+      var di = defaultTabIndex;
       if (fc.tabs[di]) activeFilters.tab = fc.tabs[di].filter || null;
     }
 
@@ -3247,7 +3327,8 @@ requestAnimationFrame(function() {
         return loadCompleteFilterIndex().then(function() {
           return ensureConfiguredFilterOptions(poolGetter, getActiveFilterPrefixes);
         });
-      }
+      },
+      defaultTabIndex
     );
 
     var grid = el('div', { class: buildGridClassName(currentLayout) });
@@ -3280,7 +3361,7 @@ requestAnimationFrame(function() {
     }
 
     if (Array.isArray(fc.tabs) && fc.tabs.length) {
-      var initTab = fc.tabs[Number(fc.defaultTab != null ? fc.defaultTab : 0)];
+      var initTab = fc.tabs[defaultTabIndex];
 
       if (initTab) {
         updateTabClass(initTab.label || '');
