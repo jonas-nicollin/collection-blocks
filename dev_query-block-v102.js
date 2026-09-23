@@ -237,6 +237,7 @@
           layout: globalLayout || 'pills',
           showLabel: true,
           order: null,
+          direction: null,
           filterFormat: null,
           filterGranularity: null,
         };
@@ -246,6 +247,7 @@
         layout:       p.layout       || globalLayout || 'pills',
         showLabel:    p.showLabel    !== false,
         order:        p.order        || null,
+        direction:    p.direction    || p.sortDirection || null,
         filterFormat: p.filterFormat || null,
         filterGranularity: p.filterGranularity || null,
       };
@@ -2616,7 +2618,12 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         var collapseByDay = shouldCollapseDateFilter(pd, datePrefix, fmt);
 
         if (collapseByDay) vals = collapseDateFilterValues(vals);
-        if (pd.order) vals = applyCustomOrder(vals, pd.order);
+
+        if (pd.order) {
+          vals = applyCustomOrder(vals, pd.order);
+        } else if (norm(pd.direction) === 'desc') {
+          vals.reverse();
+        }
 
         var displayVals = fmt ? vals.map(function(v) {
           return formatISOTag(v, fmt) || v;
@@ -3797,4 +3804,5 @@ function scheduleConfig(cfg) {
   }
 
 })();
+
 
