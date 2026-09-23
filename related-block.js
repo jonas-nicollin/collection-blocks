@@ -146,16 +146,67 @@
                 try {
                     const dt1 = new Date(d1.year, d1.month, d1.day);
                     const dt2 = new Date(d2.year, d2.month, d2.day);
+                    const sameDay = d1.day === d2.day && d1.month === d2.month && d1.year === d2.year;
+                    const formatIncludesTime = !fmt || fmt === "datetime" || fmt === "short-time" || fmt === "time" ||
+                        typeof fmt === "object" && (fmt.hour != null || fmt.minute != null);
+                    const hasRangeTime = d1.hour !== null || d2.hour !== null;
+                    const formatRangeTime = (point, date) => {
+                        if (point.hour === null) return "";
+                        return date.toLocaleTimeString(loc, Object.assign({
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            hour12: false
+                        }, tzOpt));
+                    };
+                    const formatRangeEndpoint = (point, date) => {
+                        const label = date.toLocaleDateString(loc, {
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric"
+                        });
+                        const time = formatRangeTime(point, date);
+                        return time ? `${label}, ${time}` : label;
+                    };
+                    if (sameDay) {
+                        const dateLabel = dt1.toLocaleDateString(loc, {
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric"
+                        });
+                        if (formatIncludesTime && hasRangeTime) {
+                            const startTime = formatRangeTime(d1, new Date(d1.year, d1.month, d1.day, d1.hour ?? 0, d1.min ?? 0));
+                            const endTime = formatRangeTime(d2, new Date(d2.year, d2.month, d2.day, d2.hour ?? 0, d2.min ?? 0));
+                            const timeLabel = startTime && endTime ? `${startTime}\u2013${endTime}` : startTime || endTime;
+                            return fmt === "time" ? timeLabel : dateLabel + (timeLabel ? `, ${timeLabel}` : "");
+                        }
+                        return dateLabel;
+                    }
+                    if (formatIncludesTime && hasRangeTime) {
+                        return formatRangeEndpoint(d1, new Date(d1.year, d1.month, d1.day, d1.hour ?? 0, d1.min ?? 0)) +
+                            "\u2013" +
+                            formatRangeEndpoint(d2, new Date(d2.year, d2.month, d2.day, d2.hour ?? 0, d2.min ?? 0));
+                    }
                     if (d1.month === d2.month && d1.year === d2.year) {
                         const mth = dt1.toLocaleDateString(loc, {
                             month: "long"
                         });
                         return `${d1.day}\u2013${d2.day}\u00a0${mth}\u00a0${d1.year}`;
                     }
+                    if (d1.year !== d2.year) {
+                        return dt1.toLocaleDateString(loc, {
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric"
+                        }) + "\u2013" + dt2.toLocaleDateString(loc, {
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric"
+                        });
+                    }
                     return dt1.toLocaleDateString(loc, {
                         day: "numeric",
                         month: "long"
-                    }) + " – " + dt2.toLocaleDateString(loc, {
+                    }) + "\u2013" + dt2.toLocaleDateString(loc, {
                         day: "numeric",
                         month: "long",
                         year: "numeric"
@@ -476,6 +527,7 @@
             title: cleanText(item.title || ""),
             urlId: item.urlId || "",
             fullUrl: item.fullUrl || "",
+            sourceUrl: item.sourceUrl || "",
             assetUrl: getAssetUrl(item),
             mediaFocalPoint: item.mediaFocalPoint || null,
             categories: Array.isArray(item.categories) ? item.categories.map(c => cleanText(c)).filter(Boolean) : [],
@@ -488,6 +540,9 @@
             tagPrefixValues: tagPrefixValues,
             rawItem: item
         };
+    }
+    function getItemLink(item) {
+        return item?.sourceUrl || item?.fullUrl || "";
     }
     // ════════════════════════════════════════════════════════════════
     // RÈGLES DE MATCHING
@@ -506,6 +561,22 @@
     }
     function getTagObjects(item) {
         return buildTagObjects(item.tags || []);
+    }
+    function currentItemMatchesCondition(currentItem, condition) {
+        if (!condition || typeof condition !== "object") return true;
+        const includeCategories = Array.isArray(condition.categories) ? condition.categories : [];
+        const excludeCategories = Array.isArray(condition.excludeCategories) ? condition.excludeCategories : [];
+        const includeTags = Array.isArray(condition.tags) ? condition.tags : Array.isArray(condition.exactTags) ? condition.exactTags : Array.isArray(condition.includeExactTags) ? condition.includeExactTags : [];
+        const excludeTags = Array.isArray(condition.excludeTags) ? condition.excludeTags : Array.isArray(condition.excludeExactTags) ? condition.excludeExactTags : [];
+        const includePrefixes = Array.isArray(condition.tagPrefixes) ? condition.tagPrefixes : Array.isArray(condition.prefixes) ? condition.prefixes : [];
+        const excludePrefixes = Array.isArray(condition.excludeTagPrefixes) ? condition.excludeTagPrefixes : [];
+        if (includeCategories.length && !itemHasAnyCategory(currentItem, includeCategories)) return false;
+        if (excludeCategories.length && itemHasAnyCategory(currentItem, excludeCategories)) return false;
+        if (includeTags.length && !itemHasAnyExactTag(currentItem, includeTags)) return false;
+        if (excludeTags.length && itemHasAnyExactTag(currentItem, excludeTags)) return false;
+        if (includePrefixes.length && !includePrefixes.some(prefix => getTagValuesByPrefix(currentItem, prefix).length)) return false;
+        if (excludePrefixes.length && excludePrefixes.some(prefix => getTagValuesByPrefix(currentItem, prefix).length)) return false;
+        return true;
     }
     function getCurrentTagObjectsByPrefixes(currentItem, prefixes) {
         const prefixSet = new Set((Array.isArray(prefixes) ? prefixes : []).map(normalize));
@@ -636,6 +707,7 @@
         const groups = Array.isArray(selection?.match?.groups) ? selection.match.groups : [];
         if (!groups.length) return true;
         return groups.some(group => {
+            if (!currentItemMatchesCondition(currentItem, group.whenCurrent || group.currentItem || group.ifCurrent)) return false;
             const rules = Array.isArray(group.rules) ? group.rules : [];
             if (!rules.length) return false;
             const logic = String(group.logic || "or").toLowerCase();
@@ -827,6 +899,7 @@
             'id',
             'title',
             'fullUrl',
+            'sourceUrl',
             'urlId',
             'assetUrl',
             'mediaFocalPoint',
@@ -1191,26 +1264,9 @@
             if (group?.inline === true) {
                 addClasses(wrapper, role === "body" ? "cb-card__body--inline rb-card__body--inline" : "cb-card__group--inline rb-card__group--inline");
             }
-            if (group?.inline === true) {
-                const separator = group.separator !== undefined ? group.separator : " ";
-                const nodes = [];
-                children.forEach(child => {
-                    buildContentNodesByType(child, item, CFG, { insideMedia: role === "media" }).forEach(node => nodes.push(node));
-                });
-                nodes.forEach((node, index) => {
-                    wrapper.appendChild(node);
-                    if (index < nodes.length - 1 && separator) {
-                        const sepNode = document.createElement("span");
-                        sepNode.className = "cb-inline-sep rb-inline-sep";
-                        sepNode.textContent = separator;
-                        wrapper.appendChild(sepNode);
-                    }
-                });
-            } else {
-                children.forEach(child => {
-                    buildContentNodesByType(child, item, CFG, { insideMedia: role === "media" }).forEach(node => wrapper.appendChild(node));
-                });
-            }
+            children.forEach(child => {
+                buildContentNodesByType(child, item, CFG, { insideMedia: role === "media" }).forEach(node => wrapper.appendChild(node));
+            });
             if (wrapper.childNodes.length) {
                 fragment.appendChild(wrapper);
                 hasContent = true;
@@ -1362,10 +1418,11 @@
             const location = buildLocationElement(item);
             if (location) content.appendChild(addLightboxClass(location, "cb-lightbox__location rb-lightbox__location"));
         }
-        if (options.showLink !== false && item.fullUrl) {
+        const itemLink = getItemLink(item);
+        if (options.showLink !== false && itemLink) {
             const link = document.createElement("a");
             link.className = "cb-lightbox__link rb-lightbox__link";
-            link.href = item.fullUrl;
+            link.href = itemLink;
             link.textContent = options.linkLabel;
             if (CFG.display?.openInNewTab === true || CFG.openInNewTab === true) {
                 link.target = "_blank";
@@ -1426,7 +1483,11 @@
         const card = document.createElement("a");
         card.className = "cb-card rb-card";
         String(CFG.classes?.card || CFG.classes?.cards || CFG.classes?.item || "").split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => card.classList.add(cls));
-        card.href = item.fullUrl || CFG.sourceCollection.path + "/" + item.urlId;
+        const dateUtils = getCollectionUtils();
+        if (dateUtils && typeof dateUtils.applyDateStatusClass === "function") {
+            dateUtils.applyDateStatusClass(card, item);
+        }
+        card.href = getItemLink(item) || CFG.sourceCollection.path + "/" + item.urlId;
         if (getLightboxOptions(CFG)) {
             card.dataset.rbLightboxKey = getLightboxItemKey(item, index);
             card.setAttribute("aria-haspopup", "dialog");
@@ -1726,6 +1787,19 @@ function getProgressiveMaxPages(CFG) {
   return v === undefined ? 'all' : v;
 }
 
+function shouldLoadCompleteSelectionIndex(CFG) {
+  const perf = CFG.performance || {};
+  if (perf.selectionIndex === false || perf.selectionIndex === 'progressive') return false;
+  if (perf.selectionIndex === true || perf.selectionIndex === 'complete') return true;
+  return CFG.selection?.requiresCompleteIndex === true || CFG.selection?.score?.enabled === true;
+}
+
+function getSelectionIndexMaxPages(CFG) {
+  const perf = CFG.performance || {};
+  if (perf.selectionIndexMaxPages !== undefined) return perf.selectionIndexMaxPages;
+  return getProgressiveMaxPages(CFG);
+}
+
 function canLoadMorePages(currentPages, maxPages) {
   if (maxPages === 'all') return true;
   return Number(currentPages || 1) < Number(maxPages || 1);
@@ -1810,6 +1884,29 @@ if (currentSourcePath === sourcePath && currentItemSourceState) {
 }
             let sourceLoadedPages = currentSourcePath === sourcePath ? currentItemLoadedPages : getInitialMaxPages(CFG);
             let sourceComplete = !!(sourceState && (sourceState.complete || sourceState.fetchError));
+
+if (
+    shouldLoadCompleteSelectionIndex(CFG) &&
+    !sourceComplete &&
+    canLoadMorePages(sourceLoadedPages, getSelectionIndexMaxPages(CFG))
+) {
+    const selectionIndexMaxPages = getSelectionIndexMaxPages(CFG);
+
+    try {
+        sourceState = await fetchCollectionState(CFG, selectionIndexMaxPages);
+        const indexedItems = sourceState.items || [];
+        sourceComplete = !!(sourceState.complete || sourceState.fetchError);
+
+        if (Array.isArray(indexedItems) && indexedItems.length) {
+            items = indexedItems;
+            sourceLoadedPages = selectionIndexMaxPages === 'all'
+                ? Number(sourceState.pagesLoaded || sourceLoadedPages || 1)
+                : selectionIndexMaxPages;
+        }
+    } catch (e) {
+        if (CFG.debug) console.warn("[RB]", CFG.key, "selection index fetch failed", e);
+    }
+}
 
 function computeFinalItems(allItems) {
     const candidates = [];
