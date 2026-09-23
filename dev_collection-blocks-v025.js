@@ -1157,6 +1157,43 @@
     return status;
   }
 
+  function compact12HourTime(point) {
+    if (!point || point.hour === null) return null;
+
+    var hour = point.hour % 12 || 12;
+    var minute = point.min ? ':' + String(point.min).padStart(2, '0') : '';
+
+    return {
+      clock: String(hour) + minute,
+      period: point.hour < 12 ? 'am' : 'pm'
+    };
+  }
+
+  function compact12HourRange(start, end) {
+    if (!start) return end ? end.clock + end.period : '';
+    if (!end) return start.clock + start.period;
+
+    if (start.period === end.period) {
+      return start.clock + '\u2013' + end.clock + end.period;
+    }
+
+    return start.clock + start.period + '\u2013' + end.clock + end.period;
+  }
+
+  function longDateLabel(date, locale, timeZoneOptions) {
+    return capitalize(date.toLocaleDateString(locale, Object.assign({
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric'
+    }, timeZoneOptions)));
+  }
+
+  function longTime12HourEndpoint(point, date, locale, timeZoneOptions) {
+    var dateLabel = longDateLabel(date, locale, timeZoneOptions);
+    var time = compact12HourTime(point);
+    return time ? dateLabel + ', ' + time.clock + time.period : dateLabel;
+  }
+
   function formatISOTag(str, format, locale) {
     var s = String(str || '').trim();
     var loc = getLocale(locale);
@@ -1173,6 +1210,28 @@
           var dt1 = new Date(d1.year, d1.month, d1.day);
           var dt2 = new Date(d2.year, d2.month, d2.day);
           var sameDay = d1.day === d2.day && d1.month === d2.month && d1.year === d2.year;
+
+          if (format === 'time-12h') {
+            return compact12HourRange(compact12HourTime(d1), compact12HourTime(d2));
+          }
+
+          if (format === 'long-time-12h') {
+            var longDt1 = new Date(d1.year, d1.month, d1.day, d1.hour || 0, d1.min || 0);
+            var longDt2 = new Date(d2.year, d2.month, d2.day, d2.hour || 0, d2.min || 0);
+            var longTime1 = compact12HourTime(d1);
+            var longTime2 = compact12HourTime(d2);
+
+            if (sameDay) {
+              var longDate = longDateLabel(longDt1, loc, tzOpt);
+              var longTimeRange = compact12HourRange(longTime1, longTime2);
+              return longDate + (longTimeRange ? ', ' + longTimeRange : '');
+            }
+
+            return longTime12HourEndpoint(d1, longDt1, loc, tzOpt) +
+              '\u2013' +
+              longTime12HourEndpoint(d2, longDt2, loc, tzOpt);
+          }
+
           var formatIncludesTime = !format || format === 'datetime' || format === 'short-time' || format === 'time' ||
             (typeof format === 'object' && (format.hour != null || format.minute != null));
           var hasRangeTime = d1.hour !== null || d2.hour !== null;
@@ -1249,6 +1308,15 @@
     try {
       if (format && typeof format === 'object') {
         return capitalize(dt.toLocaleDateString(loc, Object.assign({}, tzOpt, format)));
+      }
+
+      if (format === 'time-12h') {
+        var compactTime = compact12HourTime(d);
+        return compactTime ? compactTime.clock + compactTime.period : '';
+      }
+
+      if (format === 'long-time-12h') {
+        return longTime12HourEndpoint(d, dt, loc, tzOpt);
       }
 
       if (format === 'time') {
@@ -1341,7 +1409,7 @@
   }
 
   function canCompactSameDayTimes(format) {
-    if (format === 'time') return false;
+    if (format === 'time' || format === 'time-12h') return false;
     if (format === 'day' || format === 'date' || format === 'short' || format === 'numeric') return false;
     if (format && typeof format === 'object') {
       return format.hour != null || format.minute != null;
@@ -1363,7 +1431,7 @@
       var dayKey = isoDayKey(parsed);
       var useTimeOnly = shouldCompact && parsed && parsed.hour !== null && dayKey && dayKey === previousDay;
       var formatted = useTimeOnly
-        ? formatISOTag(raw, 'time', locale)
+        ? formatISOTag(raw, format === 'long-time-12h' ? 'time-12h' : 'time', locale)
         : formatISOTag(raw, format, locale);
 
       previousDay = parsed && dayKey ? dayKey : '';
