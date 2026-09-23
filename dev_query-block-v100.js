@@ -460,7 +460,56 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
     });
   }
 
-  function matchesConfiguredFilter(item, filter) {
+  function getConfiguredDateStatus(item, definition, cfg) {
+    var utils = getCollectionUtils();
+    if (!utils || typeof utils.getDateStatus !== 'function') return null;
+
+    var def = definition && typeof definition === 'object' ? definition : {};
+    var options = {
+      prefix: def.prefix || def.tagPrefix || 'Date',
+    };
+
+    if (QUERY_TZ) options.timeZone = QUERY_TZ;
+
+    var dbg = cfg && cfg.debug;
+    var mockDate = dbg && typeof dbg === 'object' ? dbg.mockDate : null;
+    var parsedMockDate = parseISO(mockDate);
+
+    if (parsedMockDate) {
+      options.now = new Date(
+        parsedMockDate.year,
+        parsedMockDate.month,
+        parsedMockDate.day,
+        12,
+        0,
+        0,
+        0
+      );
+    }
+
+    return utils.getDateStatus(item, options);
+  }
+
+  function matchesConfiguredDateStatus(item, definition, cfg) {
+    if (!definition) return true;
+
+    var def = Array.isArray(definition)
+      ? { include: definition }
+      : (typeof definition === 'object' ? definition : { include: [definition] });
+    var status = getConfiguredDateStatus(item, def, cfg);
+
+    if (!status) return def.includeUndated === true;
+
+    var include = Array.isArray(def.include) ? def.include.map(norm) : [];
+    var exclude = Array.isArray(def.exclude) ? def.exclude.map(norm) : [];
+    var normalizedStatus = norm(status);
+
+    if (include.length && include.indexOf(normalizedStatus) === -1) return false;
+    if (exclude.indexOf(normalizedStatus) !== -1) return false;
+    return true;
+  }
+
+  function matchesConfiguredFilter(item, filter, cfg) {
     if (!filter) return true;
 
     if (!matchesCats(item, filter.categories)) return false;
@@ -480,19 +529,21 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
       })
     ) return false;
 
+    if (!matchesConfiguredDateStatus(item, filter.dateStatus, cfg)) return false;
+
     return true;
   }
 
-  function applyPreFilter(items, pf) {
+  function applyPreFilter(items, pf, cfg) {
     if (!pf) return items;
 
-    return items.filter(function(item) { return matchesConfiguredFilter(item, pf); });
+    return items.filter(function(item) { return matchesConfiguredFilter(item, pf, cfg); });
   }
 
-  function applyTabFilter(items, tf) {
+  function applyTabFilter(items, tf, cfg) {
     if (!tf) return items;
 
-    return items.filter(function(item) { return matchesConfiguredFilter(item, tf); });
+    return items.filter(function(item) { return matchesConfiguredFilter(item, tf, cfg); });
   }
 
   function matchesUIFilters(item, state) {
@@ -895,7 +946,7 @@ var isPriority = options.priority === true || imgIndex < 3;
 
     for (var i = 0; i < variants.length; i++) {
       var variant = variants[i];
-      if (variant && matchesConfiguredFilter(item, variant.filter)) return variant;
+      if (variant && matchesConfiguredFilter(item, variant.filter, cfg)) return variant;
     }
 
     return null;
@@ -1775,6 +1826,94 @@ var isPriority = options.priority === true || imgIndex < 3;
     return keys;
   }
 
+  function isDateStatusGroupBy(groupBy) {
+    return groupBy &&
+      typeof groupBy === 'object' &&
+      norm(groupBy.type) === 'datestatus';
+  }
+
+  function renderDateStatusGrouped(items, cfg, grid, groupBy) {
+    var groups = new Map();
+    var discoveredKeys = [];
+    var include = Array.isArray(groupBy.include) ? groupBy.include.map(norm) : [];
+    var fallbackStatus = groupBy.fallbackStatus ? norm(groupBy.fallbackStatus) : 'undated';
+    var idx = 0;
+
+    items.forEach(function(item) {
+      var status = getConfiguredDateStatus(item, groupBy, cfg);
+      var key = norm(status || fallbackStatus);
+
+      if (!key || (include.length && include.indexOf(key) === -1)) return;
+
+      if (!groups.has(key)) {
+        groups.set(key, []);
+        discoveredKeys.push(key);
+      }
+
+      groups.get(key).push(item);
+    });
+
+    var configuredOrder = Array.isArray(groupBy.order)
+      ? groupBy.order.map(norm)
+      : ['current', 'upcoming', 'past', 'undated'];
+    var orderedKeys = configuredOrder.filter(function(key, index, arr) {
+      return groups.has(key) && arr.indexOf(key) === index;
+    });
+
+    discoveredKeys.forEach(function(key) {
+      if (orderedKeys.indexOf(key) === -1) orderedKeys.push(key);
+    });
+
+    var labels = Object.assign({
+      current: 'Current',
+      upcoming: 'Upcoming',
+      past: 'Past',
+      undated: 'Undated',
+    }, groupBy.labels || {});
+    var headingLevel = Math.min(6, Math.max(1, Number(groupBy.headingLevel || 2)));
+
+    grid.classList.add('cb-grid--date-status-groups', 'qb-grid--date-status-groups');
+
+    orderedKeys.forEach(function(key) {
+      var groupItems = groups.get(key) || [];
+      if (!groupItems.length) return;
+
+      var keySlug = slugify(key) || 'undated';
+      var headingId = 'qb-' + slugify(cfg.key || 'query') + '-date-status-' + keySlug;
+      var section = el('section', {
+        class: qCardClass(
+          'cb-date-status-group cb-date-status-group--' + keySlug,
+          'qb-date-status-group qb-date-status-group--' + keySlug
+        ),
+        'data-date-status': key,
+      });
+      var marker = el('div', {
+        class: qCardClass('cb-date-status-group__marker', 'qb-date-status-group__marker'),
+      });
+      var heading = el('div', {
+        class: qCardClass('cb-date-status-group__heading', 'qb-date-status-group__heading'),
+        id: headingId,
+      });
+      var itemsWrap = el('div', {
+        class: qCardClass('cb-date-status-group__items', 'qb-date-status-group__items'),
+      });
+
+      section.setAttribute('aria-labelledby', headingId);
+      heading.setAttribute('role', 'heading');
+      heading.setAttribute('aria-level', String(headingLevel));
+      setText(heading, Object.prototype.hasOwnProperty.call(labels, key) ? labels[key] : key);
+      marker.appendChild(heading);
+
+      groupItems.forEach(function(item) {
+        itemsWrap.appendChild(buildCard(item, cfg, idx++));
+      });
+
+      section.appendChild(marker);
+      section.appendChild(itemsWrap);
+      grid.appendChild(section);
+    });
+  }
+
   function renderGrouped(items, cfg, grid, activeGroupFilter) {
     var groupBy = (cfg.display && cfg.display.groupBy) || null;
     var groupOrder = (cfg.display && cfg.display.groupOrder) || 'collection';
@@ -1784,6 +1923,11 @@ var isPriority = options.priority === true || imgIndex < 3;
       items.forEach(function(item) {
         grid.appendChild(buildCard(item, cfg, idx++));
       });
+      return;
+    }
+
+    if (isDateStatusGroupBy(groupBy)) {
+      renderDateStatusGrouped(items, cfg, grid, groupBy);
       return;
     }
 
@@ -2335,7 +2479,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
     function tabPool() {
       var items = getBaseItems();
-      return state.tab ? applyTabFilter(items, state.tab) : items;
+      return state.tab ? applyTabFilter(items, state.tab, cfg) : items;
     }
 
     function resetSec() {
@@ -2968,7 +3112,7 @@ requestAnimationFrame(function() {
         return i.fullUrl || i.id;
       });
 
-      merged = applyPreFilter(merged, cfg.preFilter || null);
+      merged = applyPreFilter(merged, cfg.preFilter || null, cfg);
       merged = sortItems(merged, cfg.sort);
 
       return merged;
@@ -3394,7 +3538,7 @@ requestAnimationFrame(function() {
       if (fromFilter) scrollToGrid();
 
       var pool = activeFilters.tab
-        ? applyTabFilter(rawItems, activeFilters.tab)
+        ? applyTabFilter(rawItems, activeFilters.tab, cfg)
         : rawItems;
 
       var poolSorted = currentSort ? sortItems(pool, currentSort) : pool;
