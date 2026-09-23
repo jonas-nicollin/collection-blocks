@@ -1114,6 +1114,7 @@
     var hasValidDate = false;
     var hasFutureDate = false;
     var hasCurrentRange = false;
+    var latestBaseEndTimestamp = null;
 
     values.forEach(function(value) {
       var parts = String(value || '').split('/');
@@ -1128,6 +1129,9 @@
         if (endTimestamp < startTimestamp) return;
 
         hasValidDate = true;
+        if (latestBaseEndTimestamp === null || endTimestamp > latestBaseEndTimestamp) {
+          latestBaseEndTimestamp = endTimestamp;
+        }
         if (now >= startTimestamp && now <= endTimestamp) hasCurrentRange = true;
         if (now < startTimestamp) hasFutureDate = true;
         return;
@@ -1139,8 +1143,43 @@
       if (!occurrence) return;
 
       hasValidDate = true;
-      if (now <= temporalPointTimestamp(occurrence, timeZone, true)) hasFutureDate = true;
+      var occurrenceEndTimestamp = temporalPointTimestamp(occurrence, timeZone, true);
+      if (
+        latestBaseEndTimestamp === null ||
+        occurrenceEndTimestamp > latestBaseEndTimestamp
+      ) {
+        latestBaseEndTimestamp = occurrenceEndTimestamp;
+      }
+      if (now <= occurrenceEndTimestamp) hasFutureDate = true;
     });
+
+    if (
+      hasValidDate &&
+      options.endOverridePrefix &&
+      latestBaseEndTimestamp !== null
+    ) {
+      var overrideEndTimestamp = null;
+
+      getTagValuesByPrefix(item, options.endOverridePrefix).forEach(function(value) {
+        var parts = String(value || '').split('/');
+        var endpoint = parseTemporalPoint(parts[parts.length - 1]);
+        if (!endpoint) return;
+
+        var timestamp = temporalPointTimestamp(endpoint, timeZone, !endpoint.hasTime);
+        if (overrideEndTimestamp === null || timestamp > overrideEndTimestamp) {
+          overrideEndTimestamp = timestamp;
+        }
+      });
+
+      if (
+        overrideEndTimestamp !== null &&
+        overrideEndTimestamp > latestBaseEndTimestamp &&
+        now > latestBaseEndTimestamp &&
+        now <= overrideEndTimestamp
+      ) {
+        hasCurrentRange = true;
+      }
+    }
 
     if (!hasValidDate) return null;
     if (hasCurrentRange) return 'current';
@@ -2254,3 +2293,4 @@
     appendProgressiveDOM: appendProgressiveDOM
   };
 })();
+
