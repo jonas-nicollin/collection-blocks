@@ -44,26 +44,58 @@
 
 /* ─────────────────────────────────────────────
    BADGE ÉDITEUR
-   Classe qb-block sur le conteneur HTML.
    Visible uniquement en mode édition Squarespace.
-   Exemple HTML : <div id="sqb-membres"
-                       data-cb-label="Query Block — Membres"></div>
    ───────────────────────────────────────────── */
 
-.sqs-edit-mode-active :where(.cb-block).qb-block[data-cb-label]::before {
-  content: attr(data-cb-label);
-  display: block;
-  background: #0050ff;
-  color: #fff;
-  font-size: 11px;
-  font-family: ui-monospace, monospace;
-  padding: 4px 10px;
-  border-radius: 3px;
-  width: fit-content;
-  margin-bottom: 0.75rem;
+body.sqs-edit-mode-active :where(
+  [data-cb-label],
+  [data-qb-label],
+  [data-rb-label],
+  [data-lb-label],
+  [data-sqb-label]
+) {
+  display: grid !important;
+  place-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2rem;
+  padding: 0.25rem 0.75rem;
+  background: var(--paragraphMediumColor, #111);
+  color: var(--siteBackgroundColor, #fff) !important;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 1.2;
+  text-align: center;
 }
 
-body:not(.sqs-edit-mode-active) :where(.cb-block).qb-block[data-cb-label]::before {
+body.sqs-edit-mode-active :where(
+  [data-cb-label],
+  [data-qb-label],
+  [data-rb-label],
+  [data-lb-label],
+  [data-sqb-label]
+)::before {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.sqs-edit-mode-active [data-sqb-label]::before { content: attr(data-sqb-label); }
+body.sqs-edit-mode-active [data-lb-label]::before { content: attr(data-lb-label); }
+body.sqs-edit-mode-active [data-rb-label]::before { content: attr(data-rb-label); }
+body.sqs-edit-mode-active [data-qb-label]::before { content: attr(data-qb-label); }
+body.sqs-edit-mode-active [data-cb-label]::before { content: attr(data-cb-label); }
+
+body:not(.sqs-edit-mode-active) :where(
+  [data-cb-label],
+  [data-qb-label],
+  [data-rb-label],
+  [data-lb-label],
+  [data-sqb-label]
+)::before {
   display: none;
 }
 
@@ -176,6 +208,34 @@ body:not(.sqs-edit-mode-active) :where(.cb-block).qb-block[data-cb-label]::befor
 }
 :where(.cb-tab-btn).qb-tab-btn:hover   { opacity: 0.8; }
 :where(.cb-tab-btn--active).qb-tab-btn--active { opacity: 1; border-bottom-color: var(--paragraphMediumColor); }
+
+/* ─────────────────────────────────────────────
+   INTRO DU TAB ACTIF
+   ───────────────────────────────────────────── */
+
+:where(.cb-tab-intro).qb-tab-intro {
+  display: grid;
+  gap: 0.4rem;
+  margin-bottom: 2rem;
+}
+
+:where(.cb-tab-intro__heading).qb-tab-intro__heading {
+  font-size: 1.2em;
+  line-height: 1.25;
+}
+
+:where(.cb-tab-intro__text).qb-tab-intro__text {
+  font-size: 1em;
+  line-height: 1.5;
+}
+
+:where(.cb-tab-intro__link).qb-tab-intro__link {
+  display: inline-block;
+  width: fit-content;
+  margin-top: 0.25rem;
+  font-size: 0.9em;
+  line-height: 1.4;
+}
 
 
 /* ─────────────────────────────────────────────
@@ -352,16 +412,16 @@ body:not(.sqs-edit-mode-active) :where(.cb-block).qb-block[data-cb-label]::befor
    RECHERCHE
    ───────────────────────────────────────────── */
 
-:where(.cb-filter-group--search).qb-filter-group--search { display: inline-flex; }
+:where(.cb-filter-group--search) { display: inline-flex; }
 
-:where(.cb-filter-search).qb-filter-search {
+:where(.cb-filter-search) {
   border: 1px solid var(--paragraphMediumColor);
   background: var(--siteBackgroundColor); color: var(--paragraphMediumColor);
   font: inherit; font-size: 0.9em; padding: 0.3em 0.9em;
   border-radius: 2em; min-width: 10em; max-width: 16em; opacity: 0.6;
 }
-:where(.cb-filter-search).qb-filter-search::placeholder { color: var(--paragraphMediumColor); opacity: 0.5; }
-:where(.cb-filter-search).qb-filter-search:focus { outline: 2px solid var(--paragraphMediumColor); outline-offset: 2px; opacity: 1; }
+:where(.cb-filter-search)::placeholder { color: var(--paragraphMediumColor); opacity: 0.5; }
+:where(.cb-filter-search):focus { outline: 2px solid var(--paragraphMediumColor); outline-offset: 2px; opacity: 1; }
 
 /* ─────────────────────────────────────────────
    MOBILE — bouton Filtrer
@@ -533,8 +593,8 @@ body:where(.cb-panel-open).qb-panel-open { overflow: hidden; }
   margin-bottom: 0.1rem;
 }
 
-:where(.cb-mobile-filters-zone).qb-mobile-filters-zone :where(.cb-filter-select).qb-filter-select,
-:where(.cb-mobile-filters-zone).qb-mobile-filters-zone :where(.cb-filter-search).qb-filter-search {
+:where(.cb-mobile-filters-zone) :where(.cb-filter-select),
+:where(.cb-mobile-filters-zone) :where(.cb-filter-search) {
   width: 100%; max-width: 100%; box-sizing: border-box; font-size: 1em;
 }
 
