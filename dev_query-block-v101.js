@@ -469,6 +469,10 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
       prefix: def.prefix || def.tagPrefix || 'Date',
     };
 
+    if (def.endOverridePrefix) {
+      options.endOverridePrefix = def.endOverridePrefix;
+    }
+
     if (QUERY_TZ) options.timeZone = QUERY_TZ;
 
     var dbg = cfg && cfg.debug;
@@ -3793,3 +3797,4 @@ function scheduleConfig(cfg) {
   }
 
 })();
+
