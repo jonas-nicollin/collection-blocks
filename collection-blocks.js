@@ -1,17 +1,20 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.8';
+  var VERSION = '0.10';
   var STORE_KEY_PREFIX = 'collection-blocks::v0.6::';
 
   var memoryCache = new Map();
   var pendingFetches = new Map();
   var pendingIdlePreloads = new Set();
+  var manifestCache = new Map();
+  var pendingManifests = new Map();
 
   var DEFAULT_FIELDS = [
     'id',
     'title',
     'fullUrl',
+    'sourceUrl',
     'urlId',
     'assetUrl',
     'mediaFocalPoint',
@@ -29,7 +32,7 @@
 
   var DEFAULTS = {
     maxPages: 10,
-    ttl: 900,
+    ttl: 600,
     sessionCache: true,
     memoryCache: true,
     credentials: 'same-origin',
@@ -56,10 +59,39 @@
     }
   }
 
+  function getGlobalConfig() {
+    if (typeof window === 'undefined') return {};
+
+    var config = window.COLLECTION_BLOCKS_CONFIG ||
+      window.CollectionBlocksConfig ||
+      {};
+
+    return config && typeof config === 'object' ? config : {};
+  }
+
+  function isDevMode(options) {
+    options = options || {};
+
+    if (options.devMode === true) return true;
+
+    try {
+      if (window.COLLECTION_BLOCKS_DEV_MODE === true) return true;
+
+      var config = getGlobalConfig();
+      if (config.devMode === true) return true;
+
+      var dataConfig = window.COLLECTION_DATA;
+      if (dataConfig && typeof dataConfig === 'object' && dataConfig.devMode === true) return true;
+    } catch (_) {}
+
+    return false;
+  }
+
   function shouldBypassCache(options) {
     options = options || {};
 
     return (
+      isDevMode(options) ||
       isPerfTest() ||
       options.noCache === true ||
       options.cache === false ||
@@ -99,8 +131,38 @@
     return path || '/';
   }
 
-  function getDataSourceRegistry() {
+  function addQueryParam(url, key, value) {
+    if (!url) return url;
+
+    var hash = '';
+    var hashIndex = url.indexOf('#');
+
+    if (hashIndex !== -1) {
+      hash = url.slice(hashIndex);
+      url = url.slice(0, hashIndex);
+    }
+
+    var sep = url.indexOf('?') !== -1 ? '&' : '?';
+    return url + sep + encodeURIComponent(key) + '=' + encodeURIComponent(value) + hash;
+  }
+
+  function buildFetchUrl(url, options, offset) {
+    url = ensureJson(url);
+
+    if (offset != null) {
+      url = addQueryParam(url, 'offset', offset);
+    }
+
+    if (shouldBypassCache(options)) {
+      url = addQueryParam(url, '_cb', now());
+    }
+
+    return url;
+  }
+
+  function getDataSourceRegistry(options) {
     if (typeof window === 'undefined') return null;
+    if (isDevMode(options)) return null;
 
     var canonical = window.COLLECTION_DATA;
 
@@ -119,12 +181,57 @@
     return window.COLLECTION_BLOCKS_DATA_SOURCES || null;
   }
 
+  function getManifestConfig(options, dataSource) {
+    options = options || {};
+
+    if (isDevMode(options) || options.manifest === false) return null;
+
+    var manifest = options.manifest || options.manifestUrl || null;
+    var canonical = typeof window !== 'undefined' ? window.COLLECTION_DATA : null;
+
+    if (!manifest && canonical && typeof canonical === 'object') {
+      manifest = canonical.manifest || null;
+    }
+
+    if (!manifest && typeof window !== 'undefined') {
+      manifest = window.COLLECTION_BLOCKS_DATA_MANIFEST || null;
+    }
+
+    if (!manifest && dataSource && dataSource.url) {
+      try {
+        var sourceUrl = new URL(dataSource.url, window.location.href);
+        var markerIndex = sourceUrl.pathname.indexOf('/data/collections/');
+        if (markerIndex !== -1) {
+          manifest = {
+            url: sourceUrl.origin + sourceUrl.pathname.slice(0, markerIndex) + '/data/manifest.json'
+          };
+        }
+      } catch (_) {}
+    }
+
+    if (typeof manifest === 'string') manifest = { url: manifest };
+    if (!manifest || typeof manifest !== 'object' || !manifest.url) return null;
+
+    return Object.assign({
+      ttl: 60,
+      credentials: 'omit'
+    }, manifest, {
+      url: normalizePath(manifest.url)
+    });
+  }
+
   function resolveDataSource(path, options) {
     options = options || {};
 
+    if (options._resolvedDataSource && options._resolvedDataSource.url) {
+      return Object.assign({}, options._resolvedDataSource);
+    }
+
+    if (isDevMode(options) && options.useStaticInDevMode !== true) return null;
+
     var explicit = options.dataUrl || options.jsonUrl || options.staticUrl || options.sourceUrl;
     var source = explicit || null;
-    var registry = getDataSourceRegistry();
+    var registry = getDataSourceRegistry(options);
     var cleanPath = normalizePath(path);
     var trimmedPath = trimTrailingSlash(cleanPath);
 
@@ -145,6 +252,88 @@
 
     return Object.assign({}, source, {
       url: normalizePath(source.url)
+    });
+  }
+
+  function deriveManifestKey(dataSource) {
+    if (!dataSource || !dataSource.url) return '';
+    if (dataSource.manifestKey) return normalizePath(dataSource.manifestKey).replace(/^\/+/, '');
+
+    try {
+      var pathname = new URL(dataSource.url, window.location.href).pathname;
+      var marker = '/data/collections/';
+      var markerIndex = pathname.indexOf(marker);
+      if (markerIndex === -1) return '';
+      return decodeURIComponent(pathname.slice(markerIndex + marker.length)).replace(/^\/+/, '');
+    } catch (_) {
+      return '';
+    }
+  }
+
+  async function fetchManifest(config, options) {
+    var cacheKey = config.url;
+    var cached = manifestCache.get(cacheKey);
+    var manifestTtl = config.ttl == null ? 60 : Number(config.ttl);
+    var ttlMs = Math.max(0, manifestTtl) * 1000;
+
+    if (!shouldBypassCache(options) && cached && now() - cached.ts <= ttlMs) {
+      return cached.data;
+    }
+
+    if (!shouldBypassCache(options) && pendingManifests.has(cacheKey)) {
+      return pendingManifests.get(cacheKey);
+    }
+
+    var promise = fetch(config.url, {
+      credentials: config.credentials || 'omit',
+      cache: 'no-store'
+    })
+      .then(function(response) {
+        if (!response.ok) {
+          throw new Error('HTTP ' + response.status + ' while fetching collection data manifest');
+        }
+        return response.json();
+      })
+      .then(function(manifest) {
+        if (!manifest || typeof manifest.files !== 'object') {
+          throw new Error('Invalid collection data manifest');
+        }
+        manifestCache.set(cacheKey, { data: manifest, ts: now() });
+        return manifest;
+      })
+      .catch(function(error) {
+        console.warn('[Collection Blocks] Manifest unavailable; using the configured data URL.', error);
+        manifestCache.set(cacheKey, { data: null, ts: now() });
+        return null;
+      })
+      .finally(function() {
+        pendingManifests.delete(cacheKey);
+      });
+
+    if (!shouldBypassCache(options)) pendingManifests.set(cacheKey, promise);
+    return promise;
+  }
+
+  async function resolveVersionedDataOptions(path, options) {
+    if (shouldBypassCache(options)) return options;
+
+    var dataSource = resolveDataSource(path, options);
+    var manifestConfig = getManifestConfig(options, dataSource);
+    var manifestKey = deriveManifestKey(dataSource);
+
+    if (!dataSource || !manifestConfig || !manifestKey) return options;
+
+    var manifest = await fetchManifest(manifestConfig, options);
+    var entry = manifest && manifest.files ? manifest.files[manifestKey] : null;
+
+    if (!entry || !entry.sourceHash) return options;
+
+    return Object.assign({}, options, {
+      _resolvedDataSource: Object.assign({}, dataSource, {
+        url: addQueryParam(dataSource.url, '_cv', entry.sourceHash),
+        manifestKey: manifestKey,
+        version: entry.sourceHash
+      })
     });
   }
 
@@ -241,6 +430,14 @@
     } catch (_) {
       return null;
     }
+  }
+
+  function isMemoryStateFresh(state, options) {
+    if (!state) return false;
+    if (!state.ts && !state.pagesLoaded && !state.complete && !state.fetchError) return true;
+
+    var ttl = Number(state.ttl || options.ttl || DEFAULTS.ttl) * 1000;
+    return !!state.ts && now() - Number(state.ts) <= ttl;
   }
 
   function writeSession(key, state, ttl, options) {
@@ -353,11 +550,11 @@
     var url = state.nextUrl || null;
 
     if (!url && state.nextOffset != null) {
-      url = ensureJson(sourcePath) + '&offset=' + encodeURIComponent(state.nextOffset);
+      url = buildFetchUrl(sourcePath, options, state.nextOffset);
     }
 
     if (!url && page === 0) {
-      url = ensureJson(sourcePath);
+      url = buildFetchUrl(sourcePath, options);
     }
 
     state.fetchError = null;
@@ -391,9 +588,9 @@
         state.complete = !(state.nextUrl || state.nextOffset != null);
 
         if (state.nextUrl) {
-          url = state.nextUrl;
+          url = buildFetchUrl(state.nextUrl, options);
         } else if (state.nextOffset != null) {
-          url = ensureJson(sourcePath) + '&offset=' + encodeURIComponent(state.nextOffset);
+          url = buildFetchUrl(sourcePath, options, state.nextOffset);
         } else {
           url = null;
         }
@@ -406,7 +603,7 @@
           dataSource = null;
           sourcePath = cleanPath;
           sourceCredentials = options.credentials || DEFAULTS.credentials;
-          url = ensureJson(cleanPath);
+          url = buildFetchUrl(cleanPath, options);
           state.fetchError = null;
           state.source = { type: 'squarespace', path: cleanPath, fallbackFrom: 'static' };
           continue;
@@ -437,6 +634,7 @@
 
   async function resolveState(path, options) {
     options = Object.assign({}, DEFAULTS, options || {});
+    options = await resolveVersionedDataOptions(path, options);
 
     var key = makeCacheKey(path, options);
     var targetPages = options.maxPages || DEFAULTS.maxPages;
@@ -448,6 +646,10 @@
 
     if (useMemory && memoryCache.has(key)) {
       state = memoryCache.get(key);
+      if (!isMemoryStateFresh(state, options)) {
+        memoryCache.delete(key);
+        state = null;
+      }
     }
 
     if (!state && useSession) {
@@ -477,6 +679,8 @@
 
     var promise = fetchCollection(path, options, state, targetPages)
       .then(function(updatedState) {
+        updatedState.ts = now();
+        updatedState.ttl = Number(options.ttl || DEFAULTS.ttl);
         if (useMemory) memoryCache.set(key, updatedState);
         if (useSession) writeSession(key, updatedState, options.ttl, options);
         return updatedState;
@@ -572,6 +776,8 @@
     memoryCache.clear();
     pendingFetches.clear();
     pendingIdlePreloads.clear();
+    manifestCache.clear();
+    pendingManifests.clear();
 
     try {
       Object.keys(sessionStorage)
@@ -603,9 +809,11 @@
       version: VERSION,
       collections: collections,
       memoryKeys: Array.from(memoryCache.keys()),
+      manifestKeys: Array.from(manifestCache.keys()),
       pendingKeys: Array.from(pendingFetches.keys()),
       pendingIdlePreloads: Array.from(pendingIdlePreloads),
-      perfTest: isPerfTest()
+      perfTest: isPerfTest(),
+      devMode: isDevMode()
     };
   }
 
@@ -782,6 +990,173 @@
     };
   }
 
+  function parseTemporalPoint(str) {
+    var s = String(str || '').trim();
+    var m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (!m) return null;
+
+    var point = {
+      year: parseInt(m[1], 10),
+      month: parseInt(m[2], 10) - 1,
+      day: parseInt(m[3], 10),
+      hour: m[4] != null ? parseInt(m[4], 10) : 0,
+      min: m[5] != null ? parseInt(m[5], 10) : 0,
+      second: m[6] != null ? parseInt(m[6], 10) : 0,
+      hasTime: m[4] != null
+    };
+
+    var check = new Date(Date.UTC(
+      point.year,
+      point.month,
+      point.day,
+      point.hour,
+      point.min,
+      point.second
+    ));
+
+    if (
+      check.getUTCFullYear() !== point.year ||
+      check.getUTCMonth() !== point.month ||
+      check.getUTCDate() !== point.day ||
+      check.getUTCHours() !== point.hour ||
+      check.getUTCMinutes() !== point.min ||
+      check.getUTCSeconds() !== point.second
+    ) return null;
+
+    return point;
+  }
+
+  function getTimeZoneOffset(timestamp, timeZone) {
+    var date = new Date(timestamp);
+    var parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23'
+    }).formatToParts(date);
+    var values = {};
+
+    parts.forEach(function(part) {
+      if (part.type !== 'literal') values[part.type] = parseInt(part.value, 10);
+    });
+
+    return Date.UTC(
+      values.year,
+      values.month - 1,
+      values.day,
+      values.hour,
+      values.minute,
+      values.second
+    ) - Math.floor(timestamp / 1000) * 1000;
+  }
+
+  function temporalPointTimestamp(point, timeZone, endOfDay) {
+    var hour = endOfDay ? 23 : point.hour;
+    var minute = endOfDay ? 59 : point.min;
+    var second = endOfDay ? 59 : point.second;
+    var millisecond = endOfDay ? 999 : 0;
+
+    if (!timeZone || typeof Intl === 'undefined' || !Intl.DateTimeFormat) {
+      return new Date(
+        point.year,
+        point.month,
+        point.day,
+        hour,
+        minute,
+        second,
+        millisecond
+      ).getTime();
+    }
+
+    try {
+      var utcGuess = Date.UTC(
+        point.year,
+        point.month,
+        point.day,
+        hour,
+        minute,
+        second,
+        millisecond
+      );
+      var offset = getTimeZoneOffset(utcGuess, timeZone);
+      var timestamp = utcGuess - offset;
+      var adjustedOffset = getTimeZoneOffset(timestamp, timeZone);
+
+      if (adjustedOffset !== offset) timestamp = utcGuess - adjustedOffset;
+      return timestamp;
+    } catch (_) {
+      return new Date(
+        point.year,
+        point.month,
+        point.day,
+        hour,
+        minute,
+        second,
+        millisecond
+      ).getTime();
+    }
+  }
+
+  function getDateStatus(item, options) {
+    options = options || {};
+
+    var values = getTagValuesByPrefix(item, options.prefix || 'Date');
+    if (!values.length) return null;
+
+    var timeZone = options.timeZone !== undefined ? options.timeZone : getSiteTimeZone();
+    var now = options.now instanceof Date
+      ? options.now.getTime()
+      : (typeof options.now === 'number' ? options.now : Date.now());
+    var hasValidDate = false;
+    var hasFutureDate = false;
+    var hasCurrentRange = false;
+
+    values.forEach(function(value) {
+      var parts = String(value || '').split('/');
+
+      if (parts.length === 2) {
+        var rangeStart = parseTemporalPoint(parts[0]);
+        var rangeEnd = parseTemporalPoint(parts[1]);
+        if (!rangeStart || !rangeEnd) return;
+
+        var startTimestamp = temporalPointTimestamp(rangeStart, timeZone, false);
+        var endTimestamp = temporalPointTimestamp(rangeEnd, timeZone, !rangeEnd.hasTime);
+        if (endTimestamp < startTimestamp) return;
+
+        hasValidDate = true;
+        if (now >= startTimestamp && now <= endTimestamp) hasCurrentRange = true;
+        if (now < startTimestamp) hasFutureDate = true;
+        return;
+      }
+
+      if (parts.length !== 1) return;
+
+      var occurrence = parseTemporalPoint(parts[0]);
+      if (!occurrence) return;
+
+      hasValidDate = true;
+      if (now <= temporalPointTimestamp(occurrence, timeZone, true)) hasFutureDate = true;
+    });
+
+    if (!hasValidDate) return null;
+    if (hasCurrentRange) return 'current';
+    if (hasFutureDate) return 'upcoming';
+    return 'past';
+  }
+
+  function applyDateStatusClass(node, item, options) {
+    if (!node || !node.classList) return null;
+
+    node.classList.remove('is-past', 'is-current', 'is-upcoming');
+    var status = getDateStatus(item, options);
+    if (status) node.classList.add('is-' + status);
+    return status;
+  }
+
   function formatISOTag(str, format, locale) {
     var s = String(str || '').trim();
     var loc = getLocale(locale);
@@ -797,14 +1172,66 @@
         try {
           var dt1 = new Date(d1.year, d1.month, d1.day);
           var dt2 = new Date(d2.year, d2.month, d2.day);
+          var sameDay = d1.day === d2.day && d1.month === d2.month && d1.year === d2.year;
+          var formatIncludesTime = !format || format === 'datetime' || format === 'short-time' || format === 'time' ||
+            (typeof format === 'object' && (format.hour != null || format.minute != null));
+          var hasRangeTime = d1.hour !== null || d2.hour !== null;
+
+          function formatRangeTime(point, date) {
+            if (point.hour === null) return '';
+            return date.toLocaleTimeString(loc, Object.assign({
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false
+            }, tzOpt));
+          }
+
+          function formatRangeEndpoint(point, date) {
+            var label = date.toLocaleDateString(loc, {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric'
+            });
+            var time = formatRangeTime(point, date);
+            return time ? label + ', ' + time : label;
+          }
+
+          if (sameDay) {
+            var dateLabel = dt1.toLocaleDateString(loc, {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric'
+            });
+
+            if (formatIncludesTime && hasRangeTime) {
+              var startTime = formatRangeTime(d1, new Date(d1.year, d1.month, d1.day, d1.hour || 0, d1.min || 0));
+              var endTime = formatRangeTime(d2, new Date(d2.year, d2.month, d2.day, d2.hour || 0, d2.min || 0));
+              var timeLabel = startTime && endTime ? startTime + '\u2013' + endTime : startTime || endTime;
+              return format === 'time' ? timeLabel : dateLabel + (timeLabel ? ', ' + timeLabel : '');
+            }
+
+            return dateLabel;
+          }
+
+          if (formatIncludesTime && hasRangeTime) {
+            return formatRangeEndpoint(d1, new Date(d1.year, d1.month, d1.day, d1.hour || 0, d1.min || 0)) +
+              '\u2013' +
+              formatRangeEndpoint(d2, new Date(d2.year, d2.month, d2.day, d2.hour || 0, d2.min || 0));
+          }
 
           if (d1.month === d2.month && d1.year === d2.year) {
             var monthLabel = dt1.toLocaleDateString(loc, { month: 'long' });
             return d1.day + '\u2013' + d2.day + '\u00a0' + monthLabel + '\u00a0' + d1.year;
           }
 
+          if (d1.year !== d2.year) {
+            return dt1.toLocaleDateString(loc, { day: 'numeric', month: 'long', year: 'numeric' }) +
+              '\u2013' +
+              dt2.toLocaleDateString(loc, { day: 'numeric', month: 'long', year: 'numeric' });
+          }
+
           return dt1.toLocaleDateString(loc, { day: 'numeric', month: 'long' }) +
-            '\u00a0\u2013\u00a0' +
+            '\u2013' +
             dt2.toLocaleDateString(loc, { day: 'numeric', month: 'long', year: 'numeric' });
         } catch (_) {
           return s;
@@ -1646,7 +2073,7 @@
     options = options || {};
 
     var prefix = options.prefix || 'cb-card';
-    var href = item && (item.fullUrl || item.url);
+    var href = item && (item.sourceUrl || item.fullUrl || item.url);
     var tag = href && options.link !== false ? 'a' : 'article';
     var card = createEl(tag, { class: cardClass(null, prefix, options.className) });
 
@@ -1678,6 +2105,7 @@
     getState: getState,
     getCurrentPage: getCurrentPage,
     getCurrentPageState: getCurrentPageState,
+    isDevMode: isDevMode,
     idlePreload: idlePreload,
     clear: clear,
     stats: stats
@@ -1691,6 +2119,8 @@
     parseTag: parseTag,
     getTagValuesByPrefix: getTagValuesByPrefix,
     parseISO: parseISO,
+    getDateStatus: getDateStatus,
+    applyDateStatusClass: applyDateStatusClass,
     formatISOTag: formatISOTag,
     formatISOValues: formatISOValues,
     getISODatePart: getISODatePart,
@@ -1722,6 +2152,7 @@
     utils: utilsApi,
     get: get,
     getState: getState,
+    isDevMode: isDevMode,
     idlePreload: idlePreload,
     clear: clear,
     stats: stats,
@@ -1730,6 +2161,8 @@
     cleanHTML: cleanHTML,
     truncate: truncate,
     parseISO: parseISO,
+    getDateStatus: getDateStatus,
+    applyDateStatusClass: applyDateStatusClass,
     formatISOTag: formatISOTag,
     formatISOValues: formatISOValues,
     getTagValuesByPrefix: getTagValuesByPrefix,
