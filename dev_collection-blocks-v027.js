@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.10';
+  var VERSION = '0.11';
   var STORE_KEY_PREFIX = 'collection-blocks::v0.6::';
 
   var memoryCache = new Map();
@@ -24,6 +24,7 @@
     'location',
     'displayIndex',
     'workflowState',
+    'starred',
     'startDate',
     'publishOn',
     'addedOn',
@@ -824,6 +825,7 @@
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[\u2010-\u2015]/g, '-')
       .replace(/[\u2019']/g, "'")
       .replace(/&/g, 'and')
       .replace(/\s+/g, ' ')
@@ -2293,4 +2295,3 @@
     appendProgressiveDOM: appendProgressiveDOM
   };
 })();
-
