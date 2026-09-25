@@ -1305,7 +1305,9 @@
             const el = buildImageElement(item, CFG, context?.insideMedia === true);
             return el ? [ el ] : [];
         }
-        if (type === "meta" && CFG.display?.showCategories) {
+        // `categories` is the shared Query/Related Block nomenclature.
+        // Keep the historical `meta` alias for existing Related Block configs.
+        if ((type === "categories" || type === "meta") && CFG.display?.showCategories) {
             const el = buildMetaElement(item);
             return el ? [ el ] : [];
         }
