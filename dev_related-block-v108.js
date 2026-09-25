@@ -347,7 +347,7 @@
     function normalize(str) {
         const utils = getCollectionUtils();
         if (utils && typeof utils.norm === "function") return utils.norm(str);
-        return String(str || "").replace(/\u00A0/g, " ").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[\u2019']/g, "'").replace(/&/g, "and").replace(/\s+/g, " ").trim();
+        return String(str || "").replace(/\u00A0/g, " ").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[\u2010-\u2015]/g, "-").replace(/[\u2019']/g, "'").replace(/&/g, "and").replace(/\s+/g, " ").trim();
     }
     function uniq(arr) {
         return Array.from(new Set(arr));
@@ -536,6 +536,7 @@
             excerptRaw: item.excerpt || item.body || "",
             locationText: getItemLocationText(item),
             displayIndex: Number(item.displayIndex || 999999),
+            starred: item.starred === true,
             timestamp: getItemTimestamp(item),
             tagPrefixValues: tagPrefixValues,
             rawItem: item
@@ -543,6 +544,39 @@
     }
     function getItemLink(item) {
         return item?.sourceUrl || item?.fullUrl || "";
+    }
+    function itemHasTagValue(item, definition) {
+        if (!definition || !definition.prefix) return false;
+        const wanted = normalize(definition.value);
+        return getTagValuesByPrefix(item, definition.prefix).some(value => normalize(value) === wanted);
+    }
+    function matchesConfiguredItemFilter(item, filter) {
+        if (!filter) return true;
+        const categories = Array.isArray(filter.categories) ? filter.categories : [];
+        const excludeCategories = Array.isArray(filter.excludeCategories) ? filter.excludeCategories : [];
+        const exactTags = Array.isArray(filter.tags) ? filter.tags : Array.isArray(filter.exactTags) ? filter.exactTags : [];
+        const excludeExactTags = Array.isArray(filter.excludeTags) ? filter.excludeTags : Array.isArray(filter.excludeExactTags) ? filter.excludeExactTags : [];
+        const tagValues = Array.isArray(filter.tagValues) ? filter.tagValues : [];
+        const tagValuesAny = Array.isArray(filter.tagValuesAny) ? filter.tagValuesAny : [];
+        if (categories.length && !itemHasAnyCategory(item, categories)) return false;
+        if (excludeCategories.length && itemHasAnyCategory(item, excludeCategories)) return false;
+        if (exactTags.length && !exactTags.every(tag => itemHasTag(item, tag))) return false;
+        if (excludeExactTags.length && excludeExactTags.some(tag => itemHasTag(item, tag))) return false;
+        if (tagValues.length && !tagValues.every(definition => itemHasTagValue(item, definition))) return false;
+        if (tagValuesAny.length && !tagValuesAny.some(definition => itemHasTagValue(item, definition))) return false;
+        return true;
+    }
+    function getCardVariant(item, CFG) {
+        const variants = Array.isArray(CFG?.cardVariants) ? CFG.cardVariants : [];
+        return variants.find(variant => variant && matchesConfiguredItemFilter(item, variant.filter)) || null;
+    }
+    function getCardClassName(config) {
+        if (!config) return "";
+        if (config.cardClassName) return config.cardClassName;
+        if (config.classes && typeof config.classes === "object") {
+            return config.classes.card || config.classes.cards || config.classes.item || "";
+        }
+        return "";
     }
     // ════════════════════════════════════════════════════════════════
     // RÈGLES DE MATCHING
@@ -594,6 +628,23 @@
         const currentCategories = new Set((currentItem.categories || []).map(normalize).filter(Boolean));
         if (!currentCategories.size) return false;
         return (candidateItem.categories || []).some(c => currentCategories.has(normalize(c)));
+    }
+    function getFieldValues(item, field) {
+        const path = String(field || "").trim();
+        if (!path) return [];
+        const value = path.split(".").reduce((current, key) => current == null ? undefined : current[key], item);
+        const values = Array.isArray(value) ? value : value == null ? [] : [ value ];
+        return values.flat(Infinity).map(value => cleanText(value)).filter(Boolean);
+    }
+    function itemFieldsMatch(candidateItem, currentItem, rule) {
+        const candidateField = rule?.candidateField || rule?.candidate?.field;
+        const currentField = rule?.currentField || rule?.current?.field;
+        const candidateValues = getFieldValues(candidateItem, candidateField).map(normalize).filter(Boolean);
+        const currentValues = new Set(getFieldValues(currentItem, currentField).map(normalize).filter(Boolean));
+        if (!candidateValues.length || !currentValues.size) return false;
+        const mode = String(rule?.mode || "any").toLowerCase();
+        if (mode === "all") return candidateValues.every(value => currentValues.has(value));
+        return candidateValues.some(value => currentValues.has(value));
     }
     function itemTitleMatchesCurrentTagValue(candidateItem, currentItem, prefixes) {
         const candidateTitleNorm = normalize(candidateItem.title || "");
@@ -680,6 +731,7 @@
         if (type === "includeExactTags") return itemHasAnyExactTag(candidateItem, rule.values || []);
         if (type === "excludeExactTags") return !itemHasAnyExactTag(candidateItem, rule.values || []);
         if (type === "titleMatchesCurrentTagValue") return itemTitleMatchesCurrentTagValue(candidateItem, currentItem, rule.prefixes || []);
+        if (type === "fieldMatch") return itemFieldsMatch(candidateItem, currentItem, rule);
         if (type === "nextCollectionItemOfCategory") {
             const next = findNextCollectionItemOfCategory(context?.allItems || [], currentItem, rule);
             if (!next) return false;
@@ -763,6 +815,31 @@
             }
         }
         if (c.requireImage && !getAssetUrl(candidateItem)) return false;
+        if (c.requireStarred && candidateItem.starred !== true) return false;
+        if (c.dateStatus) {
+            const definition = Array.isArray(c.dateStatus)
+                ? { include: c.dateStatus }
+                : typeof c.dateStatus === "object"
+                    ? c.dateStatus
+                    : { include: [ c.dateStatus ] };
+            const utils = getCollectionUtils();
+            const status = utils && typeof utils.getDateStatus === "function"
+                ? utils.getDateStatus(candidateItem, {
+                    prefix: definition.prefix || "Date",
+                    endOverridePrefix: definition.endOverridePrefix,
+                    timeZone: definition.timeZone
+                })
+                : null;
+            if (!status) {
+                if (definition.includeUndated !== true) return false;
+            } else {
+                const include = Array.isArray(definition.include) ? definition.include.map(normalize) : [];
+                const exclude = Array.isArray(definition.exclude) ? definition.exclude.map(normalize) : [];
+                const normalizedStatus = normalize(status);
+                if (include.length && !include.includes(normalizedStatus)) return false;
+                if (exclude.includes(normalizedStatus)) return false;
+            }
+        }
         if (c.excludeCurrentItem) {
             const curUrl = String(currentItem?.fullUrl || "").replace(/\/+$/, "") || "/";
             const itemUrl = String(candidateItem?.fullUrl || "").replace(/\/+$/, "") || "/";
@@ -836,7 +913,9 @@
     // ════════════════════════════════════════════════════════════════
     function applyFallbackFill(selectedItems, allItems, currentItem, selection, CFG) {
         const fallback = selection?.fallback || {};
-        const limit = Number(selection?.limit || selectedItems.length || 0);
+        const limit = selection?.limit === "all"
+            ? Infinity
+            : Number(selection?.limit || selectedItems.length || 0);
         if (!fallback.enabled || !fallback.fillToLimit || !limit) {
             return selectedItems.slice(0, limit || selectedItems.length);
         }
@@ -909,6 +988,7 @@
             'location',
             'displayIndex',
             'workflowState',
+            'starred',
             'startDate',
             'publishOn',
             'addedOn',
@@ -1248,8 +1328,8 @@
         }
         return [];
     }
-    function buildGroupedContent(item, CFG) {
-        const groups = Array.isArray(CFG.display?.groups) ? CFG.display.groups : [];
+    function buildGroupedContent(item, CFG, configuredGroups) {
+        const groups = Array.isArray(configuredGroups) ? configuredGroups : Array.isArray(CFG.display?.groups) ? CFG.display.groups : [];
         if (!groups.length) return null;
         const fragment = document.createDocumentFragment();
         let hasContent = false;
@@ -1482,10 +1562,19 @@
     function buildCard(item, CFG, extraClasses, currentItem, index) {
         const card = document.createElement("a");
         card.className = "cb-card rb-card";
-        String(CFG.classes?.card || CFG.classes?.cards || CFG.classes?.item || "").split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => card.classList.add(cls));
+        const variant = getCardVariant(item, CFG);
+        [ getCardClassName(CFG), getCardClassName(variant) ].filter(Boolean).join(" ").split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => card.classList.add(cls));
         const dateUtils = getCollectionUtils();
         if (dateUtils && typeof dateUtils.applyDateStatusClass === "function") {
-            dateUtils.applyDateStatusClass(card, item);
+            const dateStatus = CFG.selection?.constraints?.dateStatus;
+            const dateStatusOptions = dateStatus && typeof dateStatus === "object" && !Array.isArray(dateStatus)
+                ? {
+                    prefix: dateStatus.prefix || "Date",
+                    endOverridePrefix: dateStatus.endOverridePrefix,
+                    timeZone: dateStatus.timeZone
+                }
+                : undefined;
+            dateUtils.applyDateStatusClass(card, item, dateStatusOptions);
         }
         card.href = getItemLink(item) || CFG.sourceCollection.path + "/" + item.urlId;
         if (getLightboxOptions(CFG)) {
@@ -1506,8 +1595,11 @@
                 addClasses(card, "cb-card--current rb-card--current");
             }
         }
-        if (Array.isArray(CFG.display?.groups) && CFG.display.groups.length) {
-            const groupedContent = buildGroupedContent(item, CFG);
+        const configuredGroups = variant && Object.prototype.hasOwnProperty.call(variant, "groups")
+            ? variant.groups
+            : CFG.display?.groups;
+        if (Array.isArray(configuredGroups) && configuredGroups.length) {
+            const groupedContent = buildGroupedContent(item, CFG, configuredGroups);
             if (groupedContent) card.appendChild(groupedContent);
             return card;
         }
@@ -1643,8 +1735,16 @@
         }
         return required.every(cls => document.body.classList.contains(cls));
     }
-    function getInsertTarget(selector) {
-        return document.querySelector(selector || "");
+    function getInsertTarget(target) {
+        if (typeof target === "function") {
+            try {
+                return target() || null;
+            } catch (_) {
+                return null;
+            }
+        }
+        if (target && target.nodeType === 1) return target;
+        return document.querySelector(target || "");
     }
     function alreadyInjected(target, cfgKey) {
         return !!target.querySelector(`:scope > .rb-block[data-rb-key="${cfgKey}"]`);
@@ -1740,6 +1840,8 @@
                 constraints: {
                     requirePublished: true,
                     requireImage: true,
+                    requireStarred: false,
+                    dateStatus: null,
                     excludeCurrentItem: false
                 },
                 match: {
@@ -1934,7 +2036,9 @@ function computeFinalItems(allItems) {
     let result = sortItemsByRules(candidates, CFG.selection?.sort || []);
     result = uniqBy(result, i => String(i.fullUrl || i.title || ""));
 
-    const limit = Number(CFG.selection?.limit || CFG.display?.maxItems || result.length);
+    const limit = CFG.selection?.limit === "all"
+        ? Infinity
+        : Number(CFG.selection?.limit || CFG.display?.maxItems || result.length);
 
     if (limit > 0) result = result.slice(0, limit);
 
@@ -1942,7 +2046,9 @@ return result;
 }
 
 let finalItems = computeFinalItems(items);
-const limit = Number(CFG.selection?.limit || CFG.display?.maxItems || finalItems.length);
+const limit = CFG.selection?.limit === "all"
+    ? Infinity
+    : Number(CFG.selection?.limit || CFG.display?.maxItems || finalItems.length);
 
 while (
     limit > 0 &&
