@@ -30,6 +30,39 @@
   object-fit: cover;
 }
 
+:where(.cb-card__header),
+:where(.cb-card__body),
+:where(.cb-card__meta),
+:where(.cb-card__footer) {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+  padding: 0.8em 0 0.5em;
+}
+
+:where(.cb-footer) {
+  margin-top: 2rem;
+  text-align: center;
+}
+
+:where(.cb-load-more) {
+  appearance: none;
+  padding: 0.5em 2.5em;
+  border: 1px solid var(--paragraphMediumColor);
+  border-radius: 2em;
+  background: var(--siteBackgroundColor);
+  color: var(--paragraphMediumColor);
+  font: inherit;
+  font-size: 0.9em;
+  opacity: 0.6;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+:where(.cb-load-more):hover { opacity: 1; }
+:where(.cb-end-label) { font-size: 0.9em; opacity: 0.5; }
+:where(.cb-sentinel) { height: 1px; pointer-events: none; }
+
 
 /* ==========================================================================
    Query Block
@@ -664,15 +697,6 @@ body:where(.cb-panel-open).qb-panel-open { overflow: hidden; }
 
 :where(.cb-card__media).qb-card__media  { overflow: hidden; position: relative; }
 
-/* Groupes sémantiques */
-:where(.cb-card__header).qb-card__header,
-:where(.cb-card__body).qb-card__body,
-:where(.cb-card__meta).qb-card__meta,
-:where(.cb-card__footer).qb-card__footer {
-  display: flex; flex-direction: column;
-  gap: 0.4em; padding: 0.8em 0 0.5em;
-}
-
 /* Titre — typographie body Squarespace (overridable via classe custom) */
 :where(.cb-card__title).qb-card__title {
   font-family:    var(--body-font-font-family);
@@ -713,18 +737,6 @@ body:where(.cb-panel-open).qb-panel-open { overflow: hidden; }
    ───────────────────────────────────────────── */
 
 :where(.cb-counter).qb-counter   { font-size: 0.9em; opacity: 0.5; text-align: right; margin: 0.75rem 0 0; }
-:where(.cb-footer).qb-footer    { text-align: center; margin-top: 2rem; }
-:where(.cb-load-more).qb-load-more {
-  appearance: none;
-  border: 1px solid var(--paragraphMediumColor); background: var(--siteBackgroundColor);
-  color: var(--paragraphMediumColor); font: inherit; font-size: 0.9em;
-  padding: 0.5em 2.5em; border-radius: 2em; cursor: pointer;
-  opacity: 0.6; transition: opacity 0.2s ease;
-}
-:where(.cb-load-more).qb-load-more:hover { opacity: 1; }
-:where(.cb-end-label).qb-end-label { font-size: 0.9em; opacity: 0.5; }
-:where(.cb-sentinel).qb-sentinel  { height: 1px; pointer-events: none; }
-
 /* ─────────────────────────────────────────────
    BODY / GROUPE INLINE
    ───────────────────────────────────────────── */
@@ -778,7 +790,7 @@ body:where(.cb-panel-open).qb-panel-open { overflow: hidden; }
    ───────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
-  :where(.cb-card).qb-card, :where(.cb-card__img).qb-card__img, :where(.cb-filter-btn).qb-filter-btn, :where(.cb-tab-btn).qb-tab-btn, :where(.cb-load-more).qb-load-more { transition: none; }
+  :where(.cb-card).qb-card, :where(.cb-card__img).qb-card__img, :where(.cb-filter-btn).qb-filter-btn, :where(.cb-tab-btn).qb-tab-btn, :where(.cb-load-more) { transition: none; }
 }
 
 
@@ -1403,6 +1415,7 @@ body.sqs-edit-mode-active :where(.cb-block).lb-block {
 
 /* ── Load more ── */
 :where(.cb-footer).lb-footer {
+  margin-top: 0;
   padding: .875rem 1.25rem;
   border-top: 1px solid var(--tweak-line-block-line-color, rgba(0,0,0,.1));
   line-height: var(--body-font-line-height, 1.333);
