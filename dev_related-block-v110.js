@@ -537,6 +537,7 @@
             locationText: getItemLocationText(item),
             displayIndex: Number(item.displayIndex || 999999),
             starred: item.starred === true,
+            publishOn: Number(item.publishOn || 0),
             timestamp: getItemTimestamp(item),
             tagPrefixValues: tagPrefixValues,
             rawItem: item
@@ -639,8 +640,14 @@
     function itemFieldsMatch(candidateItem, currentItem, rule) {
         const candidateField = rule?.candidateField || rule?.candidate?.field;
         const currentField = rule?.currentField || rule?.current?.field;
-        const candidateValues = getFieldValues(candidateItem, candidateField).map(normalize).filter(Boolean);
-        const currentValues = new Set(getFieldValues(currentItem, currentField).map(normalize).filter(Boolean));
+        const candidatePrefix = rule?.candidatePrefix || rule?.candidate?.prefix;
+        const currentPrefix = rule?.currentPrefix || rule?.current?.prefix;
+        const candidateValues = (candidatePrefix
+            ? getTagValuesByPrefix(candidateItem, candidatePrefix)
+            : getFieldValues(candidateItem, candidateField)).map(normalize).filter(Boolean);
+        const currentValues = new Set((currentPrefix
+            ? getTagValuesByPrefix(currentItem, currentPrefix)
+            : getFieldValues(currentItem, currentField)).map(normalize).filter(Boolean));
         if (!candidateValues.length || !currentValues.size) return false;
         const mode = String(rule?.mode || "any").toLowerCase();
         if (mode === "all") return candidateValues.every(value => currentValues.has(value));
@@ -1194,6 +1201,26 @@
         el.textContent = cleanText(item.title || "");
         return el;
     }
+    function buildPublishDateElement(item, descriptor) {
+        const timestamp = Number(item.publishOn || item.rawItem?.publishOn || 0);
+        if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
+        const date = new Date(timestamp);
+        if (Number.isNaN(date.getTime())) return null;
+        descriptor = descriptor || {};
+        const locale = descriptor.locale || document.documentElement.lang || "en-GB";
+        const displayFormat = descriptor.displayFormat && typeof descriptor.displayFormat === "object"
+            ? descriptor.displayFormat
+            : { day: "numeric", month: "long", year: "numeric" };
+        const el = document.createElement("time");
+        el.className = "cb-card__publish-date rb-card__publish-date" + (descriptor.className ? " " + descriptor.className : "");
+        el.dateTime = date.toISOString();
+        try {
+            el.textContent = new Intl.DateTimeFormat(locale, displayFormat).format(date);
+        } catch (_) {
+            el.textContent = date.toLocaleDateString(locale);
+        }
+        return el;
+    }
     function buildExcerptElement(item, CFG, descriptor) {
         if (!item.excerpt) return null;
         descriptor = descriptor || {};
@@ -1313,6 +1340,10 @@
         }
         if (type === "title" && CFG.display?.showTitle) {
             return [ buildTitleElement(item) ];
+        }
+        if (type === "publishDate" || type === "publicationDate") {
+            const el = buildPublishDateElement(item, descriptor);
+            return el ? [ el ] : [];
         }
         if (type === "excerpt" && CFG.display?.showExcerpt) {
             const el = buildExcerptElement(item, CFG, descriptor);
@@ -1673,10 +1704,88 @@
         inner.innerHTML = "";
         const heading = buildHeadingElement(items, CFG, false);
         if (heading) inner.appendChild(heading);
-        inner.appendChild(buildList(items, CFG, currentItem));
+        const rawPagination = CFG.pagination || {};
+        const paginationMode = String(rawPagination.mode || "none").toLowerCase();
+        const pageSize = Math.max(1, Number(rawPagination.perPage || items.length || 1));
+        const loadMoreLabel = cleanText(rawPagination.loadMoreLabel || "View more");
+        const endLabel = rawPagination.endLabel === false ? "" : cleanText(rawPagination.endLabel || "");
+        const footer = document.createElement("div");
+        footer.className = "cb-footer rb-footer";
+        let page = 1;
+        let list = null;
+        let infiniteObserver = null;
+
+        inner.appendChild(footer);
+
+        function renderPage() {
+            if (infiniteObserver) {
+                infiniteObserver.disconnect();
+                infiniteObserver = null;
+            }
+
+            const visibleItems = paginationMode === "none"
+                ? items
+                : items.slice(0, page * pageSize);
+            if (list) {
+                const renderedCount = list.children.length;
+                const extraClasses = String(CFG.classes?.block || "").split(/\s+/).map(s => s.trim()).filter(Boolean);
+                visibleItems.slice(renderedCount).forEach((item, offset) => {
+                    list.appendChild(buildCard(item, CFG, extraClasses, currentItem, renderedCount + offset));
+                });
+                list.dataset.count = visibleItems.length;
+                list.classList.toggle("cb-grid--single", visibleItems.length === 1);
+                list.classList.toggle("rb-grid--single", visibleItems.length === 1);
+                list.classList.toggle("cb-grid--multiple", visibleItems.length > 1);
+                list.classList.toggle("rb-grid--multiple", visibleItems.length > 1);
+            } else {
+                const nextList = buildList(visibleItems, CFG, currentItem);
+                inner.insertBefore(nextList, footer);
+                list = nextList;
+            }
+            footer.innerHTML = "";
+
+            const hasMore = visibleItems.length < items.length;
+            if (hasMore && paginationMode === "load-more") {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "cb-load-more rb-load-more";
+                button.textContent = loadMoreLabel;
+                button.addEventListener("click", () => {
+                    page += 1;
+                    renderPage();
+                });
+                footer.appendChild(button);
+            } else if (hasMore && paginationMode === "infinite") {
+                const sentinel = document.createElement("div");
+                sentinel.className = "cb-sentinel rb-sentinel";
+                sentinel.setAttribute("aria-hidden", "true");
+                footer.appendChild(sentinel);
+                if ("IntersectionObserver" in window) {
+                    infiniteObserver = new IntersectionObserver(entries => {
+                        if (!entries.some(entry => entry.isIntersecting)) return;
+                        page += 1;
+                        renderPage();
+                    }, { rootMargin: "400px 0px" });
+                    infiniteObserver.observe(sentinel);
+                } else {
+                    page += 1;
+                    renderPage();
+                    return;
+                }
+            } else if (!hasMore && endLabel) {
+                const label = document.createElement("div");
+                label.className = "cb-end-label rb-end-label";
+                label.textContent = endLabel;
+                footer.appendChild(label);
+            }
+
+            setupLightbox(section, CFG, visibleItems);
+            applyStateClasses(section);
+        }
+
+        renderPage();
         section.classList.remove("cb-block--loading", "rb-block--loading");
         section.classList.add("cb-block--ready", "rb-block--ready");
-        setupLightbox(section, CFG, items);
         applyStateClasses(section);
     }
     function replaceBlockWithEmptyState(section, CFG) {
@@ -1824,6 +1933,12 @@
                 order: [ "meta", "title", "excerpt", "location" ],
                 tagPrefixFields: [],
                 groups: []
+            },
+            pagination: {
+                mode: "none",
+                perPage: 12,
+                loadMoreLabel: "View more",
+                endLabel: ""
             },
             loading: {
                 hideLoader: false
