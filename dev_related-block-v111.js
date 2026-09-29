@@ -1166,11 +1166,11 @@
         if (utils && typeof utils.buildCategories === "function") {
             return utils.buildCategories(item, {
                 prefix: "rb-card",
-                className: "cb-card__meta rb-card__meta cb-card__categories rb-card__categories"
+                className: "cb-card__categories rb-card__categories"
             });
         }
         const meta = document.createElement("div");
-        meta.className = "cb-card__meta rb-card__meta cb-card__categories rb-card__categories";
+        meta.className = "cb-card__categories rb-card__categories";
         cats.forEach(cat => {
             const span = document.createElement("span");
             const slug = slugifyToken(cat);
@@ -1448,7 +1448,7 @@
     function applyStateClasses(section) {
         const toRemove = [ "cb-block--has-heading", "rb-block--has-heading", "cb-block--has-image", "rb-block--has-image", "cb-block--has-title", "rb-block--has-title", "cb-block--has-meta", "rb-block--has-meta", "cb-block--has-excerpt", "rb-block--has-excerpt", "cb-block--has-location", "rb-block--has-location", "cb-block--has-tag-prefix", "rb-block--has-tag-prefix", "cb-block--has-heading-cta", "rb-block--has-heading-cta", "cb-block--single-item", "rb-block--single-item", "cb-block--multiple-items", "rb-block--multiple-items", "cb-block--empty", "rb-block--empty" ];
         toRemove.forEach(cls => section.classList.remove(cls));
-        const checks = [ [ ".rb-heading", "cb-block--has-heading rb-block--has-heading" ], [ ".rb-heading__cta", "cb-block--has-heading-cta rb-block--has-heading-cta" ], [ ".rb-card__media", "cb-block--has-image rb-block--has-image" ], [ ".rb-card__title", "cb-block--has-title rb-block--has-title" ], [ ".rb-card__meta", "cb-block--has-meta rb-block--has-meta" ], [ ".rb-card__excerpt", "cb-block--has-excerpt rb-block--has-excerpt" ], [ ".rb-card__location", "cb-block--has-location rb-block--has-location" ], [ ".rb-card__tag-field", "cb-block--has-tag-prefix rb-block--has-tag-prefix" ], [ ".rb-empty", "cb-block--empty rb-block--empty" ] ];
+        const checks = [ [ ".rb-heading", "cb-block--has-heading rb-block--has-heading" ], [ ".rb-heading__cta", "cb-block--has-heading-cta rb-block--has-heading-cta" ], [ ".rb-card__media", "cb-block--has-image rb-block--has-image" ], [ ".rb-card__title", "cb-block--has-title rb-block--has-title" ], [ ".rb-card__meta, .rb-card__categories", "cb-block--has-meta rb-block--has-meta" ], [ ".rb-card__excerpt", "cb-block--has-excerpt rb-block--has-excerpt" ], [ ".rb-card__location", "cb-block--has-location rb-block--has-location" ], [ ".rb-card__tag-field", "cb-block--has-tag-prefix rb-block--has-tag-prefix" ], [ ".rb-empty", "cb-block--empty rb-block--empty" ] ];
         checks.forEach(([ sel, cls ]) => {
             if (section.querySelector(sel)) addClasses(section, cls);
         });
