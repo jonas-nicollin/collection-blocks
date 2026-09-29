@@ -1377,10 +1377,8 @@ body.sqs-edit-mode-active :where(.cb-block).lb-block {
 :where(.cb-card__body).lb-card__body {
   display: flex;
   flex-direction: column;
-  gap: .25rem;
   justify-content: flex-start;
   position: relative;
-  /* Pas de padding par défaut — à définir dans le CSS site */
 }
 
 /* Mode list : padding nécessaire pour l'alignement */
@@ -1388,10 +1386,7 @@ body.sqs-edit-mode-active :where(.cb-block).lb-block {
   padding: .75rem 1rem;
 }
 
-/* Mode grid : pas de padding (gap sur la card gère l'espace) */
-:where(.cb-block__inner--grid).lb-block__inner--grid :where(.cb-card__body).lb-card__body {
-  padding: 0;
-}
+/* Mode grid : hérite des espacements canoniques de .cb-card__body. */
 
 :where(.cb-card__title).lb-card__title { line-height: var(--body-font-line-height, 1.333); }
 :where(.cb-card__tag-field--lieu).lb-card__tag-field--lieu { display: flex; align-items: center; gap: .3rem; line-height: var(--body-font-line-height, 1.333); }
