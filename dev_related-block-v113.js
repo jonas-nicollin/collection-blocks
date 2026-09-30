@@ -539,7 +539,9 @@
             excerpt: getItemExcerpt(item, getExcerptMaxLength(CFG)),
             excerptRaw: item.excerpt || item.body || "",
             locationText: getItemLocationText(item),
-            displayIndex: Number.isFinite(Number(item.displayIndex)) ? Number(item.displayIndex) : 999999,
+            // Preserve the historical Related Block collection-sort semantics.
+            // Product ordering uses categoryOrder and therefore stays fully opt-in.
+            displayIndex: Number(item.displayIndex || 999999),
             starred: item.starred === true,
             publishOn: Number(item.publishOn || 0),
             timestamp: getItemTimestamp(item),
