@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.11';
+  var VERSION = '0.12';
   var STORE_KEY_PREFIX = 'collection-blocks::v0.6::';
 
   var memoryCache = new Map();
@@ -18,7 +18,10 @@
     'urlId',
     'assetUrl',
     'mediaFocalPoint',
+    'media',
     'categories',
+    'categoryOrder',
+    'sourceType',
     'tags',
     'excerpt',
     'location',
