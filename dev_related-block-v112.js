@@ -524,18 +524,22 @@
             };
         }).filter(Boolean);
         return {
+            id: item.id || "",
             title: cleanText(item.title || ""),
             urlId: item.urlId || "",
             fullUrl: item.fullUrl || "",
             sourceUrl: item.sourceUrl || "",
             assetUrl: getAssetUrl(item),
             mediaFocalPoint: item.mediaFocalPoint || null,
+            media: Array.isArray(item.media) ? item.media : [],
             categories: Array.isArray(item.categories) ? item.categories.map(c => cleanText(c)).filter(Boolean) : [],
+            categoryOrder: item.categoryOrder && typeof item.categoryOrder === "object" ? item.categoryOrder : {},
+            sourceType: item.sourceType || "",
             tags: Array.isArray(item.tags) ? item.tags.map(t => cleanText(t)).filter(Boolean) : [],
             excerpt: getItemExcerpt(item, getExcerptMaxLength(CFG)),
             excerptRaw: item.excerpt || item.body || "",
             locationText: getItemLocationText(item),
-            displayIndex: Number(item.displayIndex || 999999),
+            displayIndex: Number.isFinite(Number(item.displayIndex)) ? Number(item.displayIndex) : 999999,
             starred: item.starred === true,
             publishOn: Number(item.publishOn || 0),
             timestamp: getItemTimestamp(item),
@@ -868,7 +872,16 @@
         }
         return clone;
     }
-    function sortItemsByRules(items, sortRules) {
+    function getCategoryOrderForCurrentItem(item, currentItem) {
+        const orders = item?.categoryOrder;
+        const currentTitle = normalize(currentItem?.title || "");
+        if (!orders || typeof orders !== "object" || !currentTitle) return Infinity;
+
+        const matchingEntry = Object.entries(orders).find(([category]) => normalize(category) === currentTitle);
+        const value = matchingEntry ? Number(matchingEntry[1]) : Infinity;
+        return Number.isFinite(value) ? value : Infinity;
+    }
+    function sortItemsByRules(items, sortRules, currentItem) {
         const list = items.slice();
         const rules = Array.isArray(sortRules) ? sortRules : [];
         if (!rules.length) return list;
@@ -893,6 +906,10 @@
                 if (type === "collection") {
                     const diff = Number(a.displayIndex ?? 999999) - Number(b.displayIndex ?? 999999);
                     if (diff !== 0) return diff * dir;
+                }
+                if (type === "categoryOrder") {
+                    const diff = getCategoryOrderForCurrentItem(a, currentItem) - getCategoryOrderForCurrentItem(b, currentItem);
+                    if (diff !== 0 && Number.isFinite(diff)) return diff * dir;
                 }
                 // Tri par valeur ISO d'un tag prefixé
                 if (type === "tagPrefix" && rule.prefix) {
@@ -949,7 +966,7 @@
         pool = uniqBy(pool, i => String(i.fullUrl || i.title || ""));
         pool = sortItemsByRules(pool, fallback.sort || [ {
             type: "random"
-        } ]);
+        } ], currentItem);
         const result = selectedItems.slice();
         for (const item of pool) {
             if (result.length >= limit) break;
@@ -989,7 +1006,10 @@
             'urlId',
             'assetUrl',
             'mediaFocalPoint',
+            'media',
             'categories',
+            'categoryOrder',
+            'sourceType',
             'tags',
             'excerpt',
             'location',
@@ -1610,6 +1630,14 @@
             dateUtils.applyDateStatusClass(card, item, dateStatusOptions);
         }
         card.href = getItemLink(item) || CFG.sourceCollection.path + "/" + item.urlId;
+        if (item.id) card.dataset.itemId = String(item.id);
+        if (Array.isArray(item.media) && item.media.length) {
+            card.dataset.cbMedia = JSON.stringify(item.media.map(media => ({
+                assetUrl: media?.assetUrl || null,
+                mediaFocalPoint: media?.mediaFocalPoint || null,
+                title: media?.title || media?.filename || ""
+            })).filter(media => media.assetUrl));
+        }
         if (getLightboxOptions(CFG)) {
             card.dataset.rbLightboxKey = getLightboxItemKey(item, index);
             card.setAttribute("aria-haspopup", "dialog");
@@ -2150,7 +2178,7 @@ function computeFinalItems(allItems) {
         });
     });
 
-    let result = sortItemsByRules(candidates, CFG.selection?.sort || []);
+    let result = sortItemsByRules(candidates, CFG.selection?.sort || [], currentItem);
     result = uniqBy(result, i => String(i.fullUrl || i.title || ""));
 
     const limit = CFG.selection?.limit === "all"
