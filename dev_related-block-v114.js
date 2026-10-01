@@ -913,20 +913,53 @@
                     const diff = getCategoryOrderForCurrentItem(a, currentItem) - getCategoryOrderForCurrentItem(b, currentItem);
                     if (diff !== 0 && Number.isFinite(diff)) return diff * dir;
                 }
-                // Tri par valeur ISO d'un tag prefixé
+                // Tri par valeur d'un tag prefixé.
+                // valueType: 'date' | 'number' | 'text' | 'auto' (défaut).
+                // Le mode auto conserve les tris historiques numériques/ISO,
+                // puis utilise un tri textuel pour les autres valeurs.
                 if (type === "tagPrefix" && rule.prefix) {
                     const prefixNorm = normalize(String(rule.prefix).replace(/:$/, ""));
                     const getTagSortVal = item => {
                         const vals = getTagValuesByPrefix(item, prefixNorm);
-                        if (!vals.length) return Infinity;
+                        if (!vals.length) return { missing: true, kind: "text", value: "" };
                         const raw = String(vals[0]).trim();
-                        // Valeur purement numérique (ex: Numéro: 4) → tri numérique
+                        const valueType = normalize(rule.valueType || rule.dataType || "auto");
+
+                        if (valueType === "text" || valueType === "string") {
+                            return { missing: false, kind: "text", value: normalize(raw) };
+                        }
+
                         const num = Number(raw);
-                        if (!isNaN(num) && raw !== "") return num;
-                        // Sinon tenter ISO timestamp
-                        return getISOTimestamp(raw);
+                        if (valueType === "number" || valueType === "numeric") {
+                            return Number.isFinite(num)
+                                ? { missing: false, kind: "number", value: num }
+                                : { missing: true, kind: "number", value: Infinity };
+                        }
+
+                        const timestamp = getISOTimestamp(raw);
+                        if (valueType === "date" || valueType === "iso") {
+                            return Number.isFinite(timestamp)
+                                ? { missing: false, kind: "number", value: timestamp }
+                                : { missing: true, kind: "number", value: Infinity };
+                        }
+
+                        // Auto : nombre, puis ISO, puis texte.
+                        if (Number.isFinite(num) && raw !== "") {
+                            return { missing: false, kind: "number", value: num };
+                        }
+                        if (Number.isFinite(timestamp)) {
+                            return { missing: false, kind: "number", value: timestamp };
+                        }
+                        return { missing: false, kind: "text", value: normalize(raw) };
                     };
-                    const diff = getTagSortVal(a) - getTagSortVal(b);
+                    const av = getTagSortVal(a);
+                    const bv = getTagSortVal(b);
+                    if (av.missing !== bv.missing) return av.missing ? 1 : -1;
+                    if (av.missing && bv.missing) continue;
+
+                    const diff = av.kind === "number" && bv.kind === "number"
+                        ? av.value - bv.value
+                        : String(av.value).localeCompare(String(bv.value));
                     if (diff !== 0) return diff * dir;
                 }
             }
