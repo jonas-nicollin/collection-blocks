@@ -1396,6 +1396,17 @@
         if (type === "title" && CFG.display?.showTitle) {
             return [ buildTitleElement(item) ];
         }
+        if (type === "text" || type === "staticText") {
+            const value = descriptor.text != null ? descriptor.text : descriptor.value;
+            if (value == null || String(value) === "") return [];
+            const allowedTags = new Set([ "span", "p", "div", "small", "strong", "em" ]);
+            const requestedTag = String(descriptor.tag || "span").toLowerCase();
+            const el = document.createElement(allowedTags.has(requestedTag) ? requestedTag : "span");
+            addClasses(el, "cb-card__text rb-card__text");
+            String(descriptor.className || "").split(/\s+/).map(cls => cls.trim()).filter(Boolean).forEach(cls => el.classList.add(cls));
+            el.textContent = String(value);
+            return [ el ];
+        }
         if (type === "publishDate" || type === "publicationDate") {
             const el = buildPublishDateElement(item, descriptor);
             return el ? [ el ] : [];
