@@ -718,13 +718,42 @@ async function fetchPageJson(settings) {
 
   function getLocationValues(itemData, block) {
     const source = itemData?.location || {};
-    const values = [
-      source.addressTitle,
-      source.addressLine1,
-      source.addressLine2,
-      source.addressCountry
-    ].map(cleanText).filter(Boolean);
-    if (values.length) return values;
+    const tagValues = block.tagPrefix
+      ? normalizeBlockValues(
+          Array.isArray(itemData?.tags) ? itemData.tags : [],
+          { allowedPrefixSuffix: block.tagPrefix }
+        )
+      : [];
+
+    const defaultFields = [
+      'addressTitle',
+      'addressLine1',
+      'addressLine2',
+      'addressCountry'
+    ];
+    const fields = Array.isArray(block.fields) && block.fields.length
+      ? block.fields
+      : defaultFields;
+
+    const combineCountry = block.countryDisplay === 'line2' ||
+      (block.countryDisplay === 'line2-if-no-tag' && !tagValues.length);
+
+    const values = [];
+    fields.forEach(field => {
+      if (field === 'addressCountry' && combineCountry && fields.includes('addressLine2')) return;
+      if (field === 'addressLine2' && combineCountry) {
+        const line2 = cleanText(source.addressLine2);
+        const country = cleanText(source.addressCountry);
+        const combined = [line2, country].filter(Boolean).join(', ');
+        if (combined) values.push(combined);
+        return;
+      }
+      const value = cleanText(source[field]);
+      if (value) values.push(value);
+    });
+
+    const combinedValues = uniq([...tagValues, ...values]);
+    if (combinedValues.length) return combinedValues;
     if (block.useGoogleMapsLink && getGoogleMapsUrl(itemData)) {
       return [block.googleMapsLabel || 'Voir sur la carte'];
     }
