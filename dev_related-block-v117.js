@@ -1045,6 +1045,7 @@
             'categories',
             'categoryOrder',
             'sourceType',
+            'price',
             'tags',
             'excerpt',
             'location',
