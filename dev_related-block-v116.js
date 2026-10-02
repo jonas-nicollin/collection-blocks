@@ -1256,6 +1256,37 @@
         el.textContent = cleanText(item.title || "");
         return el;
     }
+    function buildPriceElement(item, descriptor) {
+        descriptor = descriptor || {};
+        const price = item?.price || item?.rawItem?.price || null;
+        const currency = cleanText(price?.currency || descriptor.currency || "").toUpperCase();
+        const min = Number(price?.min);
+        const max = Number(price?.max);
+        if (!currency || !Number.isFinite(min)) return null;
+        const locale = descriptor.locale || document.documentElement.lang || "en-CH";
+        const options = {
+            style: "currency",
+            currency,
+            currencyDisplay: descriptor.currencyDisplay || "code",
+            minimumFractionDigits: descriptor.minimumFractionDigits ?? 2,
+            maximumFractionDigits: descriptor.maximumFractionDigits ?? 2
+        };
+        let format;
+        try {
+            format = new Intl.NumberFormat(locale, options);
+        } catch (_) {
+            format = new Intl.NumberFormat("en-CH", options);
+        }
+        const formattedMin = format.format(min);
+        const hasRange = Number.isFinite(max) && max !== min;
+        const el = document.createElement(descriptor.tag || "div");
+        addClasses(el, "cb-card__price rb-card__price");
+        String(descriptor.className || "").split(/\s+/).map(cls => cls.trim()).filter(Boolean).forEach(cls => el.classList.add(cls));
+        el.textContent = hasRange
+            ? `${formattedMin}${descriptor.rangeSeparator || "–"}${format.format(max)}`
+            : formattedMin;
+        return el;
+    }
     function buildPublishDateElement(item, descriptor) {
         const timestamp = Number(item.publishOn || item.rawItem?.publishOn || 0);
         if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
@@ -1395,6 +1426,10 @@
         }
         if (type === "title" && CFG.display?.showTitle) {
             return [ buildTitleElement(item) ];
+        }
+        if (type === "price") {
+            const el = buildPriceElement(item, descriptor);
+            return el ? [ el ] : [];
         }
         if (type === "text" || type === "staticText") {
             const value = descriptor.text != null ? descriptor.text : descriptor.value;
