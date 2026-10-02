@@ -810,13 +810,40 @@ var isPriority = options.priority === true || imgIndex < 3;
 
     if (type === 'categories') {
       if (!item.categories.length) return null;
+      var categoryDescriptor = def && typeof def === 'object' ? def : {};
+      var categorySeparator = categoryDescriptor.separator == null
+        ? ''
+        : String(categoryDescriptor.separator);
       var utilsCats = getCollectionUtils();
       if (utilsCats && typeof utilsCats.buildCategories === 'function') {
-        return utilsCats.buildCategories(item, { prefix: 'qb-card' });
+        return utilsCats.buildCategories(item, {
+          prefix: 'qb-card',
+          className: categoryDescriptor.className,
+          itemClassName: categoryDescriptor.itemClassName,
+          separator: categorySeparator,
+          separatorClassName: categoryDescriptor.separatorClassName
+        });
       }
 
-      var w = el('div', { class: qCardClass('cb-card__categories', 'qb-card__categories') });
-      item.categories.forEach(function(c) {
+      var w = el('div', {
+        class: qCardClass(
+          'cb-card__categories' + (categorySeparator ? ' cb-card__categories--separated' : ''),
+          'qb-card__categories' + (categorySeparator ? ' qb-card__categories--separated' : '')
+        )
+      });
+      item.categories.forEach(function(c, categoryIndex) {
+        if (categorySeparator && categoryIndex > 0) {
+          var separatorNode = el('span', {
+            class: qCardClass(
+              'cb-card__category-separator',
+              'qb-card__category-separator'
+            ),
+            'aria-hidden': 'true'
+          });
+          separatorNode.textContent = categorySeparator;
+          w.appendChild(separatorNode);
+        }
+
         var catSlug = slugify(c);
         var s = el('span', {
           class: qCardClass(
@@ -3680,7 +3707,9 @@ if (canAppendIncrementally) {
   btn.style.display = 'none';
   footer.appendChild(buildLoader(false));
 
-  currentPage++;
+  currentPage = pag.revealAll === true
+    ? Number.MAX_SAFE_INTEGER
+    : currentPage + 1;
 
   await loadNextRemotePage();
 
@@ -3804,5 +3833,3 @@ function scheduleConfig(cfg) {
   }
 
 })();
-
-
