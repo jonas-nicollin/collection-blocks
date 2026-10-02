@@ -427,6 +427,9 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
       excerpt:      truncate(raw.excerpt || raw.body || '', 160, { preserveLineBreaks: true }),
       excerptRaw:   raw.excerpt || raw.body || '',
       location:     loc ? cleanHTML(loc.addressTitle || loc.addressLine1 || '') : '',
+      price:        raw.price && typeof raw.price === 'object'
+        ? Object.assign({}, raw.price)
+        : null,
       displayIndex: Number(raw.displayIndex != null ? raw.displayIndex : 999999),
       timestamp:    Number(raw.startDate || raw.publishOn || raw.addedOn || raw.updatedOn || 0),
     };
@@ -881,6 +884,63 @@ var isPriority = options.priority === true || imgIndex < 3;
 
       t.textContent = item.title;
       return t;
+    }
+
+    if (type === 'price') {
+      var priceDescriptor = def && typeof def === 'object' ? def : {};
+      var price = item && item.price;
+      var currency = cleanHTML(
+        (price && price.currency) || priceDescriptor.currency || ''
+      ).toUpperCase();
+      var min = Number(price && price.min);
+      var max = Number(price && price.max);
+
+      if (!currency || !Number.isFinite(min)) return null;
+
+      var priceLocale = priceDescriptor.locale ||
+        (document.documentElement && document.documentElement.lang) ||
+        'en-CH';
+      var numberOptions = {
+        minimumFractionDigits: priceDescriptor.minimumFractionDigits != null
+          ? priceDescriptor.minimumFractionDigits
+          : 2,
+        maximumFractionDigits: priceDescriptor.maximumFractionDigits != null
+          ? priceDescriptor.maximumFractionDigits
+          : 2
+      };
+      var currencyOptions = Object.assign({}, numberOptions, {
+        style: 'currency',
+        currency: currency,
+        currencyDisplay: priceDescriptor.currencyDisplay || 'code'
+      });
+      var currencyFormatter;
+      var numberFormatter;
+
+      try {
+        currencyFormatter = new Intl.NumberFormat(priceLocale, currencyOptions);
+        numberFormatter = new Intl.NumberFormat(priceLocale, numberOptions);
+      } catch (_) {
+        currencyFormatter = new Intl.NumberFormat('en-CH', currencyOptions);
+        numberFormatter = new Intl.NumberFormat('en-CH', numberOptions);
+      }
+
+      var formattedMin = currencyFormatter.format(min);
+      var hasRange = Number.isFinite(max) && max !== min;
+      var formattedMax = hasRange
+        ? (priceDescriptor.collapseCurrencyRange === true
+          ? numberFormatter.format(max)
+          : currencyFormatter.format(max))
+        : '';
+      var priceEl = el(priceDescriptor.tag || 'div', {
+        class: qCardClass('cb-card__price', 'qb-card__price') +
+          (priceDescriptor.className ? ' ' + priceDescriptor.className : '')
+      });
+
+      priceEl.textContent = hasRange
+        ? formattedMin + (priceDescriptor.rangeSeparator || '\u2013') + formattedMax
+        : formattedMin;
+
+      return priceEl;
     }
 
     if (type === 'excerpt') {
