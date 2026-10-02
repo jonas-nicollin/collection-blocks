@@ -1,8 +1,8 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.12';
-  var STORE_KEY_PREFIX = 'collection-blocks::v0.6::';
+  var VERSION = '0.13';
+  var STORE_KEY_PREFIX = 'collection-blocks::v0.7::';
 
   var memoryCache = new Map();
   var pendingFetches = new Map();
@@ -22,6 +22,7 @@
     'categories',
     'categoryOrder',
     'sourceType',
+    'price',
     'tags',
     'excerpt',
     'location',
