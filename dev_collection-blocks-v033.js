@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.16';
+  var VERSION = '0.17';
   var STORE_KEY_PREFIX = 'collection-blocks::v0.7::';
 
   var memoryCache = new Map();
@@ -1271,8 +1271,84 @@
             return compact12HourRange(compact12HourTime(d1), compact12HourTime(d2));
           }
 
-          if (format === 'long-time-12h' || format === 'long-time-year-12h') {
-            var includeLongYear = format === 'long-time-year-12h';
+          if (format === 'long-time-year-12h' || format === 'long-time-year') {
+            var compactUses12Hour = format === 'long-time-year-12h';
+            var compactDt1 = new Date(d1.year, d1.month, d1.day, d1.hour || 0, d1.min || 0);
+            var compactDt2 = new Date(d2.year, d2.month, d2.day, d2.hour || 0, d2.min || 0);
+
+            function compactLongRangeTime(point, date) {
+              if (point.hour === null) return '';
+
+              if (compactUses12Hour) {
+                var compactTime = compact12HourTime(point);
+                return compactTime ? compactTime.clock + compactTime.period : '';
+              }
+
+              return date.toLocaleTimeString(loc, Object.assign({
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+              }, tzOpt));
+            }
+
+            function compactLongRangeEndpoint(point, date, includeMonth, includeYear) {
+              var label;
+
+              if (!includeMonth) {
+                var weekdayLabel = capitalize(date.toLocaleDateString(loc, Object.assign({
+                  weekday: 'long'
+                }, tzOpt)));
+                var dayLabel = date.toLocaleDateString(loc, Object.assign({
+                  day: 'numeric'
+                }, tzOpt));
+                label = weekdayLabel + ', ' + dayLabel;
+              } else {
+                var dateOptions = {
+                  weekday: 'long',
+                  day: 'numeric',
+                  month: 'long'
+                };
+                if (includeYear) dateOptions.year = 'numeric';
+                label = capitalize(date.toLocaleDateString(
+                  loc,
+                  Object.assign(dateOptions, tzOpt)
+                ));
+              }
+
+              var time = compactLongRangeTime(point, date);
+              return time ? label + ', ' + time : label;
+            }
+
+            if (sameDay) {
+              var compactDate = longDateLabel(compactDt1, loc, tzOpt, true);
+              var compactStartTime = compactLongRangeTime(d1, compactDt1);
+              var compactEndTime = compactLongRangeTime(d2, compactDt2);
+              var compactTimeRange = compactStartTime && compactEndTime
+                ? compactStartTime + '\u2013' + compactEndTime
+                : compactStartTime || compactEndTime;
+
+              return compactDate + (compactTimeRange ? ', ' + compactTimeRange : '');
+            }
+
+            if (d1.year === d2.year && d1.month === d2.month) {
+              return compactLongRangeEndpoint(d1, compactDt1, false, false) +
+                '\u2013' +
+                compactLongRangeEndpoint(d2, compactDt2, true, true);
+            }
+
+            if (d1.year === d2.year) {
+              return compactLongRangeEndpoint(d1, compactDt1, true, false) +
+                '\u2013' +
+                compactLongRangeEndpoint(d2, compactDt2, true, true);
+            }
+
+            return compactLongRangeEndpoint(d1, compactDt1, true, true) +
+              '\u2013' +
+              compactLongRangeEndpoint(d2, compactDt2, true, true);
+          }
+
+          if (format === 'long-time-12h') {
+            var includeLongYear = false;
             var longDt1 = new Date(d1.year, d1.month, d1.day, d1.hour || 0, d1.min || 0);
             var longDt2 = new Date(d2.year, d2.month, d2.day, d2.hour || 0, d2.min || 0);
             var longTime1 = compact12HourTime(d1);
