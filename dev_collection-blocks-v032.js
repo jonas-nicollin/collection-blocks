@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.13';
+  var VERSION = '0.16';
   var STORE_KEY_PREFIX = 'collection-blocks::v0.7::';
 
   var memoryCache = new Map();
@@ -1149,14 +1149,23 @@
       if (!occurrence) return;
 
       hasValidDate = true;
-      var occurrenceEndTimestamp = temporalPointTimestamp(occurrence, timeZone, true);
+      var occurrenceStartTimestamp = temporalPointTimestamp(occurrence, timeZone, false);
+      var occurrenceEndTimestamp = temporalPointTimestamp(
+        occurrence,
+        timeZone,
+        !occurrence.hasTime
+      );
       if (
         latestBaseEndTimestamp === null ||
         occurrenceEndTimestamp > latestBaseEndTimestamp
       ) {
         latestBaseEndTimestamp = occurrenceEndTimestamp;
       }
-      if (now <= occurrenceEndTimestamp) hasFutureDate = true;
+      if (now >= occurrenceStartTimestamp && now <= occurrenceEndTimestamp) {
+        hasCurrentRange = true;
+      } else if (now < occurrenceStartTimestamp) {
+        hasFutureDate = true;
+      }
     });
 
     if (
@@ -1225,16 +1234,18 @@
     return start.clock + start.period + '\u2013' + end.clock + end.period;
   }
 
-  function longDateLabel(date, locale, timeZoneOptions) {
-    return capitalize(date.toLocaleDateString(locale, Object.assign({
+  function longDateLabel(date, locale, timeZoneOptions, includeYear) {
+    var options = {
       weekday: 'long',
       month: 'long',
       day: 'numeric'
-    }, timeZoneOptions)));
+    };
+    if (includeYear) options.year = 'numeric';
+    return capitalize(date.toLocaleDateString(locale, Object.assign(options, timeZoneOptions)));
   }
 
-  function longTime12HourEndpoint(point, date, locale, timeZoneOptions) {
-    var dateLabel = longDateLabel(date, locale, timeZoneOptions);
+  function longTime12HourEndpoint(point, date, locale, timeZoneOptions, includeYear) {
+    var dateLabel = longDateLabel(date, locale, timeZoneOptions, includeYear);
     var time = compact12HourTime(point);
     return time ? dateLabel + ', ' + time.clock + time.period : dateLabel;
   }
@@ -1260,24 +1271,26 @@
             return compact12HourRange(compact12HourTime(d1), compact12HourTime(d2));
           }
 
-          if (format === 'long-time-12h') {
+          if (format === 'long-time-12h' || format === 'long-time-year-12h') {
+            var includeLongYear = format === 'long-time-year-12h';
             var longDt1 = new Date(d1.year, d1.month, d1.day, d1.hour || 0, d1.min || 0);
             var longDt2 = new Date(d2.year, d2.month, d2.day, d2.hour || 0, d2.min || 0);
             var longTime1 = compact12HourTime(d1);
             var longTime2 = compact12HourTime(d2);
 
             if (sameDay) {
-              var longDate = longDateLabel(longDt1, loc, tzOpt);
+              var longDate = longDateLabel(longDt1, loc, tzOpt, includeLongYear);
               var longTimeRange = compact12HourRange(longTime1, longTime2);
               return longDate + (longTimeRange ? ', ' + longTimeRange : '');
             }
 
-            return longTime12HourEndpoint(d1, longDt1, loc, tzOpt) +
+            return longTime12HourEndpoint(d1, longDt1, loc, tzOpt, includeLongYear) +
               '\u2013' +
-              longTime12HourEndpoint(d2, longDt2, loc, tzOpt);
+              longTime12HourEndpoint(d2, longDt2, loc, tzOpt, includeLongYear);
           }
 
           var formatIncludesTime = !format || format === 'datetime' || format === 'short-time' || format === 'time' ||
+            format === 'long-time-year' ||
             (typeof format === 'object' && (format.hour != null || format.minute != null));
           var hasRangeTime = d1.hour !== null || d2.hour !== null;
 
@@ -1360,8 +1373,21 @@
         return compactTime ? compactTime.clock + compactTime.period : '';
       }
 
-      if (format === 'long-time-12h') {
-        return longTime12HourEndpoint(d, dt, loc, tzOpt);
+      if (format === 'long-time-12h' || format === 'long-time-year-12h') {
+        return longTime12HourEndpoint(d, dt, loc, tzOpt, format === 'long-time-year-12h');
+      }
+
+      if (format === 'long-time-year') {
+        var longDate24 = longDateLabel(dt, loc, tzOpt, true);
+        if (d.hour === null) return longDate24;
+
+        var longTime24 = dt.toLocaleTimeString(loc, Object.assign({
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        }, tzOpt));
+
+        return longDate24 + ', ' + longTime24;
       }
 
       if (format === 'time') {
@@ -1476,7 +1502,11 @@
       var dayKey = isoDayKey(parsed);
       var useTimeOnly = shouldCompact && parsed && parsed.hour !== null && dayKey && dayKey === previousDay;
       var formatted = useTimeOnly
-        ? formatISOTag(raw, format === 'long-time-12h' ? 'time-12h' : 'time', locale)
+        ? formatISOTag(
+            raw,
+            format === 'long-time-12h' || format === 'long-time-year-12h' ? 'time-12h' : 'time',
+            locale
+          )
         : formatISOTag(raw, format, locale);
 
       previousDay = parsed && dayKey ? dayKey : '';
@@ -1740,11 +1770,28 @@
     if (!cats.length) return null;
 
     var prefix = options.prefix || 'cb-card';
+    var separator = options.separator == null ? '' : String(options.separator);
     var wrap = createEl(options.tag || 'div', {
-      class: classNames(cardClass('categories', prefix), options.className)
+      class: classNames(
+        cardClass('categories', prefix),
+        separator ? cardClass('categories--separated', prefix) : '',
+        options.className
+      )
     });
 
-    cats.forEach(function(cat) {
+    cats.forEach(function(cat, index) {
+      if (separator && index > 0) {
+        var separatorEl = createEl(options.separatorTag || 'span', {
+          class: classNames(
+            cardClass('category-separator', prefix),
+            options.separatorClassName
+          ),
+          'aria-hidden': 'true'
+        });
+        separatorEl.textContent = separator;
+        wrap.appendChild(separatorEl);
+      }
+
       var catEl = createEl(options.itemTag || 'span', {
         class: classNames(
           cardClass('category', prefix),
@@ -1908,11 +1955,24 @@
     if (!cats.length) return '';
 
     var prefix = options.prefix || 'cb-card';
-    var wrapClass = classNames(cardClass('categories', prefix), options.className);
+    var separator = options.separator == null ? '' : String(options.separator);
+    var wrapClass = classNames(
+      cardClass('categories', prefix),
+      separator ? cardClass('categories--separated', prefix) : '',
+      options.className
+    );
     var itemClass = classNames(cardClass('category', prefix), options.itemClassName);
+    var separatorClass = classNames(
+      cardClass('category-separator', prefix),
+      options.separatorClassName
+    );
 
-    return '<div class="' + escapeHTML(wrapClass) + '">' + cats.map(function(cat) {
-      return '<span class="' + escapeHTML(classNames(itemClass, categoryModifier(cat, prefix))) + '">' + escapeHTML(cat) + '</span>';
+    return '<div class="' + escapeHTML(wrapClass) + '">' + cats.map(function(cat, index) {
+      var separatorHTML = separator && index > 0
+        ? '<span class="' + escapeHTML(separatorClass) + '" aria-hidden="true">' + escapeHTML(separator) + '</span>'
+        : '';
+
+      return separatorHTML + '<span class="' + escapeHTML(classNames(itemClass, categoryModifier(cat, prefix))) + '">' + escapeHTML(cat) + '</span>';
     }).join('') + '</div>';
   }
 
@@ -2171,7 +2231,9 @@
       return buildCategories(item, {
         prefix: prefix,
         className: descriptor.className,
-        itemClassName: descriptor.itemClassName
+        itemClassName: descriptor.itemClassName,
+        separator: descriptor.separator,
+        separatorClassName: descriptor.separatorClassName
       });
     }
 
