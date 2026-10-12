@@ -1848,6 +1848,11 @@ var isPriority = options.priority === true || imgIndex < 3;
     return m ? m[1] : null;
   }
 
+  function getISOYear(str) {
+    var datePart = getISODatePart(str);
+    return datePart ? datePart.slice(0, 4) : null;
+  }
+
   function formatGroupDate(dateStr, locale, groupLabelFormat) {
     var m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (!m) return dateStr;
@@ -1936,6 +1941,11 @@ var isPriority = options.priority === true || imgIndex < 3;
       if (groupBy.groupByDay && val !== '\u2014') {
         var datePart = getISODatePart(val);
         return datePart || val;
+      }
+
+      if (groupBy.groupByYear && val !== '\u2014') {
+        var year = getISOYear(val);
+        return year || val;
       }
 
       return val;
