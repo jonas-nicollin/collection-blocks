@@ -439,6 +439,17 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
     return item && (item.sourceUrl || item.fullUrl) || '';
   }
 
+  function getConfiguredItemLink(item, cfg) {
+    var linkCfg = cfg && cfg.display && cfg.display.link;
+    if (!linkCfg || typeof linkCfg !== 'object') return getItemLink(item);
+
+    var field = String(linkCfg.field || '').trim();
+    var configuredValue = field && item ? item[field] : '';
+    if (configuredValue) return configuredValue;
+
+    return linkCfg.fallback === false ? '' : getItemLink(item);
+  }
+
   /* ════════════════════════════════════
    * 4. FILTRAGE
    * ════════════════════════════════════ */
@@ -1047,7 +1058,8 @@ var isPriority = options.priority === true || imgIndex < 3;
 
   function buildCard(item, cfg, index) {
     var disp = cfg.display || {};
-    var link = disp.cardLink !== false;
+    var itemLink = getConfiguredItemLink(item, cfg);
+    var link = disp.cardLink !== false && !!itemLink;
     var variant = getCardVariant(item, cfg);
     var configuredClasses = [cardClassName(cfg), cardClassName(variant)].filter(Boolean).join(' ');
     var card = el(link ? 'a' : 'div', {
@@ -1066,7 +1078,7 @@ var isPriority = options.priority === true || imgIndex < 3;
     }
 
     if (link) {
-      card.href = getItemLink(item);
+      card.href = itemLink;
       var openInNewTab = disp.openInNewTab === true || cfg.openInNewTab === true;
       if (openInNewTab) {
         card.target = '_blank';
