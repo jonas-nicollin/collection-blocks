@@ -431,6 +431,7 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
         ? Object.assign({}, raw.price)
         : null,
       displayIndex: Number(raw.displayIndex != null ? raw.displayIndex : 999999),
+      publishOn:    Number(raw.publishOn || 0),
       timestamp:    Number(raw.startDate || raw.publishOn || raw.addedOn || raw.updatedOn || 0),
     };
   }
@@ -895,6 +896,40 @@ var isPriority = options.priority === true || imgIndex < 3;
 
       t.textContent = item.title;
       return t;
+    }
+
+    if (type === 'publishDate' || type === 'publicationDate') {
+      var publishDateDescriptor = def && typeof def === 'object' ? def : {};
+      var publishTimestamp = Number(item.publishOn || 0);
+
+      if (!Number.isFinite(publishTimestamp) || publishTimestamp <= 0) return null;
+
+      var publishDate = new Date(publishTimestamp);
+      if (Number.isNaN(publishDate.getTime())) return null;
+
+      var publishLocale = publishDateDescriptor.locale ||
+        (document.documentElement && document.documentElement.lang) ||
+        'en-GB';
+      var publishDisplayFormat = publishDateDescriptor.displayFormat &&
+        typeof publishDateDescriptor.displayFormat === 'object'
+        ? publishDateDescriptor.displayFormat
+        : { day: 'numeric', month: 'long', year: 'numeric' };
+      var publishDateEl = el('time', {
+        class: qCardClass('cb-card__publish-date', 'qb-card__publish-date') +
+          (publishDateDescriptor.className ? ' ' + publishDateDescriptor.className : ''),
+        datetime: publishDate.toISOString(),
+      });
+
+      try {
+        publishDateEl.textContent = new Intl.DateTimeFormat(
+          publishLocale,
+          publishDisplayFormat
+        ).format(publishDate);
+      } catch (_) {
+        publishDateEl.textContent = publishDate.toLocaleDateString(publishLocale);
+      }
+
+      return publishDateEl;
     }
 
     if (type === 'price') {
