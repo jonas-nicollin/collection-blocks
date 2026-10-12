@@ -552,6 +552,14 @@
     function getItemLink(item) {
         return item?.sourceUrl || item?.fullUrl || "";
     }
+    function getConfiguredItemLink(item, CFG) {
+        const linkConfig = CFG?.display?.link;
+        if (!linkConfig || typeof linkConfig !== "object") return getItemLink(item);
+        const field = String(linkConfig.field || "").trim();
+        const configuredValue = field && item ? item[field] : "";
+        if (configuredValue) return configuredValue;
+        return linkConfig.fallback === false ? "" : getItemLink(item);
+    }
     function itemHasTagValue(item, definition) {
         if (!definition || !definition.prefix) return false;
         const wanted = normalize(definition.value);
@@ -1695,7 +1703,9 @@
         });
     }
     function buildCard(item, CFG, extraClasses, currentItem, index) {
-        const card = document.createElement("a");
+        const itemLink = getConfiguredItemLink(item, CFG);
+        const linkEnabled = CFG.display?.cardLink !== false && !!itemLink;
+        const card = document.createElement(linkEnabled ? "a" : "div");
         card.className = "cb-card rb-card";
         const variant = getCardVariant(item, CFG);
         [ getCardClassName(CFG), getCardClassName(variant) ].filter(Boolean).join(" ").split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => card.classList.add(cls));
@@ -1711,7 +1721,7 @@
                 : undefined;
             dateUtils.applyDateStatusClass(card, item, dateStatusOptions);
         }
-        card.href = getItemLink(item) || CFG.sourceCollection.path + "/" + item.urlId;
+        if (linkEnabled) card.href = itemLink;
         if (item.id) card.dataset.itemId = String(item.id);
         if (Array.isArray(item.media) && item.media.length) {
             card.dataset.cbMedia = JSON.stringify(item.media.map(media => ({
@@ -1724,7 +1734,7 @@
             card.dataset.rbLightboxKey = getLightboxItemKey(item, index);
             card.setAttribute("aria-haspopup", "dialog");
         }
-        if (CFG.display?.openInNewTab === true || CFG.openInNewTab === true) {
+        if (linkEnabled && (CFG.display?.openInNewTab === true || CFG.openInNewTab === true)) {
             card.target = "_blank";
             card.rel = "noopener noreferrer";
         }
