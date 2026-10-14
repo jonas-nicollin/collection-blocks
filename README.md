@@ -13,36 +13,29 @@ Load the files in this order when several blocks are used on the same page.
 | `query-block.js` | Query Block | Filters, tabs, search, pagination, infinite scroll, grouped rendering. |
 | `related-block.js` | Related Block | Current item detection, matching, scoring, fallback, next item rules. |
 | `locator-block.js` | Locator Block | Google Maps, markers, map/list interaction, zone filters. |
+| `location-block.js` | Location Block | Current-item location card rendering. |
 | `metadata-block.js` | Metadata Block | Independent page/item metadata from the current Squarespace JSON. |
 
-Development files can keep the `dev_*` prefix. Public/release files should use the stable names above.
+The repository contains only shared stable runtimes. Site-specific
+configuration, targets, styles, and helper scripts belong in Squarespace Code
+Injection or Squarespace Custom CSS. Collection Data source manifests belong
+in the Collection Data project.
 
-## Recommended Repository Layout
+## Repository Layout
 
-`dist/` is the folder that contains the files meant to be loaded by Squarespace or jsDelivr.
+The stable files remain at the repository root so their jsDelivr URLs do not
+change:
 
 ```txt
-dist/
-  collection-blocks.js
-  collection-blocks.css
-  query-block.js
-  related-block.js
-  locator-block.js
-  metadata-block.js
-
-dev/
-  dev_collection-blocks-v008.js
-  dev_collection-blocks-v005.css
-  dev_query-block-v066.js
-  dev_related-block-v088.js
-  dev_locator-block-v047.js
-
+collection-blocks.js
+collection-blocks.css
+query-block.js
+related-block.js
+locator-block.js
+location-block.js
+metadata-block.js
 README.md
-CHANGELOG.md
-LICENSE
 ```
-
-Keeping development versions and stable release files in the same repository is fine. The important rule is to load only the stable files from `dist/` on production sites, or to load a clearly versioned development file while testing.
 
 ## Configuration Globals
 
