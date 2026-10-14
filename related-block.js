@@ -347,7 +347,7 @@
     function normalize(str) {
         const utils = getCollectionUtils();
         if (utils && typeof utils.norm === "function") return utils.norm(str);
-        return String(str || "").replace(/\u00A0/g, " ").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[\u2019']/g, "'").replace(/&/g, "and").replace(/\s+/g, " ").trim();
+        return String(str || "").replace(/\u00A0/g, " ").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[\u2010-\u2015]/g, "-").replace(/[\u2019']/g, "'").replace(/&/g, "and").replace(/\s+/g, " ").trim();
     }
     function uniq(arr) {
         return Array.from(new Set(arr));
@@ -524,18 +524,26 @@
             };
         }).filter(Boolean);
         return {
+            id: item.id || "",
             title: cleanText(item.title || ""),
             urlId: item.urlId || "",
             fullUrl: item.fullUrl || "",
             sourceUrl: item.sourceUrl || "",
             assetUrl: getAssetUrl(item),
             mediaFocalPoint: item.mediaFocalPoint || null,
+            media: Array.isArray(item.media) ? item.media : [],
             categories: Array.isArray(item.categories) ? item.categories.map(c => cleanText(c)).filter(Boolean) : [],
+            categoryOrder: item.categoryOrder && typeof item.categoryOrder === "object" ? item.categoryOrder : {},
+            sourceType: item.sourceType || "",
             tags: Array.isArray(item.tags) ? item.tags.map(t => cleanText(t)).filter(Boolean) : [],
             excerpt: getItemExcerpt(item, getExcerptMaxLength(CFG)),
             excerptRaw: item.excerpt || item.body || "",
             locationText: getItemLocationText(item),
+            // Preserve the historical Related Block collection-sort semantics.
+            // Product ordering uses categoryOrder and therefore stays fully opt-in.
             displayIndex: Number(item.displayIndex || 999999),
+            starred: item.starred === true,
+            publishOn: Number(item.publishOn || 0),
             timestamp: getItemTimestamp(item),
             tagPrefixValues: tagPrefixValues,
             rawItem: item
@@ -543,6 +551,47 @@
     }
     function getItemLink(item) {
         return item?.sourceUrl || item?.fullUrl || "";
+    }
+    function getConfiguredItemLink(item, CFG) {
+        const linkConfig = CFG?.display?.link;
+        if (!linkConfig || typeof linkConfig !== "object") return getItemLink(item);
+        const field = String(linkConfig.field || "").trim();
+        const configuredValue = field && item ? item[field] : "";
+        if (configuredValue) return configuredValue;
+        return linkConfig.fallback === false ? "" : getItemLink(item);
+    }
+    function itemHasTagValue(item, definition) {
+        if (!definition || !definition.prefix) return false;
+        const wanted = normalize(definition.value);
+        return getTagValuesByPrefix(item, definition.prefix).some(value => normalize(value) === wanted);
+    }
+    function matchesConfiguredItemFilter(item, filter) {
+        if (!filter) return true;
+        const categories = Array.isArray(filter.categories) ? filter.categories : [];
+        const excludeCategories = Array.isArray(filter.excludeCategories) ? filter.excludeCategories : [];
+        const exactTags = Array.isArray(filter.tags) ? filter.tags : Array.isArray(filter.exactTags) ? filter.exactTags : [];
+        const excludeExactTags = Array.isArray(filter.excludeTags) ? filter.excludeTags : Array.isArray(filter.excludeExactTags) ? filter.excludeExactTags : [];
+        const tagValues = Array.isArray(filter.tagValues) ? filter.tagValues : [];
+        const tagValuesAny = Array.isArray(filter.tagValuesAny) ? filter.tagValuesAny : [];
+        if (categories.length && !itemHasAnyCategory(item, categories)) return false;
+        if (excludeCategories.length && itemHasAnyCategory(item, excludeCategories)) return false;
+        if (exactTags.length && !exactTags.every(tag => itemHasTag(item, tag))) return false;
+        if (excludeExactTags.length && excludeExactTags.some(tag => itemHasTag(item, tag))) return false;
+        if (tagValues.length && !tagValues.every(definition => itemHasTagValue(item, definition))) return false;
+        if (tagValuesAny.length && !tagValuesAny.some(definition => itemHasTagValue(item, definition))) return false;
+        return true;
+    }
+    function getCardVariant(item, CFG) {
+        const variants = Array.isArray(CFG?.cardVariants) ? CFG.cardVariants : [];
+        return variants.find(variant => variant && matchesConfiguredItemFilter(item, variant.filter)) || null;
+    }
+    function getCardClassName(config) {
+        if (!config) return "";
+        if (config.cardClassName) return config.cardClassName;
+        if (config.classes && typeof config.classes === "object") {
+            return config.classes.card || config.classes.cards || config.classes.item || "";
+        }
+        return "";
     }
     // ════════════════════════════════════════════════════════════════
     // RÈGLES DE MATCHING
@@ -594,6 +643,29 @@
         const currentCategories = new Set((currentItem.categories || []).map(normalize).filter(Boolean));
         if (!currentCategories.size) return false;
         return (candidateItem.categories || []).some(c => currentCategories.has(normalize(c)));
+    }
+    function getFieldValues(item, field) {
+        const path = String(field || "").trim();
+        if (!path) return [];
+        const value = path.split(".").reduce((current, key) => current == null ? undefined : current[key], item);
+        const values = Array.isArray(value) ? value : value == null ? [] : [ value ];
+        return values.flat(Infinity).map(value => cleanText(value)).filter(Boolean);
+    }
+    function itemFieldsMatch(candidateItem, currentItem, rule) {
+        const candidateField = rule?.candidateField || rule?.candidate?.field;
+        const currentField = rule?.currentField || rule?.current?.field;
+        const candidatePrefix = rule?.candidatePrefix || rule?.candidate?.prefix;
+        const currentPrefix = rule?.currentPrefix || rule?.current?.prefix;
+        const candidateValues = (candidatePrefix
+            ? getTagValuesByPrefix(candidateItem, candidatePrefix)
+            : getFieldValues(candidateItem, candidateField)).map(normalize).filter(Boolean);
+        const currentValues = new Set((currentPrefix
+            ? getTagValuesByPrefix(currentItem, currentPrefix)
+            : getFieldValues(currentItem, currentField)).map(normalize).filter(Boolean));
+        if (!candidateValues.length || !currentValues.size) return false;
+        const mode = String(rule?.mode || "any").toLowerCase();
+        if (mode === "all") return candidateValues.every(value => currentValues.has(value));
+        return candidateValues.some(value => currentValues.has(value));
     }
     function itemTitleMatchesCurrentTagValue(candidateItem, currentItem, prefixes) {
         const candidateTitleNorm = normalize(candidateItem.title || "");
@@ -680,6 +752,7 @@
         if (type === "includeExactTags") return itemHasAnyExactTag(candidateItem, rule.values || []);
         if (type === "excludeExactTags") return !itemHasAnyExactTag(candidateItem, rule.values || []);
         if (type === "titleMatchesCurrentTagValue") return itemTitleMatchesCurrentTagValue(candidateItem, currentItem, rule.prefixes || []);
+        if (type === "fieldMatch") return itemFieldsMatch(candidateItem, currentItem, rule);
         if (type === "nextCollectionItemOfCategory") {
             const next = findNextCollectionItemOfCategory(context?.allItems || [], currentItem, rule);
             if (!next) return false;
@@ -763,6 +836,31 @@
             }
         }
         if (c.requireImage && !getAssetUrl(candidateItem)) return false;
+        if (c.requireStarred && candidateItem.starred !== true) return false;
+        if (c.dateStatus) {
+            const definition = Array.isArray(c.dateStatus)
+                ? { include: c.dateStatus }
+                : typeof c.dateStatus === "object"
+                    ? c.dateStatus
+                    : { include: [ c.dateStatus ] };
+            const utils = getCollectionUtils();
+            const status = utils && typeof utils.getDateStatus === "function"
+                ? utils.getDateStatus(candidateItem, {
+                    prefix: definition.prefix || "Date",
+                    endOverridePrefix: definition.endOverridePrefix,
+                    timeZone: definition.timeZone
+                })
+                : null;
+            if (!status) {
+                if (definition.includeUndated !== true) return false;
+            } else {
+                const include = Array.isArray(definition.include) ? definition.include.map(normalize) : [];
+                const exclude = Array.isArray(definition.exclude) ? definition.exclude.map(normalize) : [];
+                const normalizedStatus = normalize(status);
+                if (include.length && !include.includes(normalizedStatus)) return false;
+                if (exclude.includes(normalizedStatus)) return false;
+            }
+        }
         if (c.excludeCurrentItem) {
             const curUrl = String(currentItem?.fullUrl || "").replace(/\/+$/, "") || "/";
             const itemUrl = String(candidateItem?.fullUrl || "").replace(/\/+$/, "") || "/";
@@ -784,7 +882,16 @@
         }
         return clone;
     }
-    function sortItemsByRules(items, sortRules) {
+    function getCategoryOrderForCurrentItem(item, currentItem) {
+        const orders = item?.categoryOrder;
+        const currentTitle = normalize(currentItem?.title || "");
+        if (!orders || typeof orders !== "object" || !currentTitle) return Infinity;
+
+        const matchingEntry = Object.entries(orders).find(([category]) => normalize(category) === currentTitle);
+        const value = matchingEntry ? Number(matchingEntry[1]) : Infinity;
+        return Number.isFinite(value) ? value : Infinity;
+    }
+    function sortItemsByRules(items, sortRules, currentItem) {
         const list = items.slice();
         const rules = Array.isArray(sortRules) ? sortRules : [];
         if (!rules.length) return list;
@@ -810,20 +917,57 @@
                     const diff = Number(a.displayIndex ?? 999999) - Number(b.displayIndex ?? 999999);
                     if (diff !== 0) return diff * dir;
                 }
-                // Tri par valeur ISO d'un tag prefixé
+                if (type === "categoryOrder") {
+                    const diff = getCategoryOrderForCurrentItem(a, currentItem) - getCategoryOrderForCurrentItem(b, currentItem);
+                    if (diff !== 0 && Number.isFinite(diff)) return diff * dir;
+                }
+                // Tri par valeur d'un tag prefixé.
+                // valueType: 'date' | 'number' | 'text' | 'auto' (défaut).
+                // Le mode auto conserve les tris historiques numériques/ISO,
+                // puis utilise un tri textuel pour les autres valeurs.
                 if (type === "tagPrefix" && rule.prefix) {
                     const prefixNorm = normalize(String(rule.prefix).replace(/:$/, ""));
                     const getTagSortVal = item => {
                         const vals = getTagValuesByPrefix(item, prefixNorm);
-                        if (!vals.length) return Infinity;
+                        if (!vals.length) return { missing: true, kind: "text", value: "" };
                         const raw = String(vals[0]).trim();
-                        // Valeur purement numérique (ex: Numéro: 4) → tri numérique
+                        const valueType = normalize(rule.valueType || rule.dataType || "auto");
+
+                        if (valueType === "text" || valueType === "string") {
+                            return { missing: false, kind: "text", value: normalize(raw) };
+                        }
+
                         const num = Number(raw);
-                        if (!isNaN(num) && raw !== "") return num;
-                        // Sinon tenter ISO timestamp
-                        return getISOTimestamp(raw);
+                        if (valueType === "number" || valueType === "numeric") {
+                            return Number.isFinite(num)
+                                ? { missing: false, kind: "number", value: num }
+                                : { missing: true, kind: "number", value: Infinity };
+                        }
+
+                        const timestamp = getISOTimestamp(raw);
+                        if (valueType === "date" || valueType === "iso") {
+                            return Number.isFinite(timestamp)
+                                ? { missing: false, kind: "number", value: timestamp }
+                                : { missing: true, kind: "number", value: Infinity };
+                        }
+
+                        // Auto : nombre, puis ISO, puis texte.
+                        if (Number.isFinite(num) && raw !== "") {
+                            return { missing: false, kind: "number", value: num };
+                        }
+                        if (Number.isFinite(timestamp)) {
+                            return { missing: false, kind: "number", value: timestamp };
+                        }
+                        return { missing: false, kind: "text", value: normalize(raw) };
                     };
-                    const diff = getTagSortVal(a) - getTagSortVal(b);
+                    const av = getTagSortVal(a);
+                    const bv = getTagSortVal(b);
+                    if (av.missing !== bv.missing) return av.missing ? 1 : -1;
+                    if (av.missing && bv.missing) continue;
+
+                    const diff = av.kind === "number" && bv.kind === "number"
+                        ? av.value - bv.value
+                        : String(av.value).localeCompare(String(bv.value));
                     if (diff !== 0) return diff * dir;
                 }
             }
@@ -836,7 +980,9 @@
     // ════════════════════════════════════════════════════════════════
     function applyFallbackFill(selectedItems, allItems, currentItem, selection, CFG) {
         const fallback = selection?.fallback || {};
-        const limit = Number(selection?.limit || selectedItems.length || 0);
+        const limit = selection?.limit === "all"
+            ? Infinity
+            : Number(selection?.limit || selectedItems.length || 0);
         if (!fallback.enabled || !fallback.fillToLimit || !limit) {
             return selectedItems.slice(0, limit || selectedItems.length);
         }
@@ -863,7 +1009,7 @@
         pool = uniqBy(pool, i => String(i.fullUrl || i.title || ""));
         pool = sortItemsByRules(pool, fallback.sort || [ {
             type: "random"
-        } ]);
+        } ], currentItem);
         const result = selectedItems.slice();
         for (const item of pool) {
             if (result.length >= limit) break;
@@ -903,12 +1049,17 @@
             'urlId',
             'assetUrl',
             'mediaFocalPoint',
+            'media',
             'categories',
+            'categoryOrder',
+            'sourceType',
+            'price',
             'tags',
             'excerpt',
             'location',
             'displayIndex',
             'workflowState',
+            'starred',
             'startDate',
             'publishOn',
             'addedOn',
@@ -1079,11 +1230,11 @@
         if (utils && typeof utils.buildCategories === "function") {
             return utils.buildCategories(item, {
                 prefix: "rb-card",
-                className: "cb-card__meta rb-card__meta cb-card__categories rb-card__categories"
+                className: "cb-card__categories rb-card__categories"
             });
         }
         const meta = document.createElement("div");
-        meta.className = "cb-card__meta rb-card__meta cb-card__categories rb-card__categories";
+        meta.className = "cb-card__categories rb-card__categories";
         cats.forEach(cat => {
             const span = document.createElement("span");
             const slug = slugifyToken(cat);
@@ -1112,6 +1263,57 @@
         el.setAttribute("role", "heading");
         el.setAttribute("aria-level", "3");
         el.textContent = cleanText(item.title || "");
+        return el;
+    }
+    function buildPriceElement(item, descriptor) {
+        descriptor = descriptor || {};
+        const price = item?.price || item?.rawItem?.price || null;
+        const currency = cleanText(price?.currency || descriptor.currency || "").toUpperCase();
+        const min = Number(price?.min);
+        const max = Number(price?.max);
+        if (!currency || !Number.isFinite(min)) return null;
+        const locale = descriptor.locale || document.documentElement.lang || "en-CH";
+        const options = {
+            style: "currency",
+            currency,
+            currencyDisplay: descriptor.currencyDisplay || "code",
+            minimumFractionDigits: descriptor.minimumFractionDigits ?? 2,
+            maximumFractionDigits: descriptor.maximumFractionDigits ?? 2
+        };
+        let format;
+        try {
+            format = new Intl.NumberFormat(locale, options);
+        } catch (_) {
+            format = new Intl.NumberFormat("en-CH", options);
+        }
+        const formattedMin = format.format(min);
+        const hasRange = Number.isFinite(max) && max !== min;
+        const el = document.createElement(descriptor.tag || "div");
+        addClasses(el, "cb-card__price rb-card__price");
+        String(descriptor.className || "").split(/\s+/).map(cls => cls.trim()).filter(Boolean).forEach(cls => el.classList.add(cls));
+        el.textContent = hasRange
+            ? `${formattedMin}${descriptor.rangeSeparator || "–"}${format.format(max)}`
+            : formattedMin;
+        return el;
+    }
+    function buildPublishDateElement(item, descriptor) {
+        const timestamp = Number(item.publishOn || item.rawItem?.publishOn || 0);
+        if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
+        const date = new Date(timestamp);
+        if (Number.isNaN(date.getTime())) return null;
+        descriptor = descriptor || {};
+        const locale = descriptor.locale || document.documentElement.lang || "en-GB";
+        const displayFormat = descriptor.displayFormat && typeof descriptor.displayFormat === "object"
+            ? descriptor.displayFormat
+            : { day: "numeric", month: "long", year: "numeric" };
+        const el = document.createElement("time");
+        el.className = "cb-card__publish-date rb-card__publish-date" + (descriptor.className ? " " + descriptor.className : "");
+        el.dateTime = date.toISOString();
+        try {
+            el.textContent = new Intl.DateTimeFormat(locale, displayFormat).format(date);
+        } catch (_) {
+            el.textContent = date.toLocaleDateString(locale);
+        }
         return el;
     }
     function buildExcerptElement(item, CFG, descriptor) {
@@ -1225,12 +1427,33 @@
             const el = buildImageElement(item, CFG, context?.insideMedia === true);
             return el ? [ el ] : [];
         }
-        if (type === "meta" && CFG.display?.showCategories) {
+        // `categories` is the shared Query/Related Block nomenclature.
+        // Keep the historical `meta` alias for existing Related Block configs.
+        if ((type === "categories" || type === "meta") && CFG.display?.showCategories) {
             const el = buildMetaElement(item);
             return el ? [ el ] : [];
         }
         if (type === "title" && CFG.display?.showTitle) {
             return [ buildTitleElement(item) ];
+        }
+        if (type === "price") {
+            const el = buildPriceElement(item, descriptor);
+            return el ? [ el ] : [];
+        }
+        if (type === "text" || type === "staticText") {
+            const value = descriptor.text != null ? descriptor.text : descriptor.value;
+            if (value == null || String(value) === "") return [];
+            const allowedTags = new Set([ "span", "p", "div", "small", "strong", "em" ]);
+            const requestedTag = String(descriptor.tag || "span").toLowerCase();
+            const el = document.createElement(allowedTags.has(requestedTag) ? requestedTag : "span");
+            addClasses(el, "cb-card__text rb-card__text");
+            String(descriptor.className || "").split(/\s+/).map(cls => cls.trim()).filter(Boolean).forEach(cls => el.classList.add(cls));
+            el.textContent = String(value);
+            return [ el ];
+        }
+        if (type === "publishDate" || type === "publicationDate") {
+            const el = buildPublishDateElement(item, descriptor);
+            return el ? [ el ] : [];
         }
         if (type === "excerpt" && CFG.display?.showExcerpt) {
             const el = buildExcerptElement(item, CFG, descriptor);
@@ -1248,8 +1471,8 @@
         }
         return [];
     }
-    function buildGroupedContent(item, CFG) {
-        const groups = Array.isArray(CFG.display?.groups) ? CFG.display.groups : [];
+    function buildGroupedContent(item, CFG, configuredGroups) {
+        const groups = Array.isArray(configuredGroups) ? configuredGroups : Array.isArray(CFG.display?.groups) ? CFG.display.groups : [];
         if (!groups.length) return null;
         const fragment = document.createDocumentFragment();
         let hasContent = false;
@@ -1335,7 +1558,7 @@
     function applyStateClasses(section) {
         const toRemove = [ "cb-block--has-heading", "rb-block--has-heading", "cb-block--has-image", "rb-block--has-image", "cb-block--has-title", "rb-block--has-title", "cb-block--has-meta", "rb-block--has-meta", "cb-block--has-excerpt", "rb-block--has-excerpt", "cb-block--has-location", "rb-block--has-location", "cb-block--has-tag-prefix", "rb-block--has-tag-prefix", "cb-block--has-heading-cta", "rb-block--has-heading-cta", "cb-block--single-item", "rb-block--single-item", "cb-block--multiple-items", "rb-block--multiple-items", "cb-block--empty", "rb-block--empty" ];
         toRemove.forEach(cls => section.classList.remove(cls));
-        const checks = [ [ ".rb-heading", "cb-block--has-heading rb-block--has-heading" ], [ ".rb-heading__cta", "cb-block--has-heading-cta rb-block--has-heading-cta" ], [ ".rb-card__media", "cb-block--has-image rb-block--has-image" ], [ ".rb-card__title", "cb-block--has-title rb-block--has-title" ], [ ".rb-card__meta", "cb-block--has-meta rb-block--has-meta" ], [ ".rb-card__excerpt", "cb-block--has-excerpt rb-block--has-excerpt" ], [ ".rb-card__location", "cb-block--has-location rb-block--has-location" ], [ ".rb-card__tag-field", "cb-block--has-tag-prefix rb-block--has-tag-prefix" ], [ ".rb-empty", "cb-block--empty rb-block--empty" ] ];
+        const checks = [ [ ".rb-heading", "cb-block--has-heading rb-block--has-heading" ], [ ".rb-heading__cta", "cb-block--has-heading-cta rb-block--has-heading-cta" ], [ ".rb-card__media", "cb-block--has-image rb-block--has-image" ], [ ".rb-card__title", "cb-block--has-title rb-block--has-title" ], [ ".rb-card__meta, .rb-card__categories", "cb-block--has-meta rb-block--has-meta" ], [ ".rb-card__excerpt", "cb-block--has-excerpt rb-block--has-excerpt" ], [ ".rb-card__location", "cb-block--has-location rb-block--has-location" ], [ ".rb-card__tag-field", "cb-block--has-tag-prefix rb-block--has-tag-prefix" ], [ ".rb-empty", "cb-block--empty rb-block--empty" ] ];
         checks.forEach(([ sel, cls ]) => {
             if (section.querySelector(sel)) addClasses(section, cls);
         });
@@ -1480,19 +1703,38 @@
         });
     }
     function buildCard(item, CFG, extraClasses, currentItem, index) {
-        const card = document.createElement("a");
+        const itemLink = getConfiguredItemLink(item, CFG);
+        const linkEnabled = CFG.display?.cardLink !== false && !!itemLink;
+        const card = document.createElement(linkEnabled ? "a" : "div");
         card.className = "cb-card rb-card";
-        String(CFG.classes?.card || CFG.classes?.cards || CFG.classes?.item || "").split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => card.classList.add(cls));
+        const variant = getCardVariant(item, CFG);
+        [ getCardClassName(CFG), getCardClassName(variant) ].filter(Boolean).join(" ").split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => card.classList.add(cls));
         const dateUtils = getCollectionUtils();
         if (dateUtils && typeof dateUtils.applyDateStatusClass === "function") {
-            dateUtils.applyDateStatusClass(card, item);
+            const dateStatus = CFG.selection?.constraints?.dateStatus;
+            const dateStatusOptions = dateStatus && typeof dateStatus === "object" && !Array.isArray(dateStatus)
+                ? {
+                    prefix: dateStatus.prefix || "Date",
+                    endOverridePrefix: dateStatus.endOverridePrefix,
+                    timeZone: dateStatus.timeZone
+                }
+                : undefined;
+            dateUtils.applyDateStatusClass(card, item, dateStatusOptions);
         }
-        card.href = getItemLink(item) || CFG.sourceCollection.path + "/" + item.urlId;
+        if (linkEnabled) card.href = itemLink;
+        if (item.id) card.dataset.itemId = String(item.id);
+        if (Array.isArray(item.media) && item.media.length) {
+            card.dataset.cbMedia = JSON.stringify(item.media.map(media => ({
+                assetUrl: media?.assetUrl || null,
+                mediaFocalPoint: media?.mediaFocalPoint || null,
+                title: media?.title || media?.filename || ""
+            })).filter(media => media.assetUrl));
+        }
         if (getLightboxOptions(CFG)) {
             card.dataset.rbLightboxKey = getLightboxItemKey(item, index);
             card.setAttribute("aria-haspopup", "dialog");
         }
-        if (CFG.display?.openInNewTab === true || CFG.openInNewTab === true) {
+        if (linkEnabled && (CFG.display?.openInNewTab === true || CFG.openInNewTab === true)) {
             card.target = "_blank";
             card.rel = "noopener noreferrer";
         }
@@ -1506,8 +1748,11 @@
                 addClasses(card, "cb-card--current rb-card--current");
             }
         }
-        if (Array.isArray(CFG.display?.groups) && CFG.display.groups.length) {
-            const groupedContent = buildGroupedContent(item, CFG);
+        const configuredGroups = variant && Object.prototype.hasOwnProperty.call(variant, "groups")
+            ? variant.groups
+            : CFG.display?.groups;
+        if (Array.isArray(configuredGroups) && configuredGroups.length) {
+            const groupedContent = buildGroupedContent(item, CFG, configuredGroups);
             if (groupedContent) card.appendChild(groupedContent);
             return card;
         }
@@ -1579,10 +1824,88 @@
         inner.innerHTML = "";
         const heading = buildHeadingElement(items, CFG, false);
         if (heading) inner.appendChild(heading);
-        inner.appendChild(buildList(items, CFG, currentItem));
+        const rawPagination = CFG.pagination || {};
+        const paginationMode = String(rawPagination.mode || "none").toLowerCase();
+        const pageSize = Math.max(1, Number(rawPagination.perPage || items.length || 1));
+        const loadMoreLabel = cleanText(rawPagination.loadMoreLabel || "View more");
+        const endLabel = rawPagination.endLabel === false ? "" : cleanText(rawPagination.endLabel || "");
+        const footer = document.createElement("div");
+        footer.className = "cb-footer rb-footer";
+        let page = 1;
+        let list = null;
+        let infiniteObserver = null;
+
+        inner.appendChild(footer);
+
+        function renderPage() {
+            if (infiniteObserver) {
+                infiniteObserver.disconnect();
+                infiniteObserver = null;
+            }
+
+            const visibleItems = paginationMode === "none"
+                ? items
+                : items.slice(0, page * pageSize);
+            if (list) {
+                const renderedCount = list.children.length;
+                const extraClasses = String(CFG.classes?.block || "").split(/\s+/).map(s => s.trim()).filter(Boolean);
+                visibleItems.slice(renderedCount).forEach((item, offset) => {
+                    list.appendChild(buildCard(item, CFG, extraClasses, currentItem, renderedCount + offset));
+                });
+                list.dataset.count = visibleItems.length;
+                list.classList.toggle("cb-grid--single", visibleItems.length === 1);
+                list.classList.toggle("rb-grid--single", visibleItems.length === 1);
+                list.classList.toggle("cb-grid--multiple", visibleItems.length > 1);
+                list.classList.toggle("rb-grid--multiple", visibleItems.length > 1);
+            } else {
+                const nextList = buildList(visibleItems, CFG, currentItem);
+                inner.insertBefore(nextList, footer);
+                list = nextList;
+            }
+            footer.innerHTML = "";
+
+            const hasMore = visibleItems.length < items.length;
+            if (hasMore && paginationMode === "load-more") {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "cb-load-more rb-load-more";
+                button.textContent = loadMoreLabel;
+                button.addEventListener("click", () => {
+                    page += 1;
+                    renderPage();
+                });
+                footer.appendChild(button);
+            } else if (hasMore && paginationMode === "infinite") {
+                const sentinel = document.createElement("div");
+                sentinel.className = "cb-sentinel rb-sentinel";
+                sentinel.setAttribute("aria-hidden", "true");
+                footer.appendChild(sentinel);
+                if ("IntersectionObserver" in window) {
+                    infiniteObserver = new IntersectionObserver(entries => {
+                        if (!entries.some(entry => entry.isIntersecting)) return;
+                        page += 1;
+                        renderPage();
+                    }, { rootMargin: "400px 0px" });
+                    infiniteObserver.observe(sentinel);
+                } else {
+                    page += 1;
+                    renderPage();
+                    return;
+                }
+            } else if (!hasMore && endLabel) {
+                const label = document.createElement("div");
+                label.className = "cb-end-label rb-end-label";
+                label.textContent = endLabel;
+                footer.appendChild(label);
+            }
+
+            setupLightbox(section, CFG, visibleItems);
+            applyStateClasses(section);
+        }
+
+        renderPage();
         section.classList.remove("cb-block--loading", "rb-block--loading");
         section.classList.add("cb-block--ready", "rb-block--ready");
-        setupLightbox(section, CFG, items);
         applyStateClasses(section);
     }
     function replaceBlockWithEmptyState(section, CFG) {
@@ -1643,8 +1966,16 @@
         }
         return required.every(cls => document.body.classList.contains(cls));
     }
-    function getInsertTarget(selector) {
-        return document.querySelector(selector || "");
+    function getInsertTarget(target) {
+        if (typeof target === "function") {
+            try {
+                return target() || null;
+            } catch (_) {
+                return null;
+            }
+        }
+        if (target && target.nodeType === 1) return target;
+        return document.querySelector(target || "");
     }
     function alreadyInjected(target, cfgKey) {
         return !!target.querySelector(`:scope > .rb-block[data-rb-key="${cfgKey}"]`);
@@ -1723,6 +2054,12 @@
                 tagPrefixFields: [],
                 groups: []
             },
+            pagination: {
+                mode: "none",
+                perPage: 12,
+                loadMoreLabel: "View more",
+                endLabel: ""
+            },
             loading: {
                 hideLoader: false
             },
@@ -1740,6 +2077,8 @@
                 constraints: {
                     requirePublished: true,
                     requireImage: true,
+                    requireStarred: false,
+                    dateStatus: null,
                     excludeCurrentItem: false
                 },
                 match: {
@@ -1931,10 +2270,12 @@ function computeFinalItems(allItems) {
         });
     });
 
-    let result = sortItemsByRules(candidates, CFG.selection?.sort || []);
+    let result = sortItemsByRules(candidates, CFG.selection?.sort || [], currentItem);
     result = uniqBy(result, i => String(i.fullUrl || i.title || ""));
 
-    const limit = Number(CFG.selection?.limit || CFG.display?.maxItems || result.length);
+    const limit = CFG.selection?.limit === "all"
+        ? Infinity
+        : Number(CFG.selection?.limit || CFG.display?.maxItems || result.length);
 
     if (limit > 0) result = result.slice(0, limit);
 
@@ -1942,7 +2283,9 @@ return result;
 }
 
 let finalItems = computeFinalItems(items);
-const limit = Number(CFG.selection?.limit || CFG.display?.maxItems || finalItems.length);
+const limit = CFG.selection?.limit === "all"
+    ? Infinity
+    : Number(CFG.selection?.limit || CFG.display?.maxItems || finalItems.length);
 
 while (
     limit > 0 &&

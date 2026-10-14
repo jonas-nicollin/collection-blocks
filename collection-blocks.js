@@ -1,8 +1,8 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.10';
-  var STORE_KEY_PREFIX = 'collection-blocks::v0.6::';
+  var VERSION = '0.17';
+  var STORE_KEY_PREFIX = 'collection-blocks::v0.7::';
 
   var memoryCache = new Map();
   var pendingFetches = new Map();
@@ -18,12 +18,17 @@
     'urlId',
     'assetUrl',
     'mediaFocalPoint',
+    'media',
     'categories',
+    'categoryOrder',
+    'sourceType',
+    'price',
     'tags',
     'excerpt',
     'location',
     'displayIndex',
     'workflowState',
+    'starred',
     'startDate',
     'publishOn',
     'addedOn',
@@ -824,6 +829,7 @@
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[\u2010-\u2015]/g, '-')
       .replace(/[\u2019']/g, "'")
       .replace(/&/g, 'and')
       .replace(/\s+/g, ' ')
@@ -1114,6 +1120,7 @@
     var hasValidDate = false;
     var hasFutureDate = false;
     var hasCurrentRange = false;
+    var latestBaseEndTimestamp = null;
 
     values.forEach(function(value) {
       var parts = String(value || '').split('/');
@@ -1128,6 +1135,9 @@
         if (endTimestamp < startTimestamp) return;
 
         hasValidDate = true;
+        if (latestBaseEndTimestamp === null || endTimestamp > latestBaseEndTimestamp) {
+          latestBaseEndTimestamp = endTimestamp;
+        }
         if (now >= startTimestamp && now <= endTimestamp) hasCurrentRange = true;
         if (now < startTimestamp) hasFutureDate = true;
         return;
@@ -1139,8 +1149,52 @@
       if (!occurrence) return;
 
       hasValidDate = true;
-      if (now <= temporalPointTimestamp(occurrence, timeZone, true)) hasFutureDate = true;
+      var occurrenceStartTimestamp = temporalPointTimestamp(occurrence, timeZone, false);
+      var occurrenceEndTimestamp = temporalPointTimestamp(
+        occurrence,
+        timeZone,
+        !occurrence.hasTime
+      );
+      if (
+        latestBaseEndTimestamp === null ||
+        occurrenceEndTimestamp > latestBaseEndTimestamp
+      ) {
+        latestBaseEndTimestamp = occurrenceEndTimestamp;
+      }
+      if (now >= occurrenceStartTimestamp && now <= occurrenceEndTimestamp) {
+        hasCurrentRange = true;
+      } else if (now < occurrenceStartTimestamp) {
+        hasFutureDate = true;
+      }
     });
+
+    if (
+      hasValidDate &&
+      options.endOverridePrefix &&
+      latestBaseEndTimestamp !== null
+    ) {
+      var overrideEndTimestamp = null;
+
+      getTagValuesByPrefix(item, options.endOverridePrefix).forEach(function(value) {
+        var parts = String(value || '').split('/');
+        var endpoint = parseTemporalPoint(parts[parts.length - 1]);
+        if (!endpoint) return;
+
+        var timestamp = temporalPointTimestamp(endpoint, timeZone, !endpoint.hasTime);
+        if (overrideEndTimestamp === null || timestamp > overrideEndTimestamp) {
+          overrideEndTimestamp = timestamp;
+        }
+      });
+
+      if (
+        overrideEndTimestamp !== null &&
+        overrideEndTimestamp > latestBaseEndTimestamp &&
+        now > latestBaseEndTimestamp &&
+        now <= overrideEndTimestamp
+      ) {
+        hasCurrentRange = true;
+      }
+    }
 
     if (!hasValidDate) return null;
     if (hasCurrentRange) return 'current';
@@ -1155,6 +1209,45 @@
     var status = getDateStatus(item, options);
     if (status) node.classList.add('is-' + status);
     return status;
+  }
+
+  function compact12HourTime(point) {
+    if (!point || point.hour === null) return null;
+
+    var hour = point.hour % 12 || 12;
+    var minute = point.min ? ':' + String(point.min).padStart(2, '0') : '';
+
+    return {
+      clock: String(hour) + minute,
+      period: point.hour < 12 ? 'am' : 'pm'
+    };
+  }
+
+  function compact12HourRange(start, end) {
+    if (!start) return end ? end.clock + end.period : '';
+    if (!end) return start.clock + start.period;
+
+    if (start.period === end.period) {
+      return start.clock + '\u2013' + end.clock + end.period;
+    }
+
+    return start.clock + start.period + '\u2013' + end.clock + end.period;
+  }
+
+  function longDateLabel(date, locale, timeZoneOptions, includeYear) {
+    var options = {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric'
+    };
+    if (includeYear) options.year = 'numeric';
+    return capitalize(date.toLocaleDateString(locale, Object.assign(options, timeZoneOptions)));
+  }
+
+  function longTime12HourEndpoint(point, date, locale, timeZoneOptions, includeYear) {
+    var dateLabel = longDateLabel(date, locale, timeZoneOptions, includeYear);
+    var time = compact12HourTime(point);
+    return time ? dateLabel + ', ' + time.clock + time.period : dateLabel;
   }
 
   function formatISOTag(str, format, locale) {
@@ -1173,7 +1266,107 @@
           var dt1 = new Date(d1.year, d1.month, d1.day);
           var dt2 = new Date(d2.year, d2.month, d2.day);
           var sameDay = d1.day === d2.day && d1.month === d2.month && d1.year === d2.year;
+
+          if (format === 'time-12h') {
+            return compact12HourRange(compact12HourTime(d1), compact12HourTime(d2));
+          }
+
+          if (format === 'long-time-year-12h' || format === 'long-time-year') {
+            var compactUses12Hour = format === 'long-time-year-12h';
+            var compactDt1 = new Date(d1.year, d1.month, d1.day, d1.hour || 0, d1.min || 0);
+            var compactDt2 = new Date(d2.year, d2.month, d2.day, d2.hour || 0, d2.min || 0);
+
+            function compactLongRangeTime(point, date) {
+              if (point.hour === null) return '';
+
+              if (compactUses12Hour) {
+                var compactTime = compact12HourTime(point);
+                return compactTime ? compactTime.clock + compactTime.period : '';
+              }
+
+              return date.toLocaleTimeString(loc, Object.assign({
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+              }, tzOpt));
+            }
+
+            function compactLongRangeEndpoint(point, date, includeMonth, includeYear) {
+              var label;
+
+              if (!includeMonth) {
+                var weekdayLabel = capitalize(date.toLocaleDateString(loc, Object.assign({
+                  weekday: 'long'
+                }, tzOpt)));
+                var dayLabel = date.toLocaleDateString(loc, Object.assign({
+                  day: 'numeric'
+                }, tzOpt));
+                label = weekdayLabel + ', ' + dayLabel;
+              } else {
+                var dateOptions = {
+                  weekday: 'long',
+                  day: 'numeric',
+                  month: 'long'
+                };
+                if (includeYear) dateOptions.year = 'numeric';
+                label = capitalize(date.toLocaleDateString(
+                  loc,
+                  Object.assign(dateOptions, tzOpt)
+                ));
+              }
+
+              var time = compactLongRangeTime(point, date);
+              return time ? label + ', ' + time : label;
+            }
+
+            if (sameDay) {
+              var compactDate = longDateLabel(compactDt1, loc, tzOpt, true);
+              var compactStartTime = compactLongRangeTime(d1, compactDt1);
+              var compactEndTime = compactLongRangeTime(d2, compactDt2);
+              var compactTimeRange = compactStartTime && compactEndTime
+                ? compactStartTime + '\u2013' + compactEndTime
+                : compactStartTime || compactEndTime;
+
+              return compactDate + (compactTimeRange ? ', ' + compactTimeRange : '');
+            }
+
+            if (d1.year === d2.year && d1.month === d2.month) {
+              return compactLongRangeEndpoint(d1, compactDt1, false, false) +
+                '\u2013' +
+                compactLongRangeEndpoint(d2, compactDt2, true, true);
+            }
+
+            if (d1.year === d2.year) {
+              return compactLongRangeEndpoint(d1, compactDt1, true, false) +
+                '\u2013' +
+                compactLongRangeEndpoint(d2, compactDt2, true, true);
+            }
+
+            return compactLongRangeEndpoint(d1, compactDt1, true, true) +
+              '\u2013' +
+              compactLongRangeEndpoint(d2, compactDt2, true, true);
+          }
+
+          if (format === 'long-time-12h') {
+            var includeLongYear = false;
+            var longDt1 = new Date(d1.year, d1.month, d1.day, d1.hour || 0, d1.min || 0);
+            var longDt2 = new Date(d2.year, d2.month, d2.day, d2.hour || 0, d2.min || 0);
+            var longTime1 = compact12HourTime(d1);
+            var longTime2 = compact12HourTime(d2);
+
+            if (sameDay) {
+              var longDate = longDateLabel(longDt1, loc, tzOpt, includeLongYear);
+              var longTimeRange = compact12HourRange(longTime1, longTime2);
+              return longDate + (longTimeRange ? ', ' + longTimeRange : '');
+            }
+
+            return longTime12HourEndpoint(d1, longDt1, loc, tzOpt, includeLongYear) +
+              '\u2013' +
+              longTime12HourEndpoint(d2, longDt2, loc, tzOpt, includeLongYear);
+          }
+
           var formatIncludesTime = !format || format === 'datetime' || format === 'short-time' || format === 'time' ||
+            format === 'long-time-year' ||
             (typeof format === 'object' && (format.hour != null || format.minute != null));
           var hasRangeTime = d1.hour !== null || d2.hour !== null;
 
@@ -1249,6 +1442,28 @@
     try {
       if (format && typeof format === 'object') {
         return capitalize(dt.toLocaleDateString(loc, Object.assign({}, tzOpt, format)));
+      }
+
+      if (format === 'time-12h') {
+        var compactTime = compact12HourTime(d);
+        return compactTime ? compactTime.clock + compactTime.period : '';
+      }
+
+      if (format === 'long-time-12h' || format === 'long-time-year-12h') {
+        return longTime12HourEndpoint(d, dt, loc, tzOpt, format === 'long-time-year-12h');
+      }
+
+      if (format === 'long-time-year') {
+        var longDate24 = longDateLabel(dt, loc, tzOpt, true);
+        if (d.hour === null) return longDate24;
+
+        var longTime24 = dt.toLocaleTimeString(loc, Object.assign({
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        }, tzOpt));
+
+        return longDate24 + ', ' + longTime24;
       }
 
       if (format === 'time') {
@@ -1341,7 +1556,7 @@
   }
 
   function canCompactSameDayTimes(format) {
-    if (format === 'time') return false;
+    if (format === 'time' || format === 'time-12h') return false;
     if (format === 'day' || format === 'date' || format === 'short' || format === 'numeric') return false;
     if (format && typeof format === 'object') {
       return format.hour != null || format.minute != null;
@@ -1363,7 +1578,11 @@
       var dayKey = isoDayKey(parsed);
       var useTimeOnly = shouldCompact && parsed && parsed.hour !== null && dayKey && dayKey === previousDay;
       var formatted = useTimeOnly
-        ? formatISOTag(raw, 'time', locale)
+        ? formatISOTag(
+            raw,
+            format === 'long-time-12h' || format === 'long-time-year-12h' ? 'time-12h' : 'time',
+            locale
+          )
         : formatISOTag(raw, format, locale);
 
       previousDay = parsed && dayKey ? dayKey : '';
@@ -1627,11 +1846,28 @@
     if (!cats.length) return null;
 
     var prefix = options.prefix || 'cb-card';
+    var separator = options.separator == null ? '' : String(options.separator);
     var wrap = createEl(options.tag || 'div', {
-      class: classNames(cardClass('categories', prefix), options.className)
+      class: classNames(
+        cardClass('categories', prefix),
+        separator ? cardClass('categories--separated', prefix) : '',
+        options.className
+      )
     });
 
-    cats.forEach(function(cat) {
+    cats.forEach(function(cat, index) {
+      if (separator && index > 0) {
+        var separatorEl = createEl(options.separatorTag || 'span', {
+          class: classNames(
+            cardClass('category-separator', prefix),
+            options.separatorClassName
+          ),
+          'aria-hidden': 'true'
+        });
+        separatorEl.textContent = separator;
+        wrap.appendChild(separatorEl);
+      }
+
       var catEl = createEl(options.itemTag || 'span', {
         class: classNames(
           cardClass('category', prefix),
@@ -1795,11 +2031,24 @@
     if (!cats.length) return '';
 
     var prefix = options.prefix || 'cb-card';
-    var wrapClass = classNames(cardClass('categories', prefix), options.className);
+    var separator = options.separator == null ? '' : String(options.separator);
+    var wrapClass = classNames(
+      cardClass('categories', prefix),
+      separator ? cardClass('categories--separated', prefix) : '',
+      options.className
+    );
     var itemClass = classNames(cardClass('category', prefix), options.itemClassName);
+    var separatorClass = classNames(
+      cardClass('category-separator', prefix),
+      options.separatorClassName
+    );
 
-    return '<div class="' + escapeHTML(wrapClass) + '">' + cats.map(function(cat) {
-      return '<span class="' + escapeHTML(classNames(itemClass, categoryModifier(cat, prefix))) + '">' + escapeHTML(cat) + '</span>';
+    return '<div class="' + escapeHTML(wrapClass) + '">' + cats.map(function(cat, index) {
+      var separatorHTML = separator && index > 0
+        ? '<span class="' + escapeHTML(separatorClass) + '" aria-hidden="true">' + escapeHTML(separator) + '</span>'
+        : '';
+
+      return separatorHTML + '<span class="' + escapeHTML(classNames(itemClass, categoryModifier(cat, prefix))) + '">' + escapeHTML(cat) + '</span>';
     }).join('') + '</div>';
   }
 
@@ -2058,7 +2307,9 @@
       return buildCategories(item, {
         prefix: prefix,
         className: descriptor.className,
-        itemClassName: descriptor.itemClassName
+        itemClassName: descriptor.itemClassName,
+        separator: descriptor.separator,
+        separatorClassName: descriptor.separatorClassName
       });
     }
 

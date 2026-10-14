@@ -201,6 +201,11 @@
     return null;
   }
 
+  function getCollectionUtils() {
+    const cb = window.CollectionBlocks;
+    return cb && (cb.utils || cb);
+  }
+
   function matchesBodyClasses(settings) {
     const list = Array.isArray(settings.requiredBodyClasses)
       ? settings.requiredBodyClasses
@@ -270,6 +275,11 @@
    * Gère les intervalles : 2026-09-14/2026-09-22 → '14–22 septembre 2026'
    */
   function formatISOTag(str, format, locale) {
+    const utils = getCollectionUtils();
+    if (utils && typeof utils.formatISOTag === 'function') {
+      return utils.formatISOTag(str, format, locale);
+    }
+
     const s   = String(str || '');
     const loc = locale || document.documentElement.lang || 'fr-CH';
     const tzOpt = MB_TZ ? { timeZone: MB_TZ } : {};
@@ -415,10 +425,20 @@
   }
 
   function formatDateValues(values, block) {
+    const format = block.dateFormat || 'datetime';
+    const locale = block.dateLocale || null;
+    const utils = getCollectionUtils();
+
+    if (utils && typeof utils.formatISOValues === 'function') {
+      return utils.formatISOValues(values, format, locale, {
+        compactSameDayTimes: block.compactSameDayTimes === true
+      });
+    }
+
     if (!block.compactSameDayTimes) {
       return values.map(value =>
         isISODate(value)
-          ? formatISOTag(value, block.dateFormat || 'datetime', block.dateLocale || null)
+          ? formatISOTag(value, format, locale)
           : value
       );
     }
@@ -433,7 +453,7 @@
 
       if (String(value).indexOf('/') !== -1) {
         previousDateKey = '';
-        return formatISOTag(value, block.dateFormat || 'datetime', block.dateLocale || null);
+        return formatISOTag(value, format, locale);
       }
 
       const parsed = parseISO(value);
@@ -444,11 +464,11 @@
       }
 
       if (dateKey === previousDateKey && parsed.hasTime) {
-        return formatISOTag(value, 'time', block.dateLocale || null);
+        return formatISOTag(value, 'time', locale);
       }
 
       previousDateKey = dateKey;
-      return formatISOTag(value, block.dateFormat || 'datetime', block.dateLocale || null);
+      return formatISOTag(value, format, locale);
     });
   }
 
@@ -698,13 +718,42 @@ async function fetchPageJson(settings) {
 
   function getLocationValues(itemData, block) {
     const source = itemData?.location || {};
-    const values = [
-      source.addressTitle,
-      source.addressLine1,
-      source.addressLine2,
-      source.addressCountry
-    ].map(cleanText).filter(Boolean);
-    if (values.length) return values;
+    const tagValues = block.tagPrefix
+      ? normalizeBlockValues(
+          Array.isArray(itemData?.tags) ? itemData.tags : [],
+          { allowedPrefixSuffix: block.tagPrefix }
+        )
+      : [];
+
+    const defaultFields = [
+      'addressTitle',
+      'addressLine1',
+      'addressLine2',
+      'addressCountry'
+    ];
+    const fields = Array.isArray(block.fields) && block.fields.length
+      ? block.fields
+      : defaultFields;
+
+    const combineCountry = block.countryDisplay === 'line2' ||
+      (block.countryDisplay === 'line2-if-no-tag' && !tagValues.length);
+
+    const values = [];
+    fields.forEach(field => {
+      if (field === 'addressCountry' && combineCountry && fields.includes('addressLine2')) return;
+      if (field === 'addressLine2' && combineCountry) {
+        const line2 = cleanText(source.addressLine2);
+        const country = cleanText(source.addressCountry);
+        const combined = [line2, country].filter(Boolean).join(', ');
+        if (combined) values.push(combined);
+        return;
+      }
+      const value = cleanText(source[field]);
+      if (value) values.push(value);
+    });
+
+    const combinedValues = uniq([...tagValues, ...values]);
+    if (combinedValues.length) return combinedValues;
     if (block.useGoogleMapsLink && getGoogleMapsUrl(itemData)) {
       return [block.googleMapsLabel || 'Voir sur la carte'];
     }

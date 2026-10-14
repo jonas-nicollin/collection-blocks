@@ -237,6 +237,7 @@
           layout: globalLayout || 'pills',
           showLabel: true,
           order: null,
+          direction: null,
           filterFormat: null,
           filterGranularity: null,
         };
@@ -246,6 +247,7 @@
         layout:       p.layout       || globalLayout || 'pills',
         showLabel:    p.showLabel    !== false,
         order:        p.order        || null,
+        direction:    p.direction    || p.sortDirection || null,
         filterFormat: p.filterFormat || null,
         filterGranularity: p.filterGranularity || null,
       };
@@ -425,13 +427,28 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
       excerpt:      truncate(raw.excerpt || raw.body || '', 160, { preserveLineBreaks: true }),
       excerptRaw:   raw.excerpt || raw.body || '',
       location:     loc ? cleanHTML(loc.addressTitle || loc.addressLine1 || '') : '',
+      price:        raw.price && typeof raw.price === 'object'
+        ? Object.assign({}, raw.price)
+        : null,
       displayIndex: Number(raw.displayIndex != null ? raw.displayIndex : 999999),
+      publishOn:    Number(raw.publishOn || 0),
       timestamp:    Number(raw.startDate || raw.publishOn || raw.addedOn || raw.updatedOn || 0),
     };
   }
 
   function getItemLink(item) {
     return item && (item.sourceUrl || item.fullUrl) || '';
+  }
+
+  function getConfiguredItemLink(item, cfg) {
+    var linkCfg = cfg && cfg.display && cfg.display.link;
+    if (!linkCfg || typeof linkCfg !== 'object') return getItemLink(item);
+
+    var field = String(linkCfg.field || '').trim();
+    var configuredValue = field && item ? item[field] : '';
+    if (configuredValue) return configuredValue;
+
+    return linkCfg.fallback === false ? '' : getItemLink(item);
   }
 
   /* ════════════════════════════════════
@@ -460,7 +477,60 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
     });
   }
 
-  function matchesConfiguredFilter(item, filter) {
+  function getConfiguredDateStatus(item, definition, cfg) {
+    var utils = getCollectionUtils();
+    if (!utils || typeof utils.getDateStatus !== 'function') return null;
+
+    var def = definition && typeof definition === 'object' ? definition : {};
+    var options = {
+      prefix: def.prefix || def.tagPrefix || 'Date',
+    };
+
+    if (def.endOverridePrefix) {
+      options.endOverridePrefix = def.endOverridePrefix;
+    }
+
+    if (QUERY_TZ) options.timeZone = QUERY_TZ;
+
+    var dbg = cfg && cfg.debug;
+    var mockDate = dbg && typeof dbg === 'object' ? dbg.mockDate : null;
+    var parsedMockDate = parseISO(mockDate);
+
+    if (parsedMockDate) {
+      options.now = new Date(
+        parsedMockDate.year,
+        parsedMockDate.month,
+        parsedMockDate.day,
+        12,
+        0,
+        0,
+        0
+      );
+    }
+
+    return utils.getDateStatus(item, options);
+  }
+
+  function matchesConfiguredDateStatus(item, definition, cfg) {
+    if (!definition) return true;
+
+    var def = Array.isArray(definition)
+      ? { include: definition }
+      : (typeof definition === 'object' ? definition : { include: [definition] });
+    var status = getConfiguredDateStatus(item, def, cfg);
+
+    if (!status) return def.includeUndated === true;
+
+    var include = Array.isArray(def.include) ? def.include.map(norm) : [];
+    var exclude = Array.isArray(def.exclude) ? def.exclude.map(norm) : [];
+    var normalizedStatus = norm(status);
+
+    if (include.length && include.indexOf(normalizedStatus) === -1) return false;
+    if (exclude.indexOf(normalizedStatus) !== -1) return false;
+    return true;
+  }
+
+  function matchesConfiguredFilter(item, filter, cfg) {
     if (!filter) return true;
 
     if (!matchesCats(item, filter.categories)) return false;
@@ -480,19 +550,21 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
       })
     ) return false;
 
+    if (!matchesConfiguredDateStatus(item, filter.dateStatus, cfg)) return false;
+
     return true;
   }
 
-  function applyPreFilter(items, pf) {
+  function applyPreFilter(items, pf, cfg) {
     if (!pf) return items;
 
-    return items.filter(function(item) { return matchesConfiguredFilter(item, pf); });
+    return items.filter(function(item) { return matchesConfiguredFilter(item, pf, cfg); });
   }
 
-  function applyTabFilter(items, tf) {
+  function applyTabFilter(items, tf, cfg) {
     if (!tf) return items;
 
-    return items.filter(function(item) { return matchesConfiguredFilter(item, tf); });
+    return items.filter(function(item) { return matchesConfiguredFilter(item, tf, cfg); });
   }
 
   function matchesUIFilters(item, state) {
@@ -753,13 +825,40 @@ var isPriority = options.priority === true || imgIndex < 3;
 
     if (type === 'categories') {
       if (!item.categories.length) return null;
+      var categoryDescriptor = def && typeof def === 'object' ? def : {};
+      var categorySeparator = categoryDescriptor.separator == null
+        ? ''
+        : String(categoryDescriptor.separator);
       var utilsCats = getCollectionUtils();
       if (utilsCats && typeof utilsCats.buildCategories === 'function') {
-        return utilsCats.buildCategories(item, { prefix: 'qb-card' });
+        return utilsCats.buildCategories(item, {
+          prefix: 'qb-card',
+          className: categoryDescriptor.className,
+          itemClassName: categoryDescriptor.itemClassName,
+          separator: categorySeparator,
+          separatorClassName: categoryDescriptor.separatorClassName
+        });
       }
 
-      var w = el('div', { class: qCardClass('cb-card__categories', 'qb-card__categories') });
-      item.categories.forEach(function(c) {
+      var w = el('div', {
+        class: qCardClass(
+          'cb-card__categories' + (categorySeparator ? ' cb-card__categories--separated' : ''),
+          'qb-card__categories' + (categorySeparator ? ' qb-card__categories--separated' : '')
+        )
+      });
+      item.categories.forEach(function(c, categoryIndex) {
+        if (categorySeparator && categoryIndex > 0) {
+          var separatorNode = el('span', {
+            class: qCardClass(
+              'cb-card__category-separator',
+              'qb-card__category-separator'
+            ),
+            'aria-hidden': 'true'
+          });
+          separatorNode.textContent = categorySeparator;
+          w.appendChild(separatorNode);
+        }
+
         var catSlug = slugify(c);
         var s = el('span', {
           class: qCardClass(
@@ -797,6 +896,97 @@ var isPriority = options.priority === true || imgIndex < 3;
 
       t.textContent = item.title;
       return t;
+    }
+
+    if (type === 'publishDate' || type === 'publicationDate') {
+      var publishDateDescriptor = def && typeof def === 'object' ? def : {};
+      var publishTimestamp = Number(item.publishOn || 0);
+
+      if (!Number.isFinite(publishTimestamp) || publishTimestamp <= 0) return null;
+
+      var publishDate = new Date(publishTimestamp);
+      if (Number.isNaN(publishDate.getTime())) return null;
+
+      var publishLocale = publishDateDescriptor.locale ||
+        (document.documentElement && document.documentElement.lang) ||
+        'en-GB';
+      var publishDisplayFormat = publishDateDescriptor.displayFormat &&
+        typeof publishDateDescriptor.displayFormat === 'object'
+        ? publishDateDescriptor.displayFormat
+        : { day: 'numeric', month: 'long', year: 'numeric' };
+      var publishDateEl = el('time', {
+        class: qCardClass('cb-card__publish-date', 'qb-card__publish-date') +
+          (publishDateDescriptor.className ? ' ' + publishDateDescriptor.className : ''),
+        datetime: publishDate.toISOString(),
+      });
+
+      try {
+        publishDateEl.textContent = new Intl.DateTimeFormat(
+          publishLocale,
+          publishDisplayFormat
+        ).format(publishDate);
+      } catch (_) {
+        publishDateEl.textContent = publishDate.toLocaleDateString(publishLocale);
+      }
+
+      return publishDateEl;
+    }
+
+    if (type === 'price') {
+      var priceDescriptor = def && typeof def === 'object' ? def : {};
+      var price = item && item.price;
+      var currency = cleanHTML(
+        (price && price.currency) || priceDescriptor.currency || ''
+      ).toUpperCase();
+      var min = Number(price && price.min);
+      var max = Number(price && price.max);
+
+      if (!currency || !Number.isFinite(min)) return null;
+
+      var priceLocale = priceDescriptor.locale ||
+        (document.documentElement && document.documentElement.lang) ||
+        'en-CH';
+      var numberOptions = {
+        minimumFractionDigits: priceDescriptor.minimumFractionDigits != null
+          ? priceDescriptor.minimumFractionDigits
+          : 2,
+        maximumFractionDigits: priceDescriptor.maximumFractionDigits != null
+          ? priceDescriptor.maximumFractionDigits
+          : 2
+      };
+      var currencyOptions = Object.assign({}, numberOptions, {
+        style: 'currency',
+        currency: currency,
+        currencyDisplay: priceDescriptor.currencyDisplay || 'code'
+      });
+      var currencyFormatter;
+      var numberFormatter;
+
+      try {
+        currencyFormatter = new Intl.NumberFormat(priceLocale, currencyOptions);
+        numberFormatter = new Intl.NumberFormat(priceLocale, numberOptions);
+      } catch (_) {
+        currencyFormatter = new Intl.NumberFormat('en-CH', currencyOptions);
+        numberFormatter = new Intl.NumberFormat('en-CH', numberOptions);
+      }
+
+      var formattedMin = currencyFormatter.format(min);
+      var hasRange = Number.isFinite(max) && max !== min;
+      var formattedMax = hasRange
+        ? (priceDescriptor.collapseCurrencyRange === true
+          ? numberFormatter.format(max)
+          : currencyFormatter.format(max))
+        : '';
+      var priceEl = el(priceDescriptor.tag || 'div', {
+        class: qCardClass('cb-card__price', 'qb-card__price') +
+          (priceDescriptor.className ? ' ' + priceDescriptor.className : '')
+      });
+
+      priceEl.textContent = hasRange
+        ? formattedMin + (priceDescriptor.rangeSeparator || '\u2013') + formattedMax
+        : formattedMin;
+
+      return priceEl;
     }
 
     if (type === 'excerpt') {
@@ -895,7 +1085,7 @@ var isPriority = options.priority === true || imgIndex < 3;
 
     for (var i = 0; i < variants.length; i++) {
       var variant = variants[i];
-      if (variant && matchesConfiguredFilter(item, variant.filter)) return variant;
+      if (variant && matchesConfiguredFilter(item, variant.filter, cfg)) return variant;
     }
 
     return null;
@@ -903,7 +1093,8 @@ var isPriority = options.priority === true || imgIndex < 3;
 
   function buildCard(item, cfg, index) {
     var disp = cfg.display || {};
-    var link = disp.cardLink !== false;
+    var itemLink = getConfiguredItemLink(item, cfg);
+    var link = disp.cardLink !== false && !!itemLink;
     var variant = getCardVariant(item, cfg);
     var configuredClasses = [cardClassName(cfg), cardClassName(variant)].filter(Boolean).join(' ');
     var card = el(link ? 'a' : 'div', {
@@ -922,7 +1113,7 @@ var isPriority = options.priority === true || imgIndex < 3;
     }
 
     if (link) {
-      card.href = getItemLink(item);
+      card.href = itemLink;
       var openInNewTab = disp.openInNewTab === true || cfg.openInNewTab === true;
       if (openInNewTab) {
         card.target = '_blank';
@@ -1657,6 +1848,11 @@ var isPriority = options.priority === true || imgIndex < 3;
     return m ? m[1] : null;
   }
 
+  function getISOYear(str) {
+    var datePart = getISODatePart(str);
+    return datePart ? datePart.slice(0, 4) : null;
+  }
+
   function formatGroupDate(dateStr, locale, groupLabelFormat) {
     var m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (!m) return dateStr;
@@ -1747,6 +1943,11 @@ var isPriority = options.priority === true || imgIndex < 3;
         return datePart || val;
       }
 
+      if (groupBy.groupByYear && val !== '\u2014') {
+        var year = getISOYear(val);
+        return year || val;
+      }
+
       return val;
     }
 
@@ -1775,6 +1976,94 @@ var isPriority = options.priority === true || imgIndex < 3;
     return keys;
   }
 
+  function isDateStatusGroupBy(groupBy) {
+    return groupBy &&
+      typeof groupBy === 'object' &&
+      norm(groupBy.type) === 'datestatus';
+  }
+
+  function renderDateStatusGrouped(items, cfg, grid, groupBy) {
+    var groups = new Map();
+    var discoveredKeys = [];
+    var include = Array.isArray(groupBy.include) ? groupBy.include.map(norm) : [];
+    var fallbackStatus = groupBy.fallbackStatus ? norm(groupBy.fallbackStatus) : 'undated';
+    var idx = 0;
+
+    items.forEach(function(item) {
+      var status = getConfiguredDateStatus(item, groupBy, cfg);
+      var key = norm(status || fallbackStatus);
+
+      if (!key || (include.length && include.indexOf(key) === -1)) return;
+
+      if (!groups.has(key)) {
+        groups.set(key, []);
+        discoveredKeys.push(key);
+      }
+
+      groups.get(key).push(item);
+    });
+
+    var configuredOrder = Array.isArray(groupBy.order)
+      ? groupBy.order.map(norm)
+      : ['current', 'upcoming', 'past', 'undated'];
+    var orderedKeys = configuredOrder.filter(function(key, index, arr) {
+      return groups.has(key) && arr.indexOf(key) === index;
+    });
+
+    discoveredKeys.forEach(function(key) {
+      if (orderedKeys.indexOf(key) === -1) orderedKeys.push(key);
+    });
+
+    var labels = Object.assign({
+      current: 'Current',
+      upcoming: 'Upcoming',
+      past: 'Past',
+      undated: 'Undated',
+    }, groupBy.labels || {});
+    var headingLevel = Math.min(6, Math.max(1, Number(groupBy.headingLevel || 2)));
+
+    grid.classList.add('cb-grid--date-status-groups', 'qb-grid--date-status-groups');
+
+    orderedKeys.forEach(function(key) {
+      var groupItems = groups.get(key) || [];
+      if (!groupItems.length) return;
+
+      var keySlug = slugify(key) || 'undated';
+      var headingId = 'qb-' + slugify(cfg.key || 'query') + '-date-status-' + keySlug;
+      var section = el('section', {
+        class: qCardClass(
+          'cb-date-status-group cb-date-status-group--' + keySlug,
+          'qb-date-status-group qb-date-status-group--' + keySlug
+        ),
+        'data-date-status': key,
+      });
+      var marker = el('div', {
+        class: qCardClass('cb-date-status-group__marker', 'qb-date-status-group__marker'),
+      });
+      var heading = el('div', {
+        class: qCardClass('cb-date-status-group__heading', 'qb-date-status-group__heading'),
+        id: headingId,
+      });
+      var itemsWrap = el('div', {
+        class: qCardClass('cb-date-status-group__items', 'qb-date-status-group__items'),
+      });
+
+      section.setAttribute('aria-labelledby', headingId);
+      heading.setAttribute('role', 'heading');
+      heading.setAttribute('aria-level', String(headingLevel));
+      setText(heading, Object.prototype.hasOwnProperty.call(labels, key) ? labels[key] : key);
+      marker.appendChild(heading);
+
+      groupItems.forEach(function(item) {
+        itemsWrap.appendChild(buildCard(item, cfg, idx++));
+      });
+
+      section.appendChild(marker);
+      section.appendChild(itemsWrap);
+      grid.appendChild(section);
+    });
+  }
+
   function renderGrouped(items, cfg, grid, activeGroupFilter) {
     var groupBy = (cfg.display && cfg.display.groupBy) || null;
     var groupOrder = (cfg.display && cfg.display.groupOrder) || 'collection';
@@ -1784,6 +2073,11 @@ var isPriority = options.priority === true || imgIndex < 3;
       items.forEach(function(item) {
         grid.appendChild(buildCard(item, cfg, idx++));
       });
+      return;
+    }
+
+    if (isDateStatusGroupBy(groupBy)) {
+      renderDateStatusGrouped(items, cfg, grid, groupBy);
       return;
     }
 
@@ -2335,7 +2629,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
     function tabPool() {
       var items = getBaseItems();
-      return state.tab ? applyTabFilter(items, state.tab) : items;
+      return state.tab ? applyTabFilter(items, state.tab, cfg) : items;
     }
 
     function resetSec() {
@@ -2468,7 +2762,12 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         var collapseByDay = shouldCollapseDateFilter(pd, datePrefix, fmt);
 
         if (collapseByDay) vals = collapseDateFilterValues(vals);
-        if (pd.order) vals = applyCustomOrder(vals, pd.order);
+
+        if (pd.order) {
+          vals = applyCustomOrder(vals, pd.order);
+        } else if (norm(pd.direction) === 'desc') {
+          vals.reverse();
+        }
 
         var displayVals = fmt ? vals.map(function(v) {
           return formatISOTag(v, fmt) || v;
@@ -2968,7 +3267,7 @@ requestAnimationFrame(function() {
         return i.fullUrl || i.id;
       });
 
-      merged = applyPreFilter(merged, cfg.preFilter || null);
+      merged = applyPreFilter(merged, cfg.preFilter || null, cfg);
       merged = sortItems(merged, cfg.sort);
 
       return merged;
@@ -3394,7 +3693,7 @@ requestAnimationFrame(function() {
       if (fromFilter) scrollToGrid();
 
       var pool = activeFilters.tab
-        ? applyTabFilter(rawItems, activeFilters.tab)
+        ? applyTabFilter(rawItems, activeFilters.tab, cfg)
         : rawItems;
 
       var poolSorted = currentSort ? sortItems(pool, currentSort) : pool;
@@ -3525,7 +3824,9 @@ if (canAppendIncrementally) {
   btn.style.display = 'none';
   footer.appendChild(buildLoader(false));
 
-  currentPage++;
+  currentPage = pag.revealAll === true
+    ? Number.MAX_SAFE_INTEGER
+    : currentPage + 1;
 
   await loadNextRemotePage();
 
