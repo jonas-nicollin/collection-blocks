@@ -116,5 +116,29 @@ window.QUERY_BLOCK_CONFIGS = (window.QUERY_BLOCK_CONFIGS || []).concat([
       card: 'am-work-index-card'
     },
     i18n: { noResults: 'No styling projects available' }
+  },
+  {
+    key: 'qb-am-work-index-menu',
+    target: '#qb-am-work-index-menu',
+    label: 'Work Index menu',
+    heading: false,
+    filters: false,
+    display: {
+      counter: false,
+      layout: 'grid',
+      link: { field: 'sourceUrl', fallback: true },
+      groups: [
+        { role: 'body', children: ['title'] }
+      ]
+    },
+    sort: { type: 'date', direction: 'desc' },
+    pagination: { mode: 'none' },
+    performance: { maxPages: 'all', lazyInit: false, domBatchSize: 100 },
+    sourceCollection: { path: '/work-index' },
+    classes: {
+      block: 'am-work-index-menu',
+      card: 'am-work-index-menu-card'
+    },
+    i18n: { noResults: 'No projects available' }
   }
 ]);
