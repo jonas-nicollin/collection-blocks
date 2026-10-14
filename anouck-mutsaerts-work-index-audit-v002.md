@@ -11,12 +11,14 @@ La version publique de Collection Data contenait 34 entrées au moment de
 l’audit. Les corrections effectuées ensuite dans Squarespace ne figurent dans
 ce rapport que lorsqu’elles avaient déjà atteint le JSON public.
 
-## Source URL encore invalides ou cassées
+Les quatre corrections annoncées sont maintenant synchronisées :
+`/works/aliciadubuis2`, `/works/marinegiraudo`, `/works/leonprost` et
+`/works/jonasmarguet` répondent toutes correctement.
+
+## Source URL encore cassées
 
 | Titre dans Work Index | Source URL vue dans le JSON | Correction |
 | --- | --- | --- |
-| T le Temps HEAD | `marinegiraudo` | `/works/marinegiraudo` |
-| T le Temps High Jewelry | `jonasmarguet` | `/works/jonasmarguet` |
 | Valextra Campaign | `/works/valextra2` | `/works/valextra-campaign` |
 | Comptoir des Cotonniers SS24 | `/works/CDCSS24` | `/works/cdcss24` |
 | T Le Temps accessories | `/works/layering` | `/works/josephmolines` |
@@ -38,6 +40,8 @@ Différences strictes constatées sur les destinations valides :
 
 | Work Index | Page `/works` |
 | --- | --- |
+| `T le Temps HEAD ` | `T le Temps HEAD` |
+| `T le Temps High Jewelry ` | `T le Temps High Jewelry` |
 | `Byredo ` | `Byredo` |
 | `T le Temps - Sneakers ` | `T Le Temps - Sneakers` |
 | `Loewe Perfumes` | `Loewe Perfume` |
