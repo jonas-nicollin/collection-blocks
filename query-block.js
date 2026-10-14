@@ -413,6 +413,35 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
       : '50% 50%';
 
     var loc = raw.location;
+    var media = (Array.isArray(raw.media) ? raw.media : []).map(function(entry) {
+      if (!entry || typeof entry !== 'object') return null;
+
+      var mediaFp = entry.mediaFocalPoint;
+      var mediaFocalPoint = (mediaFp && typeof mediaFp.x === 'number' && typeof mediaFp.y === 'number')
+        ? (Math.round(mediaFp.x * 100) + '% ' + Math.round(mediaFp.y * 100) + '%')
+        : focalPoint;
+      var videoUrl = entry.url || entry.src || '';
+      var imageUrl = entry.assetUrl || entry.posterUrl || '';
+      var inferredType = videoUrl ? 'video' : (imageUrl ? 'image' : '');
+
+      if (!inferredType) return null;
+
+      return {
+        type: entry.type || inferredType,
+        url: videoUrl,
+        assetUrl: entry.assetUrl || '',
+        posterUrl: entry.posterUrl || assetUrl || '',
+        focalPoint: mediaFocalPoint,
+        mimeType: entry.mimeType || '',
+        aspectRatio: Number(entry.aspectRatio) || null,
+        durationSeconds: Number(entry.durationSeconds) || null,
+        autoplay: entry.autoplay !== false,
+        muted: entry.muted !== false,
+        loop: entry.loop !== false,
+        controls: entry.controls === true,
+        loading: entry.loading || 'lazy',
+      };
+    }).filter(Boolean);
 
     return {
       id:           raw.id,
@@ -422,6 +451,7 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
       urlId:        raw.urlId || '',
       assetUrl:     assetUrl,
       focalPoint:   focalPoint,
+      media:        media,
       categories:   (raw.categories || []).map(cleanHTML).filter(Boolean),
       tags:         (raw.tags || []).map(cleanHTML).filter(Boolean),
       excerpt:      truncate(raw.excerpt || raw.body || '', 160, { preserveLineBreaks: true }),
@@ -668,6 +698,100 @@ var IMAGE_SIZE_PRESETS = {
 };
 var DEFAULT_IMAGE_SIZES = IMAGE_SIZE_PRESETS.standard;
 var QB_RENDER_IMAGE_INDEX = 0;
+  var QB_HLS_PROMISE = null;
+  var QB_VIDEO_OBSERVER = null;
+
+  function getHlsScriptUrl() {
+    return window.QUERY_BLOCK_HLS_URL || 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.light.min.js';
+  }
+
+  function loadHlsLibrary() {
+    if (window.Hls) return Promise.resolve(window.Hls);
+    if (QB_HLS_PROMISE) return QB_HLS_PROMISE;
+
+    QB_HLS_PROMISE = new Promise(function(resolve, reject) {
+      var script = document.createElement('script');
+      script.src = getHlsScriptUrl();
+      script.async = true;
+      script.onload = function() { resolve(window.Hls || null); };
+      script.onerror = function() { reject(new Error('Unable to load HLS playback support')); };
+      document.head.appendChild(script);
+    });
+
+    return QB_HLS_PROMISE;
+  }
+
+  function playQueryVideo(video) {
+    if (!video || video.dataset.qbVideoAutoplay !== 'true') return;
+    var promise = video.play();
+    if (promise && typeof promise.catch === 'function') promise.catch(noop);
+  }
+
+  function activateQueryVideo(video) {
+    if (!video || video.dataset.qbVideoActive === 'true') {
+      playQueryVideo(video);
+      return;
+    }
+
+    var src = video.dataset.qbVideoSrc || '';
+    if (!src) return;
+
+    video.dataset.qbVideoActive = 'true';
+
+    if (!/\.m3u8(?:$|\?)/i.test(src) || video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = src;
+      playQueryVideo(video);
+      return;
+    }
+
+    loadHlsLibrary().then(function(Hls) {
+      if (Hls && typeof Hls.isSupported === 'function' && Hls.isSupported()) {
+        var hls = new Hls({ enableWorker: true, lowLatencyMode: false });
+        video.__qbHls = hls;
+        hls.loadSource(src);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, function() { playQueryVideo(video); });
+        return;
+      }
+
+      video.src = src;
+      playQueryVideo(video);
+    }).catch(function() {
+      video.src = src;
+      playQueryVideo(video);
+    });
+  }
+
+  function getQueryVideoObserver() {
+    if (QB_VIDEO_OBSERVER || !('IntersectionObserver' in window)) return QB_VIDEO_OBSERVER;
+
+    QB_VIDEO_OBSERVER = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        var video = entry.target;
+        if (entry.isIntersecting) activateQueryVideo(video);
+        else video.pause();
+      });
+    }, { rootMargin: '400px 0px' });
+
+    return QB_VIDEO_OBSERVER;
+  }
+
+  function observeQueryMedia(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+    var videos = [];
+
+    if (scope.matches && scope.matches('video[data-qb-video-src]')) videos.push(scope);
+    Array.prototype.push.apply(videos, scope.querySelectorAll('video[data-qb-video-src]'));
+
+    videos.forEach(function(video) {
+      if (video.dataset.qbVideoObserved === 'true') return;
+      video.dataset.qbVideoObserved = 'true';
+
+      var observer = getQueryVideoObserver();
+      if (observer) observer.observe(video);
+      else activateQueryVideo(video);
+    });
+  }
 
   function buildImg(assetUrl, focalPoint, alt, options) {
   if (typeof options === 'boolean') options = { priority: options };
@@ -731,6 +855,52 @@ var isPriority = options.priority === true || imgIndex < 3;
   wrap.appendChild(img);
   return wrap;
 }
+
+  function buildMedia(item, cardIndex, cfg, descriptor) {
+    descriptor = descriptor || {};
+    var display = cfg && cfg.display ? cfg.display : {};
+    var videoMedia = (item.media || []).find(function(entry) {
+      return entry.type === 'video' && entry.url;
+    });
+
+    if (!videoMedia) {
+      return item.assetUrl ? buildImg(item.assetUrl, item.focalPoint, item.title, {
+        priority: descriptor.priority === true || cardIndex < 3,
+        sizes: descriptor.sizes || descriptor.imageSizes || display.imageSizes,
+        widths: descriptor.widths || descriptor.srcsetWidths || display.srcsetWidths,
+        imagePreset: descriptor.imagePreset || display.imagePreset,
+        ratio: descriptor.ratio || descriptor.imageRatio || display.imageRatio,
+        fallbackWidth: descriptor.fallbackWidth || display.imageFallbackWidth
+      }) : null;
+    }
+
+    var wrap = el('div', { class: qCardClass('cb-card__video-wrap', 'qb-card__video-wrap') });
+    var ratio = descriptor.ratio || descriptor.mediaRatio || videoMedia.aspectRatio || display.imageRatio;
+    if (ratio) wrap.style.setProperty('--cb-card-image-ratio', String(ratio));
+
+    var video = el('video', {
+      class: qCardClass('cb-card__video', 'qb-card__video'),
+      muted: '',
+      loop: videoMedia.loop ? '' : null,
+      playsinline: '',
+      preload: 'none',
+      poster: videoMedia.posterUrl || item.assetUrl || '',
+      'aria-hidden': 'true',
+      tabindex: '-1',
+      'data-qb-video-src': videoMedia.url,
+      'data-qb-video-autoplay': videoMedia.autoplay ? 'true' : 'false',
+    });
+
+    video.muted = videoMedia.muted !== false;
+    video.defaultMuted = videoMedia.muted !== false;
+    video.loop = videoMedia.loop !== false;
+    video.playsInline = true;
+    video.controls = videoMedia.controls === true;
+
+    wrap.appendChild(video);
+    observeQueryMedia(video);
+    return wrap;
+  }
 
   /* ════════════════════════════════════
    * 7. RENDU CARTE
@@ -809,6 +979,10 @@ var isPriority = options.priority === true || imgIndex < 3;
 
   function buildChild(def, item, cardIndex, cfg) {
     var type = typeof def === 'string' ? def : (def && def.type);
+
+    if (type === 'media') {
+      return buildMedia(item, cardIndex, cfg, def && typeof def === 'object' ? def : {});
+    }
 
     if (type === 'image') {
       var display = cfg && cfg.display ? cfg.display : {};
@@ -3942,6 +4116,10 @@ function scheduleConfig(cfg) {
     configs.forEach(scheduleConfig);
   });
 }
+
+  window.QueryBlock = Object.assign({}, window.QueryBlock || {}, {
+    observeMedia: observeQueryMedia
+  });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init, { once: true });
