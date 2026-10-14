@@ -83,6 +83,66 @@
     return clone;
   }
 
+  function cardKey(card) {
+    var href = card && card.getAttribute ? card.getAttribute('href') : '';
+    if (!href) return '';
+
+    try {
+      var url = new URL(href, window.location.origin);
+      return url.pathname.replace(/\/+$/, '').toLowerCase();
+    } catch (_) {
+      return String(href).replace(/\/+$/, '').toLowerCase();
+    }
+  }
+
+  function shuffle(values) {
+    for (var index = values.length - 1; index > 0; index--) {
+      var swapIndex = Math.floor(Math.random() * (index + 1));
+      var temporary = values[index];
+      values[index] = values[swapIndex];
+      values[swapIndex] = temporary;
+    }
+    return values;
+  }
+
+  function balanceSharedProjects(results, root) {
+    if (!results || results.length !== 2) return;
+
+    var leftByKey = new Map();
+    var rightByKey = new Map();
+
+    results[0].cards.forEach(function(card) {
+      var key = cardKey(card);
+      if (key) leftByKey.set(key, card);
+    });
+    results[1].cards.forEach(function(card) {
+      var key = cardKey(card);
+      if (key) rightByKey.set(key, card);
+    });
+
+    var sharedKeys = shuffle(Array.from(leftByKey.keys()).filter(function(key) {
+      return rightByKey.has(key);
+    }));
+    var sharedSet = new Set(sharedKeys);
+    var counts = [
+      results[0].cards.filter(function(card) { return !sharedSet.has(cardKey(card)); }).length,
+      results[1].cards.filter(function(card) { return !sharedSet.has(cardKey(card)); }).length
+    ];
+
+    sharedKeys.forEach(function(key) {
+      var keepLeft = counts[0] < counts[1] || (counts[0] === counts[1] && Math.random() < .5);
+      var removeFrom = keepLeft ? 1 : 0;
+      results[removeFrom].cards = results[removeFrom].cards.filter(function(card) {
+        return cardKey(card) !== key;
+      });
+      counts[keepLeft ? 0 : 1]++;
+    });
+
+    root.dataset.amSplitLeftCount = String(results[0].cards.length);
+    root.dataset.amSplitRightCount = String(results[1].cards.length);
+    root.dataset.amSplitSharedCount = String(sharedKeys.length);
+  }
+
   function prepareLane(lane, result) {
     var grid = result.grid;
     var primary = document.createElement('div');
@@ -135,11 +195,12 @@
 
   function initRoot(root) {
     if (root.dataset.amSplitInitialized === 'true') return;
-    root.dataset.amSplitInitialized = 'true';
 
     var lanes = Array.from(root.querySelectorAll('.am-split-navigation__lane'));
     var targets = lanes.map(function(lane) { return lane.querySelector('[id^="qb-am-work-index-"]'); });
     if (lanes.length !== 2 || targets.some(function(target) { return !target; })) return;
+
+    root.dataset.amSplitInitialized = 'true';
 
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       root.classList.add('am-split-navigation--reduced-motion');
@@ -147,6 +208,7 @@
     }
 
     Promise.all(targets.map(waitForCards)).then(function(results) {
+      balanceSharedProjects(results, root);
       var states = lanes.map(function(lane, index) { return prepareLane(lane, results[index]); });
       var pending = 0;
       var frame = 0;

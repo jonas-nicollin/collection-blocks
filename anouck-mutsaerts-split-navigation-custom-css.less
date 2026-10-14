@@ -1,0 +1,119 @@
+/* Anouck Mutsaerts — split Work Index navigation
+   Version à coller dans Squarespace Custom CSS (LESS). */
+
+.am-split-navigation {
+  --am-work-index-ratio: 4 / 5;
+  --am-split-gap: clamp(.75rem, 1.5vw, 1.5rem);
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  width: 100%;
+  height: ~"calc(100svh - var(--header-height, 0px))";
+  min-height: 30rem;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  touch-action: none;
+  background: var(--siteBackgroundColor, #fff);
+}
+
+.am-split-navigation__lane {
+  position: relative;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  scrollbar-width: none;
+  border: 0 !important;
+}
+
+.am-split-navigation__lane::-webkit-scrollbar {
+  display: none;
+}
+
+.am-split-navigation .am-work-index-block,
+.am-split-navigation .qb-block__inner,
+.am-split-navigation .qb-root {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.am-split-navigation .qb-grid {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.am-split-navigation__set {
+  display: grid;
+  gap: var(--am-split-gap);
+  padding-bottom: var(--am-split-gap);
+}
+
+.am-split-navigation .am-work-index-card {
+  position: relative;
+  display: block;
+  min-width: 0;
+  margin: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.am-split-navigation .qb-card__media,
+.am-split-navigation .qb-card__img-wrap,
+.am-split-navigation .qb-card__video-wrap {
+  width: 100%;
+  margin: 0;
+}
+
+.am-split-navigation .qb-card__img,
+.am-split-navigation .qb-card__video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.am-split-navigation .qb-card__body {
+  padding: .65rem clamp(.65rem, 1.25vw, 1.25rem) clamp(1rem, 2vw, 2rem);
+}
+
+.am-split-navigation .qb-card__title {
+  margin: 0;
+  font-size: var(--am-work-index-title-size, clamp(.7rem, .66rem + .18vw, .9rem));
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.am-split-navigation .qb-loader,
+.am-split-navigation .qb-loader--text {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+}
+
+@media screen and (max-width: 767px) {
+  .am-split-navigation {
+    --am-split-gap: .5rem;
+    min-height: 24rem;
+  }
+
+  .am-split-navigation .qb-card__body {
+    padding: .45rem .5rem .85rem;
+  }
+
+  .am-split-navigation .qb-card__title {
+    font-size: var(--am-work-index-title-size-mobile, .65rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .am-split-navigation {
+    touch-action: auto;
+  }
+
+  .am-split-navigation__lane {
+    overflow-y: auto;
+    overscroll-behavior: auto;
+  }
+}
