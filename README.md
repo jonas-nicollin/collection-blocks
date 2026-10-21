@@ -46,6 +46,44 @@ README.md
 | Locator Block | `window.LOCATOR_BLOCK_CONFIGS = []` |
 | Metadata Block | `window.metadataBlocksSettingsList = []` |
 
+## Shared exclusions
+
+Query, Related and Locator accept the same optional `preFilter` exclusions:
+
+```js
+preFilter: {
+  excludeCategories: ["Interview"],
+  excludeTagPrefixes: ["Selection"],
+  excludeTagValues: [{ prefix: "Selection", value: "Hero" }]
+}
+```
+
+Each exclusion is independent: any match rejects the item. Prefixes match the
+part before the first colon; values match the complete label, not a substring.
+Matching normalizes case, accents, whitespace and apostrophes. A trailing colon
+is optional on a configured prefix. Empty lists do not exclude anything.
+Exclusions apply before sorting, limiting and pagination, and also to Related
+fallback filling. Query tab filters and card variant filters accept the same
+fields. Load the matching current core and block runtimes together.
+
+## Optional Query masonry
+
+Load `query-masonry.js` after the core and before Query. Register the hook on
+only the configurations that need masonry:
+
+```js
+window.QUERY_BLOCK_HOOKS = window.QUERY_BLOCK_HOOKS || {};
+window.QUERY_BLOCK_HOOKS['my-query'] = function (grid, items, config, options) {
+  window.CollectionBlocksMasonry(grid, items, config, options);
+};
+```
+
+Give the block the class `qb-masonry-block`. Site styles and
+`window.QUERY_MASONRY_OPTIONS` control columns, gaps and optional image ratio
+snapping. The extension does not register any client-specific configurations.
+All external classic scripts may use `defer` when loaded in dependency order;
+inline configuration and hook registration must be present before they execute.
+
 ## Shared Collection Source
 
 These options are used by Query, Related, and Locator.

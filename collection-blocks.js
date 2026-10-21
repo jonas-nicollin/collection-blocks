@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.17';
+  var VERSION = '0.18';
   var STORE_KEY_PREFIX = 'collection-blocks::v0.7::';
 
   var memoryCache = new Map();
@@ -948,6 +948,36 @@
 
       return acc;
     }, []);
+  }
+
+  // Shared, opt-in exclusions. Values are exact after editorial normalization;
+  // a prefix exclusion matches the part before the first colon, never a substring.
+  function isItemExcluded(item, filter) {
+    if (!item || !filter) return false;
+    var categories = Array.isArray(item.categories) ? item.categories : [];
+    var tags = Array.isArray(item.tags) ? item.tags : [];
+    var excludedCategories = Array.isArray(filter.excludeCategories) ? filter.excludeCategories : [];
+    var excludedPrefixes = Array.isArray(filter.excludeTagPrefixes) ? filter.excludeTagPrefixes : [];
+    var excludedValues = Array.isArray(filter.excludeTagValues) ? filter.excludeTagValues : [];
+
+    if (excludedCategories.some(function(category) {
+      var wanted = norm(category);
+      return wanted && categories.some(function(value) { return norm(value) === wanted; });
+    })) return true;
+
+    return tags.some(function(tag) {
+      var parsed = parseTag(tag);
+      if (!parsed.prefix) return false;
+      var prefix = norm(parsed.prefix);
+      if (excludedPrefixes.some(function(value) {
+        return prefix === norm(String(value || '').trim().replace(/:$/, ''));
+      })) return true;
+      return excludedValues.some(function(definition) {
+        return definition && definition.prefix && definition.value != null &&
+          prefix === norm(String(definition.prefix).trim().replace(/:$/, '')) &&
+          norm(parsed.value) === norm(definition.value);
+      });
+    });
   }
 
   function getSiteTimeZone() {
@@ -2363,6 +2393,7 @@
   };
 
   var utilsApi = {
+    isItemExcluded: isItemExcluded,
     norm: norm,
     slugify: slugify,
     cleanHTML: cleanHTML,
@@ -2398,6 +2429,7 @@
   };
 
   window.CollectionBlocks = {
+    isItemExcluded: isItemExcluded,
     version: VERSION,
     data: dataApi,
     utils: utilsApi,

@@ -563,8 +563,11 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
   function matchesConfiguredFilter(item, filter, cfg) {
     if (!filter) return true;
 
+    var utils = getCollectionUtils();
+    if (utils && typeof utils.isItemExcluded === 'function' && utils.isItemExcluded(item, filter)) return false;
+
     if (!matchesCats(item, filter.categories)) return false;
-    if (filter.excludeCategories && matchesCats(item, filter.excludeCategories)) return false;
+    if (filter.excludeCategories && filter.excludeCategories.length && matchesCats(item, filter.excludeCategories)) return false;
 
     if (filter.tagValues) {
       for (var i = 0; i < filter.tagValues.length; i++) {

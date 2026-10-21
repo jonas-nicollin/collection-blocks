@@ -567,6 +567,8 @@
     }
     function matchesConfiguredItemFilter(item, filter) {
         if (!filter) return true;
+        const utils = getCollectionUtils();
+        if (utils && typeof utils.isItemExcluded === "function" && utils.isItemExcluded(item, filter)) return false;
         const categories = Array.isArray(filter.categories) ? filter.categories : [];
         const excludeCategories = Array.isArray(filter.excludeCategories) ? filter.excludeCategories : [];
         const exactTags = Array.isArray(filter.tags) ? filter.tags : Array.isArray(filter.exactTags) ? filter.exactTags : [];
@@ -995,6 +997,7 @@
             }
         } : null;
         let pool = allItems.filter(item => {
+            if (!matchesConfiguredItemFilter(item, CFG.preFilter)) return false;
             if (!passesConstraints(item, currentItem, {
                 constraints: constraints
             })) return false;
@@ -2252,6 +2255,7 @@ function computeFinalItems(allItems) {
 
     allItems.forEach(item => {
         if (!item) return;
+        if (!matchesConfiguredItemFilter(item, CFG.preFilter)) return;
         if (!passesConstraints(item, currentItem, CFG.selection)) return;
         if (!evaluateMatchGroups(item, currentItem, CFG.selection, {
             allItems: allItems

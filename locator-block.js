@@ -415,6 +415,8 @@ function getCollectionOptions(maxPages){
 
   function passesPreFilter(item){
     var preFilter = cfg.preFilter || {};
+    var utils = getCollectionUtils();
+    if(utils && typeof utils.isItemExcluded === 'function' && utils.isItemExcluded(item, preFilter))return false;
     var includeCategories = asArray(preFilter.categories || preFilter.includeCategories);
     var excludeCategories = asArray(preFilter.excludeCategories);
 
