@@ -1,0 +1,52 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Collection Blocks — extension checks</title>
+<style>body{font:16px system-ui;margin:24px}.fixture{margin-bottom:20px}.test-grid{display:flex;gap:10px}.cb-card{border:1px solid #aaa;padding:12px}.pass{color:#075b34}.fail{color:#b00}.image-fixture img{width:300px;height:auto}</style>
+<h1>Extension and image dimension checks</h1><ul id="results"></ul><div id="fixtures"></div>
+<script src="../collection-blocks.js"></script><script src="../extension-slider.js"></script>
+<script>
+(async function(){
+ const results=document.querySelector('#results'),fixtures=document.querySelector('#fixtures');
+ let passed=0,failed=0;
+ function check(name,condition){const li=document.createElement('li');li.className=condition?'pass':'fail';li.textContent=(condition?'PASS: ':'FAIL: ')+name;results.append(li);condition?passed++:failed++;}
+ const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+ const root=document.createElement('section');root.className='fixture cb-block';root.setAttribute('aria-label','Original label');
+ const grid=document.createElement('div');grid.className='test-grid';root.append(grid);fixtures.append(root);
+ function card(label){const el=document.createElement('article');el.className='cb-card';el.innerHTML='<a href="#'+label+'">'+label+'</a><button>Action</button>';return el;}
+ const a=card('A'),b=card('B');grid.append(a,b);
+ const slider=CollectionBlocksSlider.mount(grid,{autoplay:1100,dots:true});
+ check('one active card and inactive descendants excluded from keyboard',a.classList.contains('is-active')&&b.querySelector('a').tabIndex===-1);
+ check('remount is idempotent',CollectionBlocksSlider.mount(grid)===slider&&root.querySelectorAll('.cb-slider__controls').length===1);
+ slider.goTo(1);const c=card('C');grid.append(c);await delay(60);
+ check('progressive insertion preserves active card and updates dots',b.classList.contains('is-active')&&root.querySelectorAll('.cb-slider__dot').length===3);
+ root.querySelector('.cb-slider__next').click();
+ check('next button changes slide',c.classList.contains('is-active'));
+ root.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));
+ check('keyboard loops to first slide',a.classList.contains('is-active'));
+ a.querySelector('a').focus();await delay(1200);
+ check('keyboard focus pauses autoplay',a.classList.contains('is-active'));
+ root.dispatchEvent(new MouseEvent('mouseenter'));a.querySelector('a').blur();await delay(1200);
+ check('hover remains paused after focus leaves',a.classList.contains('is-active'));
+ root.dispatchEvent(new MouseEvent('mouseleave'));await delay(1200);
+ check('autoplay resumes when all pauses leave',b.classList.contains('is-active'));
+ slider.pause();
+ a.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerId:1,clientX:250,clientY:20}));
+ window.dispatchEvent(new PointerEvent('pointerup',{pointerId:1,clientX:100,clientY:22}));
+ const click=new MouseEvent('click',{bubbles:true,cancelable:true});a.querySelector('a').dispatchEvent(click);
+ check('horizontal drag moves one slide and suppresses link click',c.classList.contains('is-active')&&click.defaultPrevented);
+ const originalMM=window.matchMedia;window.matchMedia=()=>({matches:true,addEventListener(){},removeEventListener(){}});
+ const reducedRoot=document.createElement('section');const reduced=document.createElement('div');reducedRoot.append(reduced);fixtures.append(reducedRoot);reduced.append(card('R1'),card('R2'));
+ const reducedSlider=CollectionBlocksSlider.mount(reduced,{autoplay:1000});window.matchMedia=originalMM;await delay(1150);
+ check('reduced motion disables autoplay',reduced.children[0].classList.contains('is-active'));
+ reducedSlider.destroy();slider.destroy();
+ check('destroy restores original semantics and tab order',root.getAttribute('aria-label')==='Original label'&&!a.hasAttribute('aria-hidden')&&!a.querySelector('a').hasAttribute('tabindex')&&!root.querySelector('.cb-slider__controls')&&!a.classList.contains('is-active'));
+ const utils=CollectionBlocks.utils;
+ const wrapper=utils.buildImg('/not-an-image','50% 50%','dimension test',{imageDimensions:{width:1500,height:2250}});
+ wrapper.classList.add('image-fixture');fixtures.append(wrapper);
+ check('DOM renderer writes intrinsic width and height',wrapper.firstChild.getAttribute('width')==='1500'&&wrapper.firstChild.getAttribute('height')==='2250');
+ check('natural height is reserved before image arrives',Math.abs(wrapper.firstChild.getBoundingClientRect().height-450)<1);
+ check('HTML renderer includes valid dimensions',utils.buildImgHTML('/image','50% 50%','',{imageDimensions:{width:300,height:400}}).includes('width="300" height="400"'));
+ check('invalid dimensions omitted',!utils.buildImgHTML('/image',null,'',{imageDimensions:{width:0,height:400}}).includes(' width='));
+ check('direct Squarespace size supported',utils.getImageDimensions({originalSize:'1600x900'}).height===900);
+ results.dataset.complete='true';results.dataset.passed=passed;results.dataset.failed=failed;
+ document.title=passed+' passed, '+failed+' failed — Collection Blocks';
+})().catch(error=>{document.querySelector('#results').innerHTML+='<li class="fail">'+error.stack+'</li>';});
+</script></html>

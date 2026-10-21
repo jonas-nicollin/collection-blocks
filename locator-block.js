@@ -253,7 +253,7 @@ function getFocalPos(point){
   return Math.round(point.x*100)+'% '+Math.round(point.y*100)+'%';
 }
 
-function imgTag(base,alt,cls,sizes,fp,priority){
+function imgTag(base,alt,cls,sizes,fp,priority,dimensions){
   if(!base)return'';
 
   var useIndexPriority = priority == null;
@@ -270,6 +270,7 @@ function imgTag(base,alt,cls,sizes,fp,priority){
   var utils=getCollectionUtils();
   if(utils&&typeof utils.buildImgHTML==='function'){
     return utils.buildImgHTML(base,pos,alt,{
+      imageDimensions:dimensions,
       imageClass:cls,
       sizes:imageSizes,
       widths:SW,
@@ -288,10 +289,10 @@ function imgTag(base,alt,cls,sizes,fp,priority){
     +' style="object-position:'+escHtml(pos)+'">';
 }
 
-function imgWrapTag(base,alt,sizes,fp,priority){
+function imgWrapTag(base,alt,sizes,fp,priority,dimensions){
   if(!base)return'';
   var style=cfg.display.imageRatio?' style="--cb-card-image-ratio:'+escHtml(cfg.display.imageRatio)+'"':'';
-  return '<div class="'+escHtml(CLS_IMG_WRAP)+'"'+style+'>'+imgTag(base,alt,CLS_IMAGE,sizes,fp,priority)+'</div>';
+  return '<div class="'+escHtml(CLS_IMG_WRAP)+'"'+style+'>'+imgTag(base,alt,CLS_IMAGE,sizes,fp,priority,dimensions)+'</div>';
 }
    
 /* ── Coordonnées ── */
@@ -346,6 +347,8 @@ function getCollectionOptions(maxPages){
       'sourceUrl',
       'urlId',
       'assetUrl',
+      'imageDimensions',
+      'originalSize',
       'mediaFocalPoint',
       'categories',
       'tags',
@@ -464,6 +467,8 @@ function getCollectionOptions(maxPages){
       zones: getTags(item.tags, cfg.tagZone),
       categories: normalizeCategories(item.categories),
       imageBase: getImgBase(item),
+      imageDimensions: getCollectionUtils().getImageDimensions
+        ? getCollectionUtils().getImageDimensions(item) : null,
       focalPos: focalPos,
       lat: c.lat,
       lng: c.lng
@@ -512,7 +517,7 @@ function renderChild(child,item){
   }
   if(child==='image'){
     if(!d.showImage||!item.imageBase)return'';
-    return imgWrapTag(item.imageBase,item.title,'',item.focalPos);
+    return imgWrapTag(item.imageBase,item.title,'',item.focalPos,undefined,item.imageDimensions);
   }
   if(child==='title'){
     if(!d.showTitle||!item.title)return'';
@@ -585,7 +590,7 @@ function buildCardHTML(item){
 
   /* Comportement par défaut : media (image seule) + body (tous les champs texte) */
   var mediaHtml='';
-  if(d.showImage&&item.imageBase)mediaHtml='<div class="'+escHtml(CLS_MEDIA)+'">'+imgWrapTag(item.imageBase,item.title,'',item.focalPos)+'</div>';
+  if(d.showImage&&item.imageBase)mediaHtml='<div class="'+escHtml(CLS_MEDIA)+'">'+imgWrapTag(item.imageBase,item.title,'',item.focalPos,undefined,item.imageDimensions)+'</div>';
 
   var bodyHtml='';
   if(d.showNumero&&item.numero)bodyHtml+='<div class="'+escHtml(CLS_TAG_FIELD+tagFieldModifier('numero'))+'" data-prefix="'+escHtml(String(cfg.tagNumero||'Numéro').replace(/:$/,''))+'"><span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.numero)+'</span></div>';
@@ -607,7 +612,7 @@ function defineCustomPopup(){
   CustomPopup.prototype=Object.create(google.maps.OverlayView.prototype);
   CustomPopup.prototype.onAdd=function(){
     var d=cfg.display,item=this.item;
-    var im=(cfg.map.popupShowImage&&d.showImage&&item.imageBase)?'<div class="lb-popup-media">'+imgTag(item.imageBase,item.title,'lb-popup-image','240px',item.focalPos,false)+'</div>':'';
+    var im=(cfg.map.popupShowImage&&d.showImage&&item.imageBase)?'<div class="lb-popup-media">'+imgTag(item.imageBase,item.title,'lb-popup-image','240px',item.focalPos,false,item.imageDimensions)+'</div>':'';
     var b='';
     if(cfg.map.popupShowCategories&&item.categories&&item.categories.length){
       b+='<div class="cb-popup-categories lb-popup-categories">'+item.categories.map(function(cat){

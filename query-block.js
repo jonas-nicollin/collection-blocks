@@ -451,6 +451,8 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
       urlId:        raw.urlId || '',
       assetUrl:     assetUrl,
       focalPoint:   focalPoint,
+      imageDimensions: getCollectionUtils().getImageDimensions
+        ? getCollectionUtils().getImageDimensions(raw) : null,
       media:        media,
       categories:   (raw.categories || []).map(cleanHTML).filter(Boolean),
       tags:         (raw.tags || []).map(cleanHTML).filter(Boolean),
@@ -862,6 +864,11 @@ var isPriority = options.priority === true || imgIndex < 3;
     decoding: 'async',
   });
 
+  var dimensions = utils && utils.getImageDimensions ? utils.getImageDimensions(options) : null;
+  if (dimensions) {
+    img.setAttribute('width', String(dimensions.width));
+    img.setAttribute('height', String(dimensions.height));
+  }
   img.style.objectPosition = (utils && typeof utils.focalPoint === 'function')
     ? utils.focalPoint(focalPoint)
     : focalPoint;
@@ -903,6 +910,7 @@ var isPriority = options.priority === true || imgIndex < 3;
 
     if (!videoMedia) {
       return item.assetUrl ? buildImg(item.assetUrl, item.focalPoint, item.title, {
+        imageDimensions: item.imageDimensions,
         priority: descriptor.priority === true || cardIndex < 3,
         sizes: descriptor.sizes || descriptor.imageSizes || display.imageSizes,
         widths: descriptor.widths || descriptor.srcsetWidths || display.srcsetWidths,
@@ -1040,6 +1048,7 @@ var isPriority = options.priority === true || imgIndex < 3;
       var display = cfg && cfg.display ? cfg.display : {};
       var descriptor = def && typeof def === 'object' ? def : {};
       return item.assetUrl ? buildImg(item.assetUrl, item.focalPoint, item.title, {
+        imageDimensions: item.imageDimensions,
         priority: descriptor.priority === true || cardIndex < 3,
         sizes: descriptor.sizes || descriptor.imageSizes || display.imageSizes,
         widths: descriptor.widths || descriptor.srcsetWidths || display.srcsetWidths,
@@ -1421,6 +1430,7 @@ var isPriority = options.priority === true || imgIndex < 3;
     }
 
     if (item.assetUrl) card.appendChild(buildImg(item.assetUrl, item.focalPoint, item.title, {
+      imageDimensions: item.imageDimensions,
       priority: index < 3,
       sizes: disp.imageSizes,
       widths: disp.srcsetWidths,

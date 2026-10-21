@@ -530,6 +530,8 @@
             fullUrl: item.fullUrl || "",
             sourceUrl: item.sourceUrl || "",
             assetUrl: getAssetUrl(item),
+            imageDimensions: getCollectionUtils().getImageDimensions
+              ? getCollectionUtils().getImageDimensions(item) : null,
             mediaFocalPoint: item.mediaFocalPoint || null,
             media: Array.isArray(item.media) ? item.media : [],
             categories: Array.isArray(item.categories) ? item.categories.map(c => cleanText(c)).filter(Boolean) : [],
@@ -1051,6 +1053,8 @@
             'sourceUrl',
             'urlId',
             'assetUrl',
+            'imageDimensions',
+            'originalSize',
             'mediaFocalPoint',
             'media',
             'categories',
@@ -1385,6 +1389,7 @@
         media.className = "cb-card__media rb-card__media";
         const wrap = utils && typeof utils.buildImg === "function"
           ? utils.buildImg(base, item.mediaFocalPoint, cleanText(item.title || ""), {
+              imageDimensions: item.imageDimensions,
               wrapperClass: "cb-card__img-wrap rb-card__img-wrap",
               imageClass: "cb-card__img rb-card__img",
               widths: cleanWidths,

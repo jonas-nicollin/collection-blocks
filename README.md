@@ -113,8 +113,8 @@ ResizeObserver size changes schedule one shared pass per frame per grid.
 Measurements are batched before position writes. Until source dimensions are
 known, image loading may still change card heights: this is not a CLS guarantee.
 Repeated mounting is idempotent. Destroy before deliberately reusing a grid for
-a different layout. `query-masonry.js` remains a compatible legacy delivery
-entry point; new installations should load only `extension-masonry.js`.
+a different layout. Load only `extension-masonry.js`; the unused development
+alias `query-masonry.js` was removed. Older release tags remain immutable.
 
 ## Shared Collection Source
 
@@ -643,3 +643,51 @@ Suggested entry format:
 ```
 
 Use `LICENSE` to define legal reuse terms. For private/internal code, it can be omitted. For public GitHub code, add one intentionally.
+
+## Optional slider extension
+
+Load `extension-slider.js` before the block runtimes. Mount on a flat card grid
+from a render hook; Query, Related and Locator card selectors are supported.
+The extension provides behavior; the site supplies its slider layout/CSS.
+
+```js
+window.QUERY_BLOCK_HOOKS = window.QUERY_BLOCK_HOOKS || {};
+window.QUERY_BLOCK_HOOKS['featured'] = function (grid) {
+  window.CollectionBlocksSlider.mount(grid, {
+    autoplay: 6000, arrows: true, dots: true, drag: true,
+    label: 'Featured stories',
+    onChange: function (state) { /* state.index, state.card, state.grid, state.user */ }
+  });
+};
+```
+
+`mount(grid, options)` is idempotent. Direct child insertion/removal is observed;
+active cards survive progressive rendering. The returned controller exposes
+`refresh()`, `goTo(index)`, `pause()`, `resume()` and `destroy()`. Destroy restores
+modified attributes, classes and CSS properties and removes timers/listeners.
+Destroy before remounting with different options or replacing a grid.
+
+Options include `root` (element), `cardSelector`, `autoplay` (milliseconds, 0 by
+default), `arrows`, `dots`, `drag`, `dragThreshold` (48px), `controlsInGrid`,
+`label`, `previousLabel`, `nextLabel`, `dotLabel`, `previousIcon`, `nextIcon`,
+`step` (offset percentage, default 100), `cssPrefix` (default `--cb-slider`),
+`introDuration`, `onChange` and `classes` overrides. Class keys are `root`,
+`track`, `slide`, `controls`, `button`, `previous`, `next`, `dot`, `icon`, `ready`,
+`introReady`, `introComplete`, `dragging`; defaults use `cb-slider` names.
+
+State classes are `is-active`, `is-previous`, `is-before`, `is-after`,
+`is-adjacent`, `is-distant`. CSS properties append `-active-index` to the root
+prefix and `-slide-index`, `-offset`, `-offset-x` to cards. Navigation supports
+arrows and horizontal dragging; inactive cards and descendants leave the tab
+order. Autoplay pauses for hover, focus, document visibility and reduced motion.
+A manual navigation never cancels another pause condition.
+
+## Intrinsic image dimensions
+
+The core and Query/Related/Locator renderers use optional
+`imageDimensions: { width, height }` from Collection Data to write native image
+`width`/`height` attributes. Direct Squarespace `originalSize: "1500x2262"` is
+also accepted. Invalid/missing dimensions are omitted. Fixed CSS ratios and
+`object-fit` remain in control of deliberate crops; natural-height layouts can
+reserve their image space before lazy loading. No additional image request is
+made. Custom `keepFields` lists must retain `imageDimensions` / `originalSize`.

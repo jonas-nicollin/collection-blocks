@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.18';
+  var VERSION = '0.19';
   var STORE_KEY_PREFIX = 'collection-blocks::v0.7::';
 
   var memoryCache = new Map();
@@ -17,6 +17,8 @@
     'sourceUrl',
     'urlId',
     'assetUrl',
+    'imageDimensions',
+    'originalSize',
     'mediaFocalPoint',
     'media',
     'categories',
@@ -1997,6 +1999,24 @@
     return row;
   }
 
+  // Intrinsic image size from Collection Data or the direct Squarespace JSON.
+  function getImageDimensions(source) {
+    if (!source || typeof source !== 'object') return null;
+    var asset = source.asset || {};
+    var candidates = [source.imageDimensions, source.originalSize,
+      asset.imageDimensions, asset.originalSize];
+    for (var i = 0; i < candidates.length; i++) {
+      var value = candidates[i];
+      var match = typeof value === 'string'
+        ? value.trim().match(/^(\d+)\s*[x×]\s*(\d+)$/i) : null;
+      var width = Number(match ? match[1] : value && value.width);
+      var height = Number(match ? match[2] : value && value.height);
+      if (Number.isSafeInteger(width) && width > 0 &&
+          Number.isSafeInteger(height) && height > 0) return { width: width, height: height };
+    }
+    return null;
+  }
+
   function buildImg(assetUrl, focal, alt, options) {
     options = options || {};
 
@@ -2025,6 +2045,11 @@
       decoding: 'async'
     });
 
+    var dimensions = getImageDimensions(options);
+    if (dimensions) {
+      img.setAttribute('width', String(dimensions.width));
+      img.setAttribute('height', String(dimensions.height));
+    }
     img.fetchPriority = priority ? 'high' : 'low';
     img.style.objectPosition = focalPoint(focal);
     wrap.appendChild(img);
@@ -2042,8 +2067,11 @@
     var fallbackWidth = Number(options.fallbackWidth || 750);
     var priority = options.priority === true;
     var fallback = base + '?format=' + fallbackWidth + 'w';
+    var dimensions = getImageDimensions(options);
+    var dimensionAttrs = dimensions
+      ? ' width="' + dimensions.width + '" height="' + dimensions.height + '"' : '';
 
-    return '<img class="' + escapeHTML(imageClass) + '"' +
+    return '<img class="' + escapeHTML(imageClass) + '"' + dimensionAttrs +
       ' src="' + escapeHTML(fallback) + '"' +
       ' srcset="' + escapeHTML(buildSrcset(base, options.widths)) + '"' +
       ' sizes="' + escapeHTML(sizes) + '"' +
@@ -2279,6 +2307,7 @@
 
     if (type === 'image') {
       return buildImg(getImageBase(item), item.mediaFocalPoint, item.title, {
+        imageDimensions: getImageDimensions(item),
         wrapperClass: cardClass('img-wrap', prefix, descriptor.className),
         imageClass: cardClass('img', prefix, descriptor.imageClassName),
         sizes: descriptor.sizes || options.imageSizes,
@@ -2408,6 +2437,7 @@
     getISODatePart: getISODatePart,
     focalPoint: focalPoint,
     getImageBase: getImageBase,
+    getImageDimensions: getImageDimensions,
     buildSrcset: buildSrcset,
     escapeHTML: escapeHTML,
     sanitizeRichHTML: sanitizeRichHTML,
