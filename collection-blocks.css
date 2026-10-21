@@ -56,12 +56,14 @@
   color: var(--paragraphMediumColor);
   font: inherit;
   font-size: 0.9em;
-  opacity: 0.6;
   cursor: pointer;
-  transition: opacity 0.2s ease;
 }
 
-:where(.cb-load-more):hover { opacity: 1; }
+:where(.cb-load-more:not(.cb-heading__cta-below)) {
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+:where(.cb-load-more:not(.cb-heading__cta-below)):hover { opacity: 1; }
 :where(.cb-end-label) { font-size: 0.9em; opacity: 0.5; }
 :where(.cb-sentinel) { height: 1px; pointer-events: none; }
 
