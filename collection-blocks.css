@@ -174,14 +174,11 @@ body:not(.sqs-edit-mode-active) :where(
 
 :where(.cb-heading__cta).qb-heading__cta {
   font-size: 0.9em;
-  opacity: 0.6;
   white-space: nowrap;
   flex-shrink: 0;
   text-decoration: none;
   color: inherit;
-  transition: opacity 0.2s ease;
 }
-:where(.cb-heading__cta).qb-heading__cta:hover { opacity: 1; }
 
 :where(.cb-footer--cta).qb-footer--cta {
   text-align: center;
@@ -198,10 +195,7 @@ body:not(.sqs-edit-mode-active) :where(
   font-size: 0.9em;
   padding: 0.5em 2.5em;
   border-radius: 2em;
-  opacity: 0.6;
-  transition: opacity 0.2s ease;
 }
-:where(.cb-heading__cta-below).qb-heading__cta-below:hover { opacity: 1; }
 
 /* ─────────────────────────────────────────────
    TABS

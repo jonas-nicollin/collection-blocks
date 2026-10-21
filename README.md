@@ -66,23 +66,55 @@ Exclusions apply before sorting, limiting and pagination, and also to Related
 fallback filling. Query tab filters and card variant filters accept the same
 fields. Load the matching current core and block runtimes together.
 
-## Optional Query masonry
+## Optional masonry extension
 
-Load `query-masonry.js` after the core and before Query. Register the hook on
-only the configurations that need masonry:
+Load `extension-masonry.js` before the block runtimes (external classic scripts
+may use `defer` in dependency order). The engine works on a flat grid of direct
+`.cb-card`, `.qb-card`, `.rb-card` or `.lb-card` children; `cardSelector` can
+replace that selector. It does not fetch content or change filtering/sorting.
+Do not mount it on a container with group headings, controls or map elements.
+
+Query exposes a render hook, including progressive rendering and pagination:
 
 ```js
+window.CB_MASONRY_OPTIONS = {
+  columns: { default: 3, tablet: 2, mobile: 1 },
+  breakpoints: { tablet: 768, mobile: 480 }
+};
 window.QUERY_BLOCK_HOOKS = window.QUERY_BLOCK_HOOKS || {};
 window.QUERY_BLOCK_HOOKS['my-query'] = function (grid, items, config, options) {
   window.CollectionBlocksMasonry(grid, items, config, options);
 };
 ```
 
-Give the block the class `qb-masonry-block`. Site styles and
-`window.QUERY_MASONRY_OPTIONS` control columns, gaps and optional image ratio
-snapping. The extension does not register any client-specific configurations.
-All external classic scripts may use `defer` when loaded in dependency order;
-inline configuration and hook registration must be present before they execute.
+For Related, Locator or another rendering lifecycle, explicitly mount the **card
+grid** once it exists. These runtimes do not currently expose Query's registry:
+
+```js
+const masonry = window.CollectionBlocksMasonry.mount(gridElement, {
+  columns: { default: 4 },
+  gap: 24 // optional pixel value; zero is supported
+});
+masonry.refresh(); // optional; content/image/container changes are observed
+masonry.destroy(); // disconnect observers and restore original inline styles
+```
+
+Options merge defaults, legacy `QUERY_MASONRY_OPTIONS`, `CB_MASONRY_OPTIONS`,
+then per-grid options (`config.masonry` through the Query adapter). Nested column
+and breakpoint settings merge independently. Breakpoints use viewport width.
+Gaps and column offsets may also use `--cb-masonry-gap` and
+`--cb-masonry-offset-0`, etc.; legacy `--qb-` / `--sqb-` names remain supported.
+CSS lengths for these properties accept px or rem. `snapRatios: true` optionally
+snaps loaded image wrappers to familiar ratios; it does not crop by default.
+
+The extension lays out available cards at the next animation frame, without
+waiting for all lazy images. Image load/error, progressive DOM changes and
+ResizeObserver size changes schedule one shared pass per frame per grid.
+Measurements are batched before position writes. Until source dimensions are
+known, image loading may still change card heights: this is not a CLS guarantee.
+Repeated mounting is idempotent. Destroy before deliberately reusing a grid for
+a different layout. `query-masonry.js` remains a compatible legacy delivery
+entry point; new installations should load only `extension-masonry.js`.
 
 ## Shared Collection Source
 
