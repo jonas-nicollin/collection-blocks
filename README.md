@@ -221,6 +221,7 @@ Each config is an object inside `window.QUERY_BLOCK_CONFIGS`.
 | --- | --- | --- |
 | `layout` | `'pills'` | Default layout for tag filters. |
 | `tagPrefixes` | `[]` | Tag prefix filters. |
+| `publicationYear` | `false` | Year filter derived from `publishOn`, without tags. Accepts `true` or `{ layout, label, showLabel, direction, timeZone }`. Defaults: pills, Year, visible label, descending, UTC. |
 | `datePrefix` | `null` | Prefix treated as ISO date values for sorting/display. |
 | `search` | enabled unless `false` | Full-text search across title, excerpt, location, categories, tags. |
 | `tabs` | `[]` | Tab definitions. |
@@ -607,6 +608,25 @@ Date-like tag values can be formatted with these values:
 | `'datetime'` | Date + time. |
 | `'short-time'` | Short date + time when available. |
 | custom object | Passed to `toLocaleDateString()`. |
+
+Publication dates (`publishDate` in Query and Related) support a reusable month/year
+format through the existing `displayFormat` object:
+
+```js
+{ type: 'publishDate', locale: 'en-GB',
+  displayFormat: { month: 'long', year: 'numeric', timeZone: 'Europe/Zurich' } }
+```
+
+This displays `October 2026` and preserves the full timestamp in the `time`
+element. Date-like tag descriptors also accept `{ month: 'long', year: 'numeric' }`
+for individual dates. Exhibition period formatting remains independent.
+
+`filters.publicationYear` combines with category, tag and search filters. With
+`filters.urlState`, it uses the `year` URL parameter (override with
+`urlState.publicationYear`). `filters.controlOrder` identifies it as
+`publicationYear`. Invalid/missing dates offer no year; these items remain in the
+unfiltered results. Keep `performance.filterIndex: 'complete'` when all years must
+be discoverable before pagination.
 
 ## CSS Class Model
 

@@ -604,7 +604,23 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
     return items.filter(function(item) { return matchesConfiguredFilter(item, tf, cfg); });
   }
 
-  function matchesUIFilters(item, state) {
+  var PUBLICATION_YEAR_FILTER_KEY = '__publicationYear';
+
+  function getPublicationYear(item, options) {
+    var timestamp = Number(item.publishOn || 0);
+    if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
+    var date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return null;
+    try {
+      return new Intl.DateTimeFormat('en', {
+        year: 'numeric', timeZone: (options && options.timeZone) || 'UTC'
+      }).format(date);
+    } catch (_) {
+      return String(date.getUTCFullYear());
+    }
+  }
+
+  function matchesUIFilters(item, state, filters) {
     if (state.category && !item.categories.some(function(c) {
       return norm(c) === norm(state.category);
     })) return false;
@@ -612,6 +628,10 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
     var tags = state.tags || {};
     for (var prefix in tags) {
       if (!Object.prototype.hasOwnProperty.call(tags, prefix) || !tags[prefix]) continue;
+      if (prefix === PUBLICATION_YEAR_FILTER_KEY && filters && filters.publicationYear) {
+        if (getPublicationYear(item, filters.publicationYear) !== tags[prefix]) return false;
+        continue;
+      }
       if (!getTagValuesByPrefix(item, prefix).some(function(v) {
         if (tags[prefix] === '*') return true;
         var selectedDatePart = getISODatePart(tags[prefix]);
@@ -1155,8 +1175,8 @@ var isPriority = options.priority === true || imgIndex < 3;
       var publishDateEl = el('time', {
         class: qCardClass('cb-card__publish-date', 'qb-card__publish-date') +
           (publishDateDescriptor.className ? ' ' + publishDateDescriptor.className : ''),
-        datetime: publishDate.toISOString(),
       });
+      publishDateEl.dateTime = publishDate.toISOString();
 
       try {
         publishDateEl.textContent = new Intl.DateTimeFormat(
@@ -2737,7 +2757,8 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
   function filterURLContract(fc) {
     if (!fc.urlState) return null;
     var options = fc.urlState === true ? {} : fc.urlState;
-    var tags = options.tags || {};
+    var tags = Object.assign({}, options.tags || {});
+    if (fc.publicationYear) tags[PUBLICATION_YEAR_FILTER_KEY] = options.publicationYear || 'year';
     if (fc.urlState === true) {
       [fc].concat(fc.tabs || []).forEach(function(part) {
         normalizePrefixes(part.tagPrefixes, fc.layout || 'pills').forEach(function(pd) {
@@ -2766,6 +2787,10 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       var key = contract.tags[pd.prefix], value = key && params.get(key);
       if (value && (value !== '*' || pd.includeAny)) tags[pd.prefix] = value;
     });
+    if (fc.publicationYear && hasURLState) {
+      var yearValue = params.get(contract.tags[PUBLICATION_YEAR_FILTER_KEY]);
+      if (/^\d{4}$/.test(yearValue || '')) tags[PUBLICATION_YEAR_FILTER_KEY] = yearValue;
+    }
     return { tabIndex: index, defaults: !hasURLState, category: fc.categories !== false
         ? (hasURLState ? params.get(contract.category) : fc.defaultCategory || null) : null,
       tags: tags, search: fc.search !== false ? (params.get(contract.search) || '') : '' };
@@ -2882,6 +2907,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       if (!fc.resetOthers) return;
 
       if (exceptType !== 'category') state.category = null;
+      if (exceptType !== 'publicationYear') state.tags[PUBLICATION_YEAR_FILTER_KEY] = null;
 
       var activePrefixDefs = (getTabPrefixes && getTabPrefixes())
         ? normalizePrefixes(getTabPrefixes(), globalLayout)
@@ -3018,6 +3044,30 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     }
 
     function appendSecondary(pool, container) {
+      if (fc.publicationYear) {
+        var yearsCfg = typeof fc.publicationYear === 'object' ? fc.publicationYear : {};
+        var years = uniqBy(pool.map(function(item) {
+          return getPublicationYear(item, yearsCfg);
+        }).filter(Boolean), norm).sort();
+        var selectedYear = state.tags[PUBLICATION_YEAR_FILTER_KEY];
+        if (selectedYear && years.indexOf(selectedYear) === -1) years.push(selectedYear);
+        years.sort();
+        if (yearsCfg.direction !== 'asc') years.reverse();
+        if (years.length) {
+          var getYear = function() { return state.tags[PUBLICATION_YEAR_FILTER_KEY] || null; };
+          var selectYear = function(value) {
+            state.tags[PUBLICATION_YEAR_FILTER_KEY] = value;
+            resetOtherFilters('publicationYear');
+          };
+          var yearLabel = yearsCfg.label || 'Year';
+          var yearGroup = yearsCfg.layout === 'dropdown'
+            ? buildDropdown(years, null, yearLabel, getYear, selectYear)
+            : buildPillGroup(years, null, yearLabel, yearsCfg.showLabel !== false, getYear, selectYear);
+          addUiClasses(yearGroup, 'cb-filter-group--years qb-filter-group--years');
+          yearGroup.setAttribute('data-filter-control', 'publicationYear');
+          container.appendChild(yearGroup);
+        }
+      }
       if (fc.categories !== false) {
         var catsCfg = (fc.categories && typeof fc.categories === 'object') ? fc.categories : {};
         var catsOrder = catsCfg.order || null;
@@ -4071,7 +4121,7 @@ requestAnimationFrame(function() {
       var poolSorted = currentSort ? sortItems(pool, currentSort) : pool;
 
       var filtered = poolSorted.filter(function(item) {
-        return matchesUIFilters(item, activeFilters);
+        return matchesUIFilters(item, activeFilters, fc);
       });
 
       var total = filtered.length;

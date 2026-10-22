@@ -1,0 +1,67 @@
+<!doctype html><html lang="en"><meta charset="utf-8">
+<title>Publication year filters</title>
+<link rel="stylesheet" href="../collection-blocks.css">
+<style>body{font:16px system-ui;margin:20px}#result{white-space:pre-wrap}.qb-block{margin:20px 0}</style>
+<h1>Publication year filters</h1><pre id="result">Running…</pre>
+<div id="news"></div><div id="legacy"></div><div id="dropdown"></div>
+<script src="../collection-blocks.js"></script>
+<script>
+const rows=[
+ {id:'a',title:'October story',publishOn:Date.parse('2026-10-22T12:00Z')},
+ {id:'b',title:'Year boundary',publishOn:Date.parse('2025-12-31T23:30Z')},
+ {id:'c',title:'Older story',publishOn:Date.parse('2025-06-10T12:00Z')},
+ {id:'d',title:'Archive story',publishOn:Date.parse('2024-06-10T12:00Z')},
+ {id:'e',title:'Undated story',publishOn:0}
+].map(i=>({...i,fullUrl:'/'+i.id,categories:['News'],tags:[]}));
+CollectionBlocks.data.getState=async()=>({items:rows,complete:true,pagesLoaded:1});
+history.replaceState({},'',location.pathname+'?keep=yes&year=2026');
+const base={sourceCollection:{path:'/fixture'},filters:{categories:false,search:false,
+ publicationYear:{showLabel:false,timeZone:'Europe/Zurich'},clearAll:'All news',urlState:true},
+ display:{groups:[{role:'body',children:['title',{type:'publishDate',locale:'en-GB',
+ displayFormat:{month:'long',year:'numeric',timeZone:'Europe/Zurich'}}]}]},
+ pagination:{mode:'load-more',perPage:2},performance:{lazyInit:false,maxPages:'all',domBatchSize:100}};
+window.QUERY_BLOCK_CONFIGS=[{...base,key:'news',target:'#news'},
+ {...base,key:'legacy',target:'#legacy',filters:false,pagination:{mode:'none'}},
+ {...base,key:'dropdown',target:'#dropdown',filters:{...base.filters,urlState:false,
+ publicationYear:{layout:'dropdown',timeZone:'UTC'},resetOthers:true,search:true},pagination:{mode:'none'}}];
+</script><script src="../query-block.js"></script><script>
+window.addEventListener('load',async()=>{
+ const results=[],ok=(test,pass)=>{results.push({test,pass:!!pass});if(!pass)throw Error(test)};
+ const delay=ms=>new Promise(r=>setTimeout(r,ms));
+ const wait=async f=>{for(let i=0;i<100&&!f();i++)await delay(20);if(!f())throw Error('Timeout')};
+ const q=document.querySelector('#news'),count=()=>q.querySelectorAll('.qb-card').length;
+ const year=y=>[...q.querySelectorAll('.qb-filter-btn')].find(b=>b.textContent===y);
+ try {
+ await wait(()=>count()===2&&document.querySelectorAll('#legacy .qb-card').length===5);
+ ok('Years derive from publication date without tags', [...q.querySelectorAll('.qb-filter-btn')].map(b=>b.textContent).join(',')==='2026,2025,2024');
+ ok('URL restores year with timezone boundary',year('2026').getAttribute('aria-pressed')==='true'||year('2026').classList.contains('qb-filter-btn--active'));
+ ok('Month/year omits day and retains exact datetime',q.querySelector('time').textContent==='October 2026'&&q.querySelector('time').dateTime==='2026-10-22T12:00:00.000Z');
+ ok('Timezone applies to displayed month/year',q.querySelectorAll('time')[1].textContent==='January 2026');
+ ok('Year filter is opt-in',!document.querySelector('#legacy .cb-filter-group--years'));
+ year('2025').click();await wait(()=>count()===1);
+ ok('Selecting a year filters and updates URL',q.querySelector('.qb-card').textContent.includes('Older story')&&location.search.includes('year=2025'));
+ history.back();await wait(()=>count()===2);
+ ok('Back restores year and cards',year('2026').classList.contains('qb-filter-btn--active'));
+ q.querySelector('.qb-clear-all').click();await wait(()=>!location.search.includes('year='));
+ ok('Reset keeps unrelated URL parameter',location.search.includes('keep=yes')&&count()===2);
+ q.querySelector('.qb-load-more').click();await wait(()=>count()===4);
+ q.querySelector('.qb-load-more').click();await wait(()=>count()===5);
+ ok('Unfiltered pagination retains undated stories',q.textContent.includes('Undated story')&&q.querySelectorAll('time').length===4);
+ year('2024').click();await wait(()=>count()===1);
+ ok('Changing year resets pagination',q.querySelector('.qb-card').textContent.includes('Archive story'));
+ const d=document.querySelector('#dropdown'),s=d.querySelector('select[aria-label="Year"]');
+ s.value='2025';s.dispatchEvent(new Event('change'));await wait(()=>d.querySelectorAll('.qb-card').length===2);
+ ok('Dropdown uses its configured UTC year',d.textContent.includes('Year boundary')&&d.textContent.includes('Older story'));
+ const search=d.querySelector('input');search.value='Older';search.dispatchEvent(new Event('input'));
+ await wait(()=>d.querySelectorAll('.qb-card').length===1);
+ ok('Search combines with publication year',d.querySelector('select').value==='2025'&&d.textContent.includes('Older story'));
+ const nextYear=d.querySelector('select');nextYear.value='2026';nextYear.dispatchEvent(new Event('change'));
+ await wait(()=>d.querySelectorAll('.qb-card').length===1&&d.querySelector('input').value==='');
+ ok('Year selection honors resetOthers',d.textContent.includes('October story'));
+ history.pushState({},'',location.pathname+'?year=2023');dispatchEvent(new PopStateEvent('popstate'));await wait(()=>count()===0);
+ ok('Unknown shared year remains visible',!!year('2023'));
+ }catch(error){results.push({error:String(error)})}
+ document.querySelector('#result').textContent=JSON.stringify(results,null,2);
+ document.body.dataset.passed=String(results.every(r=>r.pass));
+});
+</script></html>
