@@ -802,3 +802,17 @@ A tag-prefix filter can opt into `includeAny: true` and `anyLabel` to offer an
 prefix such as Vernissage to filter by calendar day independently of Date.
 Existing blocks without URL state retain their existing behavior.
 Browser checks: `tests/browser-query-url.html`.
+
+
+### Filter presentation and scroller date labels
+
+`filters.categories.layout: 'dropdown'` opts categories into a select control;
+the default remains pills. `filters.controlOrder` optionally orders secondary
+controls in the DOM, using `'categories'`, exact tag prefixes, and `'search'`.
+Unlisted controls follow in their original order. Tabs remain separate.
+For example: `controlOrder: ['Date', 'categories', 'Membre', 'search']`.
+
+Scroller `formatDay(day)` can return a site-specific day label for an ISO
+`YYYY-MM-DD` value. Omitting it preserves the standard localized label.
+For exhibition selections spanning multiple days, omit `getSchedule` to keep
+the supplied card order and dates without generating day separators.

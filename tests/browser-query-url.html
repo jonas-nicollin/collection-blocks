@@ -11,8 +11,8 @@ const rows=[
 ];
 CollectionBlocks.data.getState=async()=>({items:rows,complete:true,pagesLoaded:1});
 history.replaceState({fixture:true},'',location.pathname+'?keep=yes&type=events&category=Talk&date=2026-09-16#anchor');
-const settings={key:'url-test',target:'#query',debug:true,sourceCollection:{path:'/fixture'},filters:{clearAll:true,search:true,categories:{showLabel:false},datePrefix:'Date',urlState:{tab:'type',tags:{Date:'date','Thématique':'theme',Vernissage:'opening'}},tabs:[{id:'exhibitions',label:'Expositions',filter:{categories:['Exposition']},tagPrefixes:[{prefix:'Thématique',layout:'dropdown'},{prefix:'Vernissage',layout:'dropdown',filterGranularity:'day',includeAny:true,anyLabel:'All openings'}]},{id:'events',label:'Events',filter:{excludeCategories:['Exposition']},tagPrefixes:[{prefix:'Date',layout:'pills',filterFormat:'short'}]}]},display:{groups:[{role:'body',children:['title']}]},pagination:{mode:'none'},performance:{lazyInit:false,maxPages:'all',domBatchSize:100}};
-window.QUERY_BLOCK_CONFIGS=[settings,{...settings,key:'legacy',target:'#legacy',filters:{...settings.filters,urlState:false}}];
+const settings={key:'url-test',target:'#query',debug:true,sourceCollection:{path:'/fixture'},filters:{clearAll:true,search:true,categories:{showLabel:false,layout:'dropdown'},controlOrder:['Date','categories','Thématique','Vernissage','search'],datePrefix:'Date',urlState:{tab:'type',tags:{Date:'date','Thématique':'theme',Vernissage:'opening'}},tabs:[{id:'exhibitions',label:'Expositions',filter:{categories:['Exposition']},tagPrefixes:[{prefix:'Thématique',layout:'dropdown'},{prefix:'Vernissage',layout:'dropdown',filterGranularity:'day',includeAny:true,anyLabel:'All openings'}]},{id:'events',label:'Events',filter:{excludeCategories:['Exposition']},tagPrefixes:[{prefix:'Date',layout:'dropdown',filterFormat:'short'}]}]},display:{groups:[{role:'body',children:['title']}]},pagination:{mode:'none'},performance:{lazyInit:false,maxPages:'all',domBatchSize:100}};
+window.QUERY_BLOCK_CONFIGS=[settings,{...settings,key:'legacy',target:'#legacy',filters:{...settings.filters,urlState:false,categories:{showLabel:false},controlOrder:null}}];
 </script><script src="../query-block.js"></script><script>
 window.addEventListener('load',async()=>{
  const results=[],ok=(test,pass)=>{results.push({test,pass:!!pass});if(!pass)throw Error(test)};
@@ -24,6 +24,11 @@ window.addEventListener('load',async()=>{
  await wait(()=>count()===1);
  ok('Initial URL restores event tab/category/day',q.querySelector('.qb-card').textContent==='Talk Three'&&tab('Events').classList.contains('qb-tab-btn--active'));
  ok('Block without opt-in ignores URL',document.querySelectorAll('#legacy .qb-card').length===2);
+ ok('Date dropdown precedes category in DOM',[...q.querySelectorAll('select')].map(x=>x.getAttribute('aria-label')).join(',')==='Date,Catégorie');
+ ok('Category dropdown restores URL selection',q.querySelector('select[aria-label="Catégorie"]').value==='Talk');
+ const category=q.querySelector('select[aria-label="Catégorie"]');category.value='Visite guidée';category.dispatchEvent(new Event('change'));await wait(()=>count()===0);
+ const day=q.querySelector('select[aria-label="Date"]');day.value='2026-09-17';day.dispatchEvent(new Event('change'));await wait(()=>count()===1);
+ ok('Dropdown category and date combine and update URL',new URL(location.href).searchParams.get('category')==='Visite guidée'&&new URL(location.href).searchParams.get('date')==='2026-09-17');
  ok('Initial reset is visible',q.querySelector('.qb-clear-all').style.display!=='none');
  tab('Expositions').click();await wait(()=>count()===2);
  ok('Tab clears dependent filters and writes URL',location.search.includes('type=exhibitions')&&!location.search.includes('category='));

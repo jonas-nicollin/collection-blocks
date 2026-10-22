@@ -20,10 +20,11 @@
  const track=document.querySelector('#track');
  const dates=['2026-09-16T10:00','2026-09-16T14:00','2026-09-17T10:00'];
  function cards(){track.innerHTML=dates.map((d,i)=>'<a class="card" data-cb-index="'+i+'" href="#'+i+'">'+d+'</a>').join('')};cards();
- let time='2026-09-16T12:00';const config={itemSelector:':scope > .card',getSchedule:c=>dates[+c.dataset.cbIndex],now:()=>time,timeZone:'Europe/Zurich',locale:'fr-CH'};
+ let time='2026-09-16T12:00';const config={itemSelector:':scope > .card',getSchedule:c=>dates[+c.dataset.cbIndex],now:()=>time,timeZone:'Europe/Zurich',locale:'fr-CH',formatDay:day=>{const s=new Intl.DateTimeFormat('fr-CH',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'}).format(new Date(day+'T12:00Z')).replace(/,/g,'');return s.charAt(0).toUpperCase()+s.slice(1)}};
  const c=api.mount(track,config);await frames();
  ok('Current first, then upcoming',[...track.querySelectorAll('.card')].map(x=>x.dataset.cbIndex).join(',')==='0,1,2');
  ok('Day dividers generated',track.querySelectorAll('.cb-scroller-day').length===2);
+ ok('Site formatter abbreviates and capitalizes dates',track.querySelectorAll('.cb-scroller-day span:last-child')[1].textContent==='Jeu. 17 sept.');
  ok('Idempotent mounting has one control group',api.mount(track,config)===c&&track.parentElement.querySelectorAll('.cb-scroller-controls').length===1);
  time='2026-09-17T09:00';c.refresh();await frames();
  ok('Next-day clock rotates the ordering',track.querySelector('.card').dataset.cbIndex==='2');
@@ -34,6 +35,7 @@
  cards();await frames();ok('Replacement cards are enhanced again',track.querySelectorAll('[data-scroller-card]').length===3);
  dates.push('2026-09-20T10:00');track.insertAdjacentHTML('beforeend','<a class="card" data-cb-index="3" href="#3">New</a>');await frames();ok('Progressive insertion joins chronological order',track.querySelector('.card').dataset.cbIndex==='3');
  c.destroy();ok('Destroy removes controls and day dividers',!track.parentElement.querySelector('.cb-scroller-controls')&&!track.querySelector('.cb-scroller-day')&&!track.hasAttribute('tabindex'));
+ const staticRail=api.mount(track,{itemSelector:':scope > .card'});await frames();ok('Unscheduled exhibition rail retains order without day dividers',!track.querySelector('.cb-scroller-day')&&[...track.querySelectorAll('.card')].map(x=>x.dataset.cbIndex).join(',')==='0,1,2,3');staticRail.destroy();
  }catch(e){results.push({error:String(e)})}
  document.querySelector('#result').textContent=JSON.stringify(results,null,2);document.body.dataset.passed=String(results.every(x=>x.pass));
 })();

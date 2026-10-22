@@ -3040,19 +3040,17 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
             state.category = fc.defaultCategory;
           }
 
-          var grp = buildPillGroup(
-            cats,
-            null,
-            catsLabel,
-            catsShowLbl,
-            function() { return state.category; },
-            function(v) {
-              state.category = v;
-              resetOtherFilters('category', null);
-            }
-          );
+          var getCategory = function() { return state.category; };
+          var selectCategory = function(v) {
+            state.category = v;
+            resetOtherFilters('category', null);
+          };
+          var grp = catsCfg.layout === 'dropdown'
+            ? buildDropdown(cats, null, catsLabel, getCategory, selectCategory)
+            : buildPillGroup(cats, null, catsLabel, catsShowLbl, getCategory, selectCategory);
 
           addUiClasses(grp, CLS_FILTER_GROUP_CATS);
+          grp.setAttribute('data-filter-control', 'categories');
           container.appendChild(grp);
         }
       }
@@ -3135,6 +3133,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
         addUiClasses(grp, CLS_FILTER_GROUP_TAG);
         grp.setAttribute('data-prefix', pd.prefix);
+        grp.setAttribute('data-filter-control', pd.prefix);
         container.appendChild(grp);
       });
 
@@ -3161,7 +3160,20 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         });
 
         sg.appendChild(inp);
+        sg.setAttribute('data-filter-control', 'search');
         container.appendChild(sg);
+      }
+
+      // Order the actual DOM so keyboard and visual navigation agree.
+      if (Array.isArray(fc.controlOrder)) {
+        var controls = Array.from(container.children);
+        fc.controlOrder.forEach(function(key) {
+          var control = controls.find(function(node) {
+            return node.getAttribute('data-filter-control') === key;
+          });
+          if (control) { container.appendChild(control); controls.splice(controls.indexOf(control), 1); }
+        });
+        controls.forEach(function(control) { container.appendChild(control); });
       }
     }
 

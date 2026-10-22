@@ -98,9 +98,10 @@
         (archive ? labels.archive : status === 'past' ? labels.past :
           date === today ? labels.today : '');
       var title = document.createElement('span');
-      title.textContent = date ? new Intl.DateTimeFormat(cfg.locale || 'en', {
+      title.textContent = date ? (typeof cfg.formatDay === 'function' ? cfg.formatDay(date) :
+        new Intl.DateTimeFormat(cfg.locale || 'en', {
         weekday: 'short', day: 'numeric', month: 'long', timeZone: 'UTC'
-      }).format(new Date(date + 'T12:00Z')) : '';
+      }).format(new Date(date + 'T12:00Z'))) : '';
       h.append(eyebrow, title); return h;
     }
     function refresh(force) {
