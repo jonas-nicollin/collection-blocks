@@ -13,7 +13,7 @@
   flex: 0 0 var(--scroller-day-width, 140px); align-self: stretch;
   display: flex; flex-direction: column; justify-content: center;
   gap: 10px; margin: 0; padding: 16px; border-inline: 1px solid currentColor;
-  font-size: 1rem; font-weight: 500; scroll-snap-align: start;
+  font-size: 1rem; scroll-snap-align: start;
 }
 .cb-scroller-day__context { font-size: .7em; text-transform: uppercase; letter-spacing: .04em; }
 .cb-scroller-controls { display: flex; gap: 8px; justify-content: flex-end; margin-block: 0 12px; }

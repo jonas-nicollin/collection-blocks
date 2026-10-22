@@ -28,7 +28,7 @@
     if (!start) return null;
     var end = range[1] ? wallTime(range[1], zone) : '';
     if (range[1] && /^\d{4}-\d{2}-\d{2}$/.test(range[1])) end = range[1] + 'T23:59';
-    if (!range[1] && /^\d{4}-\d{2}-\d{2}$/.test(range[0])) end = range[0] + 'T23:59';
+    if (!range[1]) end = start.slice(0, 10) + 'T23:59';
     return { start: start, end: end >= start ? end : '' };
   }
 

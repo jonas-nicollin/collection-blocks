@@ -754,8 +754,9 @@ Options include `itemSelector`, `label`, `labels`, `locale`, `timeZone`, `now`,
 Schedules accept one ISO start/range or an array of occurrences. Naive ISO
 values are local to `timeZone`; explicit offsets are converted. The next
 available occurrence represents a multi-occurrence card. Date-only schedules
-last through that day; a timed start without an end is classified as an earlier
-start after its time, never presented as proof that the event has finished.
+and start-only schedules last through the end of their local calendar day. An
+explicit end takes precedence. This is a display convention for missing end
+times, not a claim about the actual event duration.
 
 Dated rails put ongoing and upcoming items first, then earlier starts and
 undated items, with day markers. All-past selections become an archive.
@@ -775,3 +776,29 @@ primary media URL, accessible name (`openLabel` fallback) and dialog semantics.
 Mount one controller per gallery to keep gallery groups independent. Late items
 are prepared by `refresh()` and original link attributes are restored on destroy.
 Existing artwork configs and alternate artwork views keep their prior behavior.
+
+### Shareable Query filters
+
+`filters.urlState` is opt-in. Use stable `id` values on tabs. For example:
+
+```js
+urlState: {
+  tab: 'type', category: 'categorie', search: 'recherche',
+  tags: { Date: 'date', Membre: 'membre', 'Thématique': 'theme' }
+}
+```
+
+The initial URL restores the active tab, category, tag values and search. User
+filter changes push a browser history entry; debounced search edits replace the
+current entry. Back/forward restore the UI and results. Unmapped parameters and
+the hash are retained. Only one block should own a given set of parameter names
+on a page; use distinct names for independent blocks. `urlState: true` defaults
+to `tab`, `category`, `search` and `tag.<prefix>` for configured prefixes.
+Tab IDs fall back to label slugs. Unknown tabs fall back to the configured tab.
+Only prefixes exposed by the active tab can be restored from the URL.
+
+A tag-prefix filter can opt into `includeAny: true` and `anyLabel` to offer an
+“any value” selection, encoded as `*`. `filterGranularity: 'day'` allows a dated
+prefix such as Vernissage to filter by calendar day independently of Date.
+Existing blocks without URL state retain their existing behavior.
+Browser checks: `tests/browser-query-url.html`.

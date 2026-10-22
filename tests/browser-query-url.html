@@ -1,0 +1,51 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Query URL checks</title>
+<link rel="stylesheet" href="../collection-blocks.css"><style>body{font:16px system-ui;margin:20px}#result{white-space:pre-wrap}.qb-block{margin:20px 0}</style>
+<h1>Shareable programme filters</h1><pre id="result">Running…</pre><div id="query"></div><div id="legacy"></div>
+<script src="../collection-blocks.js"></script>
+<script>
+const rows=[
+ {id:'1',title:'Photo One',fullUrl:'/one',categories:['Exposition'],tags:['Thématique: Photographie','Vernissage: 2026-09-16T18:00']},
+ {id:'2',title:'Clay Two',fullUrl:'/two',categories:['Exposition'],tags:['Thématique: Céramique']},
+ {id:'3',title:'Talk Three',fullUrl:'/three',categories:['Talk'],tags:['Date: 2026-09-16T11:00']},
+ {id:'4',title:'Tour Four',fullUrl:'/four',categories:['Visite guidée'],tags:['Date: 2026-09-17T12:00']}
+];
+CollectionBlocks.data.getState=async()=>({items:rows,complete:true,pagesLoaded:1});
+history.replaceState({fixture:true},'',location.pathname+'?keep=yes&type=events&category=Talk&date=2026-09-16#anchor');
+const settings={key:'url-test',target:'#query',debug:true,sourceCollection:{path:'/fixture'},filters:{clearAll:true,search:true,categories:{showLabel:false},datePrefix:'Date',urlState:{tab:'type',tags:{Date:'date','Thématique':'theme',Vernissage:'opening'}},tabs:[{id:'exhibitions',label:'Expositions',filter:{categories:['Exposition']},tagPrefixes:[{prefix:'Thématique',layout:'dropdown'},{prefix:'Vernissage',layout:'dropdown',filterGranularity:'day',includeAny:true,anyLabel:'All openings'}]},{id:'events',label:'Events',filter:{excludeCategories:['Exposition']},tagPrefixes:[{prefix:'Date',layout:'pills',filterFormat:'short'}]}]},display:{groups:[{role:'body',children:['title']}]},pagination:{mode:'none'},performance:{lazyInit:false,maxPages:'all',domBatchSize:100}};
+window.QUERY_BLOCK_CONFIGS=[settings,{...settings,key:'legacy',target:'#legacy',filters:{...settings.filters,urlState:false}}];
+</script><script src="../query-block.js"></script><script>
+window.addEventListener('load',async()=>{
+ const results=[],ok=(test,pass)=>{results.push({test,pass:!!pass});if(!pass)throw Error(test)};
+ const delay=ms=>new Promise(r=>setTimeout(r,ms));
+ const q=document.querySelector('#query'),count=()=>q.querySelectorAll('.qb-card').length;
+ const tab=text=>[...q.querySelectorAll('.qb-tab-btn')].find(x=>x.textContent===text);
+ const wait=async f=>{for(let i=0;i<100&&!f();i++)await delay(20);if(!f())throw Error('Timeout')};
+ try{
+ await wait(()=>count()===1);
+ ok('Initial URL restores event tab/category/day',q.querySelector('.qb-card').textContent==='Talk Three'&&tab('Events').classList.contains('qb-tab-btn--active'));
+ ok('Block without opt-in ignores URL',document.querySelectorAll('#legacy .qb-card').length===2);
+ ok('Initial reset is visible',q.querySelector('.qb-clear-all').style.display!=='none');
+ tab('Expositions').click();await wait(()=>count()===2);
+ ok('Tab clears dependent filters and writes URL',location.search.includes('type=exhibitions')&&!location.search.includes('category='));
+ const theme=q.querySelector('select[aria-label="Thématique"]');theme.value='Photographie';theme.dispatchEvent(new Event('change'));await wait(()=>count()===1);
+ ok('Tag selection is shareable',new URL(location.href).searchParams.get('theme')==='Photographie'&&q.querySelector('.qb-card').textContent==='Photo One');
+ ok('Unowned parameters, hash and history state preserved',location.search.includes('keep=yes')&&location.hash==='#anchor'&&history.state.fixture);
+ history.back();await wait(()=>count()===2);
+ ok('Back restores filters and results',q.querySelector('select[aria-label="Thématique"]').value==='');
+ history.forward();await wait(()=>count()===1);
+ ok('Forward restores selected dropdown',q.querySelector('select[aria-label="Thématique"]').value==='Photographie');
+ q.querySelector('.qb-clear-all').click();await wait(()=>count()===2);
+ ok('Reset removes selected tag URL',!location.search.includes('theme='));
+ const opening=q.querySelector('select[aria-label="Vernissage"]');opening.value='*';opening.dispatchEvent(new Event('change'));await wait(()=>count()===1);
+ ok('Any opening filter keeps only tagged exhibitions',new URL(location.href).searchParams.get('opening')==='*');
+ q.querySelector('.qb-clear-all').click();await wait(()=>count()===2);
+ const input=q.querySelector('input[type="search"]');input.value='Clay';input.dispatchEvent(new Event('input'));await wait(()=>count()===1);
+ ok('Search updates URL without losing text',new URL(location.href).searchParams.get('search')==='Clay'&&input.value==='Clay');
+ history.pushState(history.state,'',location.pathname+'?type=events&date=2026-09-17&category=Visite+guid%C3%A9e');window.dispatchEvent(new PopStateEvent('popstate'));await wait(()=>count()===1&&q.querySelector('.qb-card').textContent==='Tour Four');
+ ok('Encoded category and day restore together',tab('Events').classList.contains('qb-tab-btn--active'));
+ history.pushState(history.state,'',location.pathname+'?type=invalid&theme=Unknown');window.dispatchEvent(new PopStateEvent('popstate'));await wait(()=>count()===0);
+ ok('Unknown tab falls back; unknown tag remains visible',tab('Expositions').classList.contains('qb-tab-btn--active')&&q.querySelector('select[aria-label="Thématique"]').value==='Unknown');
+ }catch(error){results.push({error:String(error)})}
+ document.querySelector('#result').textContent=JSON.stringify(results,null,2);document.body.dataset.passed=String(results.every(r=>r.pass));
+});
+</script></html>

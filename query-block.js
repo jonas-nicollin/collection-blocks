@@ -250,6 +250,8 @@
         direction:    p.direction    || p.sortDirection || null,
         filterFormat: p.filterFormat || null,
         filterGranularity: p.filterGranularity || null,
+        includeAny: p.includeAny === true,
+        anyLabel: p.anyLabel || null,
       };
     });
   }
@@ -611,6 +613,7 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
     for (var prefix in tags) {
       if (!Object.prototype.hasOwnProperty.call(tags, prefix) || !tags[prefix]) continue;
       if (!getTagValuesByPrefix(item, prefix).some(function(v) {
+        if (tags[prefix] === '*') return true;
         var selectedDatePart = getISODatePart(tags[prefix]);
         if (selectedDatePart) {
           var valueDatePart = getISODatePart(v);
@@ -2514,7 +2517,9 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
   }
 
   function shouldCollapseDateFilter(pd, datePrefix, format) {
-    if (!pd || !isDatePrefix(pd.prefix, datePrefix)) return false;
+    if (!pd) return false;
+    if (pd.filterGranularity === 'day') return true;
+    if (!isDatePrefix(pd.prefix, datePrefix)) return false;
 
     var granularity = String(pd.filterGranularity || '').toLowerCase();
     if (granularity === 'value' || granularity === 'exact' || granularity === 'time') return false;
@@ -2728,7 +2733,45 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
    * 12. FILTRES UI
    * ════════════════════════════════════ */
 
-  function buildFilterBar(baseItemsOrGetter, cfg, onFilter, onTabChange, getTabPrefixes, ownerBlock, ensureFilterOptions, defaultTabIndex) {
+  // URL state is opt-in and owns only the explicitly mapped query parameters.
+  function filterURLContract(fc) {
+    if (!fc.urlState) return null;
+    var options = fc.urlState === true ? {} : fc.urlState;
+    var tags = options.tags || {};
+    if (fc.urlState === true) {
+      [fc].concat(fc.tabs || []).forEach(function(part) {
+        normalizePrefixes(part.tagPrefixes, fc.layout || 'pills').forEach(function(pd) {
+          tags[pd.prefix] = 'tag.' + pd.prefix;
+        });
+      });
+    }
+    return { tab: options.tab || 'tab', category: options.category || 'category',
+      search: options.search || 'search', tags: tags };
+  }
+
+  function readFilterURL(fc, fallbackIndex) {
+    var contract = filterURLContract(fc);
+    if (!contract) return null;
+    var params = new URL(window.location.href).searchParams;
+    var tabs = fc.tabs || [], index = fallbackIndex;
+    var tabValue = params.get(contract.tab);
+    tabs.forEach(function(tab, i) {
+      if (String(tab.id || slugify(tab.label || String(i))) === tabValue) index = i;
+    });
+    var owned = [contract.tab, contract.category, contract.search].concat(Object.values(contract.tags));
+    var hasURLState = owned.some(function(key) { return params.has(key); });
+    var part = tabs[index] || {}, tags = hasURLState ? {} : Object.assign({}, fc.defaultTags || {});
+    var definitions = normalizePrefixes(part.tagPrefixes || fc.tagPrefixes, fc.layout || 'pills');
+    definitions.forEach(function(pd) {
+      var key = contract.tags[pd.prefix], value = key && params.get(key);
+      if (value && (value !== '*' || pd.includeAny)) tags[pd.prefix] = value;
+    });
+    return { tabIndex: index, defaults: !hasURLState, category: fc.categories !== false
+        ? (hasURLState ? params.get(contract.category) : fc.defaultCategory || null) : null,
+      tags: tags, search: fc.search !== false ? (params.get(contract.search) || '') : '' };
+  }
+
+  function buildFilterBar(baseItemsOrGetter, cfg, onFilter, onTabChange, getTabPrefixes, ownerBlock, ensureFilterOptions, defaultTabIndex, initialURLState) {
     if (cfg.filters === false) return null;
 
     var fc = cfg.filters || {};
@@ -2764,6 +2807,32 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       search: '',
     };
 
+    var activeTabIndex = defaultTabIndex || 0;
+    var urlContract = filterURLContract(fc);
+    var restoringURL = false;
+    var usingURLDefaults = initialURLState && initialURLState.defaults;
+    if (initialURLState) {
+      state.category = initialURLState.category;
+      state.tags = Object.assign({}, initialURLState.tags);
+      state.search = initialURLState.search;
+    }
+    function writeURL(replace) {
+      if (!urlContract || restoringURL) return;
+      var url = new URL(window.location.href);
+      [urlContract.tab, urlContract.category, urlContract.search]
+        .concat(Object.values(urlContract.tags)).forEach(function(key) { url.searchParams.delete(key); });
+      var tab = (fc.tabs || [])[activeTabIndex];
+      if (tab) url.searchParams.set(urlContract.tab, tab.id || slugify(tab.label || String(activeTabIndex)));
+      if (state.category) url.searchParams.set(urlContract.category, state.category);
+      if (state.search) url.searchParams.set(urlContract.search, state.search);
+      Object.keys(urlContract.tags).forEach(function(prefix) {
+        if (state.tags[prefix]) url.searchParams.set(urlContract.tags[prefix], state.tags[prefix]);
+      });
+      if (url.href !== window.location.href) {
+        window.history[replace ? 'replaceState' : 'pushState'](window.history.state, '', url.href);
+      }
+    }
+
     var secondaryEl = null;
     var mobileObj = null;
     var toggleBtn = null;
@@ -2776,7 +2845,8 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         : (baseItemsOrGetter || []);
     }
 
-    function emit() {
+    function emit(replaceURL) {
+      writeURL(replaceURL === true);
       var t = {};
 
       Object.keys(state.tags).forEach(function(k) {
@@ -2960,10 +3030,13 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
           return norm(a).localeCompare(norm(b));
         });
 
+        if (state.category && !cats.some(function(c) { return norm(c) === norm(state.category); })) {
+          cats.push(state.category);
+        }
         if (catsOrder) cats = applyCustomOrder(cats, catsOrder);
 
         if (cats.length > 1) {
-          if (fc.defaultCategory && state.category == null) {
+          if (!urlContract && fc.defaultCategory && state.category == null) {
             state.category = fc.defaultCategory;
           }
 
@@ -3007,7 +3080,15 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
         var displayVals = fmt ? vals.map(function(v) {
           return formatISOTag(v, fmt) || v;
-        }) : vals;
+        }) : vals.slice();
+        if (pd.includeAny && vals.length) {
+          vals.unshift('*'); displayVals.unshift(pd.anyLabel || pd.prefix);
+        }
+        // Keep unknown shared values visible so an empty result is explainable.
+        var selected = state.tags[pd.prefix];
+        if (selected && !(usingURLDefaults && (selected === 'first' || selected === 'last')) && !vals.some(function(v) { return norm(v) === norm(selected); })) {
+          vals.unshift(selected); displayVals.unshift(selected);
+        }
 
         if (!vals.length) return;
 
@@ -3016,7 +3097,10 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         if (defVal === 'first' && vals.length) defVal = vals[0];
         if (defVal === 'last' && vals.length) defVal = vals[vals.length - 1];
 
-        if (defVal && !state.tags[pd.prefix]) {
+        if (usingURLDefaults && (state.tags[pd.prefix] === 'first' || state.tags[pd.prefix] === 'last')) {
+          state.tags[pd.prefix] = defVal;
+        }
+        if (!urlContract && defVal && !state.tags[pd.prefix]) {
           state.tags[pd.prefix] = defVal;
         }
 
@@ -3064,6 +3148,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
           'aria-label': i18n.searchPlaceholder,
         });
 
+        inp.value = state.search;
         var timer;
 
         inp.addEventListener('input', function() {
@@ -3071,7 +3156,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
           timer = setTimeout(function() {
             state.search = inp.value.trim();
-            emit();
+            emit(true);
           }, 200);
         });
 
@@ -3125,6 +3210,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
           addUiClasses(btn, CLS_TAB_BTN_ACTIVE);
 
+          activeTabIndex = idx;
           state.tab = tab.filter || null;
           resetSec();
 
@@ -3258,6 +3344,40 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       }
     }
 
+    if (urlContract) {
+      function restoreURL() {
+        if (!ownerBlock.isConnected) {
+          window.removeEventListener('popstate', restoreURL);
+          return;
+        }
+        var restored = readFilterURL(fc, resolveDefaultTabIndex(fc, cfg));
+        activeTabIndex = restored.tabIndex;
+        usingURLDefaults = restored.defaults;
+        state.tab = tabs[activeTabIndex] ? tabs[activeTabIndex].filter || null : null;
+        state.category = restored.category; state.tags = restored.tags; state.search = restored.search;
+        if (tabs[activeTabIndex] && onTabChange) onTabChange(tabs[activeTabIndex]);
+        wrapper.querySelectorAll('.qb-tab-btn').forEach(function(btn, index) {
+          toggleUiClasses(btn, CLS_TAB_BTN_ACTIVE, index === activeTabIndex);
+        });
+        rebuildSecondary();
+        if (mobileObj) {
+          mobileObj.close(); mobileObj.syncContext();
+        }
+        restoringURL = true;
+        emit();
+        restoringURL = false;
+      }
+      window.addEventListener('popstate', restoreURL);
+    }
+    updateToggleBadge();
+    if (clearAllBtn && countActive() > 0 && mobilePanelBp !== Infinity) {
+      clearAllBtn.style.display = '';
+    }
+    wrapper.qbFilterState = function() {
+      return { tab: state.tab, category: state.category,
+        tags: Object.assign({}, state.tags), search: state.search };
+    };
+
     wrapper.qbRebuildSecondary = function() {
       rebuildSecondary();
       updateToggleBadge();
@@ -3333,6 +3453,8 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     var disp = cfg.display || {};
     var fc = (cfg.filters && cfg.filters !== false) ? cfg.filters : {};
     var defaultTabIndex = resolveDefaultTabIndex(fc, cfg);
+    var initialURLState = readFilterURL(fc, defaultTabIndex);
+    if (initialURLState) defaultTabIndex = initialURLState.tabIndex;
 
     var i18n = Object.assign({
       loading: false,
@@ -3863,8 +3985,10 @@ requestAnimationFrame(function() {
           return ensureConfiguredFilterOptions(poolGetter, getActiveFilterPrefixes);
         });
       },
-      defaultTabIndex
+      defaultTabIndex,
+      initialURLState
     );
+    if (initialURLState && filterWrapper) activeFilters = filterWrapper.qbFilterState();
 
     var grid = el('div', { class: buildGridClassName(currentLayout) });
 
