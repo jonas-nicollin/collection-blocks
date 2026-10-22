@@ -9,6 +9,7 @@
  const ok=(test,pass)=>{results.push({test,pass:!!pass});if(!pass)throw Error(test)};
  const frames=()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
  try{
+ ok('Invalid calendar dates are undated',api.selectOccurrence(['2026-02-30T12:00','2026-09-16T25:00'],'2026-09-16T12:00','Europe/Zurich').status==='undated');
  ok('Zurich timezone independent of browser timezone',api.wallTime('2026-09-16T10:00:00Z','Europe/Zurich')==='2026-09-16T12:00');
  ok('Explicit end keeps ongoing event current',api.selectOccurrence(['2026-09-16T11:00/2026-09-16T13:00'],'2026-09-16T12:00','Europe/Zurich').status==='current');
  ok('Start-only does not invent a duration',api.selectOccurrence(['2026-09-16T11:00'],'2026-09-16T12:00','Europe/Zurich').status==='past');

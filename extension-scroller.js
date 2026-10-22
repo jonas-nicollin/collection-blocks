@@ -6,6 +6,9 @@
 
   function wallTime(value, zone) {
     if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/.test(value)) {
+      var check = new Date(value.slice(0, 10) + 'T00:00:00Z');
+      if (!Number.isFinite(check.getTime()) || check.toISOString().slice(0, 10) !== value.slice(0, 10) ||
+          (value.length > 10 && (Number(value.slice(11, 13)) > 23 || Number(value.slice(14, 16)) > 59))) return '';
       return value.length === 10 ? value + 'T00:00' : value;
     }
     var date = value instanceof Date ? value : new Date(value);
@@ -65,13 +68,15 @@
       controls.appendChild(b); return b;
     }
     var refreshButton = button('cb-scroller-refresh', '');
+    refreshButton.hidden = true;
     var previous = button('cb-scroller-prev', '←');
     var next = button('cb-scroller-next', '→');
     root.insertBefore(controls, track);
     var observer = new MutationObserver(schedule);
     function observe() { observer.observe(track, { childList: true }); }
     function now() {
-      return wallTime(typeof cfg.now === 'function' ? cfg.now() : (cfg.now || new Date()), zone);
+      return wallTime(typeof cfg.now === 'function' ? cfg.now() : (cfg.now || new Date()), zone) ||
+        wallTime(new Date(), zone);
     }
     function busy() {
       return !!pointer || Date.now() - lastInteraction < 1800 ||
@@ -192,7 +197,7 @@
     track.addEventListener('scroll', onScroll, { passive: true });
     track.addEventListener('keydown', onKey);
     track.addEventListener('pointerdown', onDown); track.addEventListener('pointermove', onMove);
-    track.addEventListener('pointerup', onUp); track.addEventListener('pointercancel', onUp);
+    window.addEventListener('pointerup', onUp); window.addEventListener('pointercancel', onUp);
     track.addEventListener('click', onClick, true); track.addEventListener('dragstart', onDrag);
     var resize = new ResizeObserver(syncButtons); resize.observe(track);
     function update(options) {
@@ -225,10 +230,11 @@
           else track.setAttribute(entry[0], entry[1]);
         });
       [['scroll',onScroll],['keydown',onKey],['pointerdown',onDown],['pointermove',onMove],
-        ['pointerup',onUp],['pointercancel',onUp],['dragstart',onDrag]].forEach(function (entry) {
+        ['dragstart',onDrag]].forEach(function (entry) {
         track.removeEventListener(entry[0], entry[1]);
       });
       track.removeEventListener('click',onClick,true); controllers.delete(track);
+      window.removeEventListener('pointerup',onUp); window.removeEventListener('pointercancel',onUp);
     }
     var controller = { update: update, refresh: function () { refresh(true); }, destroy: destroy };
     controllers.set(track, controller); observe(); update(config); return controller;
