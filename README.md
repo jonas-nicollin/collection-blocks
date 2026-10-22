@@ -691,3 +691,54 @@ also accepted. Invalid/missing dimensions are omitted. Fixed CSS ratios and
 `object-fit` remain in control of deliberate crops; natural-height layouts can
 reserve their image space before lazy loading. No additional image request is
 made. Custom `keepFields` lists must retain `imageDimensions` / `originalSize`.
+
+### Optional Fancybox and Collapse extensions
+
+`extension-fancybox.js` adapts rendered cards to **Fancybox 6.x** (verified with
+6.1.3). Load the Fancybox library/CSS separately; the extension does not bundle,
+upgrade or license that dependency. Targets and presentation remain site-owned.
+
+Register `window.CB_FANCYBOX_CONFIGS = [...]` before the deferred extension,
+or call `CollectionBlocksFancybox.mount(element, options)` explicitly. Each
+configuration supplies `targets`, `itemSelector`, `triggerSelector`, and
+`selectors: { image, category, title, excerpt }`. Optional `mediaAttribute`
+is the dataset key holding an array of `{ assetUrl, title }`, e.g. `cbMedia`.
+Each card remains one gallery slide; its alternate media are view buttons
+inside that slide. `artworkViews` supplies enabled/groupLabel/primaryLabel/
+alternateLabel. `classPrefixes`, `button: { enabled, label, href }`,
+`thumbnailWidth`, and `fancybox` retain site styling and controls. Supported
+Fancybox settings: theme, hash, preload, dragToClose, closeButton, infinite,
+thumbsType, showThumbsOnStart, toolbar.
+
+Hooks: `getMedia(card)` returns normalized `{ src, thumb, alt }` entries;
+`getCaption(card)` returns trusted site-authored HTML; `onOpen(instance, card)`
+can subscribe to Fancybox events. The controller exposes `open(card)` and
+`destroy()`. `CollectionBlocksFancybox.refresh()` discovers registered targets.
+Delegation handles cards inserted later and a library that becomes available
+later. Without Fancybox, normal card links remain usable. No site selector or
+enquiry destination is built into the engine.
+
+`extension-collapse.js` progressively reveals **already-rendered cards**;
+it does not fetch pages and must not be applied on top of native Query/Related
+pagination. Register `window.CB_COLLAPSE_CONFIGS = [...]`, or call
+`CollectionBlocksCollapse.mount(element, options)`. Supply `targets`,
+`listSelector`, `itemSelector`, optionally `footerSelector`, `excludeSelector`,
+`threshold` (default 8), `step` (defaults to threshold),
+`labels: { showMore, showLess }`, and `scrollToSectionOnCollapse` (default true).
+`classPrefix` defaults to `cb-collapse`; a site's existing prefix may be kept.
+Styles must honor `[hidden]` on cards/buttons if local display rules override
+it. The extension itself sets the native hidden attribute.
+
+The controller exposes `refresh()`, `showMore()`, `collapse()`, and `destroy()`;
+`onChange({ scope, visibleCount, total })` is optional. Global `refresh()`
+reconciles mounted scopes and discovers registered targets. Progressive DOM
+updates preserve the current count; a small replacement result removes the
+controls. Destroy restores original item visibility. Both modules are guarded
+against duplicate loading, batch mutation discovery per frame, and support
+DOMContentLoaded, mercury:load, page:loaded and site:refresh. View-all cards and
+text disclosure remain separate integrations.
+
+Browser regression checks: serve `tests/browser-fancybox-collapse.html` with
+these two files from an isolated local folder. The fixture tests lifecycle,
+thresholds, progressive changes, captions and media mapping; an actual Fancybox
+installation still needs its own visual/interaction verification.

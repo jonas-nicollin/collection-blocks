@@ -1,0 +1,39 @@
+<!doctype html><meta charset="utf-8"><title>Fancybox and Collapse extension checks</title>
+<style>[hidden]{display:none!important}body{font:16px system-ui;margin:2rem}#fixtures{display:none}.pass{color:green}</style>
+<h1>Fancybox and Collapse checks</h1><pre id="result">Running…</pre><div id="fixtures"></div>
+<script>window.CB_FANCYBOX_CONFIGS=[];window.CB_COLLAPSE_CONFIGS=[];</script>
+<script src="../extension-collapse.js"></script><script src="../extension-fancybox.js"></script>
+<script>
+(async function(){
+ const results=[],host=document.querySelector('#fixtures');
+ const ok=(test,pass)=>{results.push({test,pass:!!pass});if(!pass)throw Error(test)};
+ const frames=()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+ try {
+ const scope=document.createElement('section');scope.innerHTML='<div class="grid">'+Array.from({length:10},(_,i)=>'<article class="card">'+i+'</article>').join('')+'</div><footer></footer>';host.append(scope);
+ const cfg={listSelector:'.grid',itemSelector:'.card',threshold:8,step:8,footerSelector:'footer',scrollToSectionOnCollapse:false};
+ const c=CollectionBlocksCollapse.mount(scope,cfg);
+ ok('Initial threshold 8',scope.querySelectorAll('.card:not([hidden])').length===8);
+ ok('Mount is idempotent',c===CollectionBlocksCollapse.mount(scope,cfg)&&scope.querySelectorAll('.cb-collapse__controls').length===1);
+ scope.querySelector('.cb-collapse__more').click();ok('View more reveals all',scope.querySelectorAll('.card:not([hidden])').length===10);
+ ok('Show less replaces more',scope.querySelector('.cb-collapse__more').hidden&&!scope.querySelector('.cb-collapse__less').hidden);
+ scope.querySelector('.cb-collapse__less').click();ok('Collapse restores 8',scope.querySelectorAll('.card:not([hidden])').length===8);
+ scope.querySelector('.grid').insertAdjacentHTML('beforeend','<article class="card">10</article>');await frames();ok('Progressive insertion reconciled',scope.querySelectorAll('.card[hidden]').length===3);
+ scope.querySelector('.grid').innerHTML='<article class="card">A</article><article class="card">B</article>';await frames();ok('Replacement with small result removes controls',!scope.querySelector('.cb-collapse__controls')&&scope.querySelectorAll('.card:not([hidden])').length===2);
+ c.destroy();ok('Destroy removes generated ID',!scope.querySelector('.grid').id);
+ scope.innerHTML='<div class="grid"><article class="card" hidden>hidden before mount</article><article class="card">B</article></div>';const c2=CollectionBlocksCollapse.mount(scope,{...cfg,threshold:1});c2.destroy();ok('Destroy restores original visibility',scope.querySelector('.card').hidden&&!scope.querySelectorAll('.card')[1].hidden);
+ const gallery=document.createElement('section');host.append(gallery);
+ const fc={itemSelector:'.card',triggerSelector:'a',mediaAttribute:'cbMedia',selectors:{image:'img',title:'h2',excerpt:'.excerpt'},button:{enabled:true,label:'Enquire',href:'/enquire'}};
+ const f=CollectionBlocksFancybox.mount(gallery,fc);ok('Fancybox mount idempotent',f===CollectionBlocksFancybox.mount(gallery,fc));
+ gallery.innerHTML='<article class="card"><a href="#fallback"><img src="https://example.com/a.jpg"><h2>&lt;Artwork&gt;</h2></a><div class="excerpt"><span class="cb-card__excerpt-line">2026</span><span class="cb-card__excerpt-line">Oil</span></div></article>';
+ gallery.querySelector('.card').dataset.cbMedia=JSON.stringify([{assetUrl:'https://example.com/a.jpg'},{assetUrl:'https://example.com/b.jpg'}]);
+ let captured;window.Fancybox={show:(slides,options)=>{captured={slides,options};return captured}};
+ gallery.querySelector('a').click();ok('Late cards and late library supported',captured?.slides.length===1);
+ ok('Alternate views remain within one artwork',captured.slides[0].cbMedia.length===2);
+ ok('Caption escaping and line breaks preserved',captured.slides[0].caption.includes('&lt;Artwork&gt;')&&captured.slides[0].caption.includes('custom-fancybox-year')&&captured.slides[0].caption.includes('Oil'));
+ ok('Enquiry link preserved',captured.slides[0].caption.includes('href="/enquire"'));
+ captured=null;gallery.querySelector('a').dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,ctrlKey:true}));ok('Modified clicks untouched',captured===null);
+ f.destroy();captured=null;gallery.querySelector('a').click();ok('Destroy removes handler',captured===null);
+ } catch(e){results.push({error:String(e)});}
+ document.querySelector('#result').textContent=JSON.stringify(results,null,2);document.body.dataset.passed=String(results.every(x=>x.pass));
+})();
+</script>
