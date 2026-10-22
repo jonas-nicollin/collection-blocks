@@ -742,3 +742,36 @@ Browser regression checks: serve `tests/browser-fancybox-collapse.html` with
 these two files from an isolated local folder. The fixture tests lifecycle,
 thresholds, progressive changes, captions and media mapping; an actual Fancybox
 installation still needs its own visual/interaction verification.
+
+### Native selection scrollers
+
+`extension-scroller.js` and `extension-scroller.css` provide an optional horizontal
+rail for existing cards. Load the stylesheet and deferred script, then call
+`CollectionBlocksScroller.mount(track, options)` from the block's render hook.
+The engine has no site selectors, content source, image ratio, or autoplay.
+Options include `itemSelector`, `label`, `labels`, `locale`, `timeZone`, `now`,
+`refreshInterval` (default 60 seconds), and optional `getSchedule(card)`.
+Schedules accept one ISO start/range or an array of occurrences. Naive ISO
+values are local to `timeZone`; explicit offsets are converted. The next
+available occurrence represents a multi-occurrence card. Date-only schedules
+last through that day; a timed start without an end is classified as an earlier
+start after its time, never presented as proof that the event has finished.
+
+Dated rails put ongoing and upcoming items first, then earlier starts and
+undated items, with day markers. All-past selections become an archive.
+Automatic clock updates do not reorder a focused card or a scrolled rail;
+a visible update button applies pending changes. Native touch/trackpad scroll,
+mouse drag, arrow buttons and keyboard arrows are supported. There is no loop.
+The controller exposes `update(options)`, `refresh()` and `destroy()`.
+CSS hooks: `--scroller-card-width`, `--scroller-day-width`, `--scroller-gap`.
+The caller owns site targets, rendering, filtering, image presentation and clocks
+used for development previews. Browser checks: `tests/browser-scroller.html`.
+
+### Native gallery links in Fancybox
+
+Fancybox extension 1.1 adds opt-in `linkMedia: true` for image anchors lacking a
+usable destination, such as native Squarespace grid galleries. It prepares the
+primary media URL, accessible name (`openLabel` fallback) and dialog semantics.
+Mount one controller per gallery to keep gallery groups independent. Late items
+are prepared by `refresh()` and original link attributes are restored on destroy.
+Existing artwork configs and alternate artwork views keep their prior behavior.

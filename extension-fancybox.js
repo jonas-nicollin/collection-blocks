@@ -490,7 +490,29 @@
 
   function mount(scope, cfg) {
     if (!scope || !cfg || !cfg.itemSelector) return null;
-    if (controllers.has(scope)) return controllers.get(scope);
+    if (controllers.has(scope)) {
+      controllers.get(scope).refresh();
+      return controllers.get(scope);
+    }
+    var originalLinks = new Map();
+    function prepareLinks() {
+      if (!cfg.linkMedia) return;
+      scope.querySelectorAll(cfg.itemSelector).forEach(function (card) {
+        var link = card.querySelector(cfg.triggerSelector || 'a');
+        var media = parseCardMedia(card, cfg);
+        if (!link || link.tagName !== 'A' || !media.length) return;
+        if (!originalLinks.has(link)) originalLinks.set(link, {
+          href: link.getAttribute('href'), role: link.getAttribute('role'),
+          label: link.getAttribute('aria-label'), popup: link.getAttribute('aria-haspopup')
+        });
+        link.href = media[0].src;
+        if (link.getAttribute('role') === 'presentation') link.removeAttribute('role');
+        link.setAttribute('aria-haspopup', 'dialog');
+        if (!link.getAttribute('aria-label')) {
+          link.setAttribute('aria-label', media[0].alt || cfg.openLabel || 'Open image');
+        }
+      });
+    }
     function open(card) {
       if (!window.Fancybox) return null;
       var collection = collectFancyboxSlides(scope, cfg);
@@ -516,12 +538,22 @@
     scope.addEventListener('click', click, true);
     var controller = {
       open: open,
+      refresh: prepareLinks,
       destroy: function () {
         scope.removeEventListener('click', click, true);
+        originalLinks.forEach(function (values, link) {
+          [['href', values.href], ['role', values.role],
+            ['aria-label', values.label], ['aria-haspopup', values.popup]].forEach(function (pair) {
+            if (pair[1] === null) link.removeAttribute(pair[0]);
+            else link.setAttribute(pair[0], pair[1]);
+          });
+        });
+        originalLinks.clear();
         controllers.delete(scope);
       }
     };
     controllers.set(scope, controller);
+    prepareLinks();
     return controller;
   }
   function refresh() {
@@ -532,7 +564,7 @@
       scopesFor(cfg.targets).forEach(function (scope) { mount(scope, cfg); });
     });
   }
-  window.CollectionBlocksFancybox = { version: '1.0.0', mount: mount, refresh: refresh };
+  window.CollectionBlocksFancybox = { version: '1.1.0', mount: mount, refresh: refresh };
   var scheduled = false;
   function schedule() {
     if (scheduled) return;

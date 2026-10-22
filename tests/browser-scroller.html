@@ -1,0 +1,37 @@
+<!doctype html><meta charset="utf-8"><title>Selection scroller checks</title>
+<link rel="stylesheet" href="../extension-scroller.css">
+<style>body{font:16px system-ui;margin:2rem}section{max-width:600px}.card{width:260px;height:150px;background:#eee}.cb-scroller-track{--scroller-card-width:260px}pre{white-space:pre-wrap}</style>
+<h1>Selection scroller checks</h1><pre id="result">Running…</pre><section><div id="track"></div></section>
+<script src="../extension-scroller.js"></script>
+<script>
+(async function(){
+ const api=CollectionBlocksScroller,results=[];
+ const ok=(test,pass)=>{results.push({test,pass:!!pass});if(!pass)throw Error(test)};
+ const frames=()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+ try{
+ ok('Zurich timezone independent of browser timezone',api.wallTime('2026-09-16T10:00:00Z','Europe/Zurich')==='2026-09-16T12:00');
+ ok('Explicit end keeps ongoing event current',api.selectOccurrence(['2026-09-16T11:00/2026-09-16T13:00'],'2026-09-16T12:00','Europe/Zurich').status==='current');
+ ok('Start-only does not invent a duration',api.selectOccurrence(['2026-09-16T11:00'],'2026-09-16T12:00','Europe/Zurich').status==='past');
+ ok('Multi-occurrence selects next available date',api.selectOccurrence(['2026-09-16T11:00','2026-09-17T10:00'],'2026-09-16T12:00','Europe/Zurich').start==='2026-09-17T10:00');
+ ok('Date-only remains available all day',api.selectOccurrence(['2026-09-16'],'2026-09-16T22:00','Europe/Zurich').status==='current');
+ const track=document.querySelector('#track');
+ const dates=['2026-09-16T10:00','2026-09-16T14:00','2026-09-17T10:00'];
+ function cards(){track.innerHTML=dates.map((d,i)=>'<a class="card" data-cb-index="'+i+'" href="#'+i+'">'+d+'</a>').join('')};cards();
+ let time='2026-09-16T12:00';const config={itemSelector:':scope > .card',getSchedule:c=>dates[+c.dataset.cbIndex],now:()=>time,timeZone:'Europe/Zurich',locale:'fr-CH'};
+ const c=api.mount(track,config);await frames();
+ ok('Upcoming first, earlier starts at the end',[...track.querySelectorAll('.card')].map(x=>x.dataset.cbIndex).join(',')==='1,2,0');
+ ok('Day dividers generated',track.querySelectorAll('.cb-scroller-day').length===3);
+ ok('Idempotent mounting has one control group',api.mount(track,config)===c&&track.parentElement.querySelectorAll('.cb-scroller-controls').length===1);
+ time='2026-09-17T09:00';c.refresh();await frames();
+ ok('Next-day clock rotates the ordering',track.querySelector('.card').dataset.cbIndex==='2');
+ track.querySelector('.card').focus();const node=track.querySelector('.card');time='2026-09-18T12:00';api.mount(track,config);await frames();
+ ok('Focused card is not moved by automatic refresh',track.querySelector('.card')===node&&!track.parentElement.querySelector('.cb-scroller-refresh').hidden);
+ track.parentElement.querySelector('.cb-scroller-refresh').click();await frames();
+ ok('Explicit update resolves pending changes',track.querySelector('.card').dataset.cbIndex==='0'&&track.parentElement.querySelector('.cb-scroller-refresh').hidden);
+ cards();await frames();ok('Replacement cards are enhanced again',track.querySelectorAll('[data-scroller-card]').length===3);
+ dates.push('2026-09-20T10:00');track.insertAdjacentHTML('beforeend','<a class="card" data-cb-index="3" href="#3">New</a>');await frames();ok('Progressive insertion joins chronological order',track.querySelector('.card').dataset.cbIndex==='3');
+ c.destroy();ok('Destroy removes controls and day dividers',!track.parentElement.querySelector('.cb-scroller-controls')&&!track.querySelector('.cb-scroller-day')&&!track.hasAttribute('tabindex'));
+ }catch(e){results.push({error:String(e)})}
+ document.querySelector('#result').textContent=JSON.stringify(results,null,2);document.body.dataset.passed=String(results.every(x=>x.pass));
+})();
+</script>

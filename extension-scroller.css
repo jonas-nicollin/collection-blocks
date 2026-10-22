@@ -1,0 +1,29 @@
+/* Collection Blocks — Optional native horizontal scroller structure. */
+.cb-scroller { position: relative; min-width: 0; }
+.cb-scroller .cb-scroller-track {
+  display: flex; flex-wrap: nowrap; align-items: flex-start; gap: var(--scroller-gap, 24px);
+  overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain; scrollbar-width: thin; padding-block: 4px 18px;
+  touch-action: pan-x pan-y pinch-zoom;
+}
+.cb-scroller-track > [data-scroller-card] {
+  flex: 0 0 var(--scroller-card-width, 280px); min-width: 0; scroll-snap-align: start;
+}
+.cb-scroller-day {
+  flex: 0 0 var(--scroller-day-width, 140px); align-self: stretch;
+  display: flex; flex-direction: column; justify-content: center;
+  gap: 10px; margin: 0; padding: 16px; border-inline: 1px solid currentColor;
+  font-size: 1rem; font-weight: 500; scroll-snap-align: start;
+}
+.cb-scroller-day__context { font-size: .7em; text-transform: uppercase; letter-spacing: .04em; }
+.cb-scroller-controls { display: flex; gap: 8px; justify-content: flex-end; margin-block: 0 12px; }
+.cb-scroller-controls button {
+  appearance: none; border: 1px solid currentColor; border-radius: 0;
+  background: transparent; color: inherit; padding: 8px 12px; cursor: pointer;
+}
+.cb-scroller-controls button:disabled { cursor: default; }
+.cb-scroller-controls button[hidden] { display: none; }
+.cb-scroller-track:focus-visible, .cb-scroller-controls button:focus-visible {
+  outline: 2px solid currentColor; outline-offset: 3px;
+}
+.cb-scroller-dragging { scroll-snap-type: none !important; cursor: grabbing; user-select: none; }

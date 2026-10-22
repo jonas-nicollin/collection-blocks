@@ -33,6 +33,15 @@
  ok('Enquiry link preserved',captured.slides[0].caption.includes('href="/enquire"'));
  captured=null;gallery.querySelector('a').dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,ctrlKey:true}));ok('Modified clicks untouched',captured===null);
  f.destroy();captured=null;gallery.querySelector('a').click();ok('Destroy removes handler',captured===null);
+ const native=document.createElement('section');host.append(native);
+ native.innerHTML='<article class="slide"><a role="presentation" aria-label=""><img alt="Installation" data-image="https://example.com/install.jpg"></a></article>';
+ const nf={itemSelector:'.slide',triggerSelector:'a',selectors:{image:'img'},linkMedia:true};
+ const n=CollectionBlocksFancybox.mount(native,nf),a=native.querySelector('a');
+ ok('Native image links become keyboard accessible',a.href==='https://example.com/install.jpg'&&!a.hasAttribute('role')&&a.getAttribute('aria-label')==='Installation');
+ captured=null;a.click();ok('Native gallery opens with no artwork caption',captured.slides.length===1&&captured.slides[0].caption==='');
+ native.insertAdjacentHTML('beforeend','<article class="slide"><a><img src="https://example.com/second.jpg"></a></article>');n.refresh();
+ ok('New native gallery items prepared',native.querySelectorAll('a[href]').length===2);
+ n.destroy();ok('Native attributes restored on destroy',!a.hasAttribute('href')&&a.getAttribute('role')==='presentation'&&a.getAttribute('aria-label')==='');
  } catch(e){results.push({error:String(e)});}
  document.querySelector('#result').textContent=JSON.stringify(results,null,2);document.body.dataset.passed=String(results.every(x=>x.pass));
 })();
