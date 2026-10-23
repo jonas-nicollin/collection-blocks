@@ -1,0 +1,74 @@
+<!doctype html><html lang="en"><meta charset="utf-8">
+<title>Persistent dropdown labels</title>
+<link rel="stylesheet" href="../collection-blocks.css">
+<style>:root{--paragraphMediumColor:#111;--siteBackgroundColor:#fff}body{font:16px system-ui;margin:20px}#result{white-space:pre-wrap}.qb-block{margin:20px 0}</style>
+<h1>Persistent dropdown labels</h1><pre id="result">Running…</pre>
+<div id="outside"></div><div id="legacy"></div><div id="mixed"></div><div id="locator"></div>
+<script src="../collection-blocks.js"></script><script>
+const rows=[
+ {id:'a',title:'Recent solo',categories:['Solo'],tags:['Year: 2026'],publishOn:Date.parse('2026-10-22T12:00Z')},
+ {id:'b',title:'Older fair',categories:['Fair'],tags:['Year: 2025'],publishOn:Date.parse('2025-06-10T12:00Z')},
+ {id:'c',title:'Older solo',categories:['Solo'],tags:['Year: 2025'],publishOn:Date.parse('2025-06-10T12:00Z')}
+].map(i=>({...i,fullUrl:'/'+i.id}));
+CollectionBlocks.data.getState=async()=>({items:rows,complete:true,pagesLoaded:1});
+const filters={labelPosition:'outside',categories:{layout:'dropdown',label:'Exhibition'},
+ tagPrefixes:[{prefix:'Year',layout:'dropdown',showLabel:false}],
+ publicationYear:{layout:'dropdown',label:'Published'},search:false,clearAll:'Reset filters'};
+const base={sourceCollection:{path:'/fixture'},filters,i18n:{all:'All'},locale:'en',
+ display:{groups:[{role:'body',children:['title']}]},pagination:{mode:'none'},
+ performance:{lazyInit:false,maxPages:'all',domBatchSize:100}};
+window.QUERY_BLOCK_CONFIGS=[{...base,key:'outside',target:'#outside'},
+ {...base,key:'legacy',target:'#legacy',filters:{...filters,labelPosition:undefined}},
+ {...base,key:'mixed',target:'#mixed',filters:{...filters,
+ categories:{...filters.categories,labelPosition:'inside'},
+ tagPrefixes:[{...filters.tagPrefixes[0],labelPosition:'inside'}]}}];
+</script><script src="../query-block.js"></script><script>
+window.addEventListener('load',async()=>{
+ const results=[],ok=(test,pass)=>{results.push({test,pass:!!pass});if(!pass)throw Error(test)};
+ const wait=async f=>{for(let i=0;i<100&&!f();i++)await new Promise(r=>setTimeout(r,20));if(!f())throw Error('Timeout')};
+ const q=document.querySelector('#outside'),count=()=>q.querySelectorAll('.qb-card').length;
+ try{
+ await wait(()=>count()===3&&document.querySelectorAll('#mixed select').length===3);
+ const selects=[...q.querySelectorAll('select')];
+ ok('All three filter types have native associated labels',selects.every(s=>s.labels.length===1&&s.labels[0].htmlFor===s.id));
+ ok('Outside empty options do not repeat label',selects.every(s=>s.options[0].text==='All'));
+ ok('Visible labels supply accessible name without overriding ARIA',selects.every(s=>!s.hasAttribute('aria-label')));
+ ok('showLabel false for pills does not disable explicitly requested dropdown label',selects.find(s=>s.labels[0].textContent==='Year').labels.length===1);
+ ok('Dropdown shape stays rounded by default',parseFloat(getComputedStyle(selects[0]).borderRadius)>0);
+ const legacy=[...document.querySelectorAll('#legacy select')];
+ ok('Legacy keeps original markup and ARIA',legacy.every(s=>s.hasAttribute('aria-label')&&!s.labels.length&&!s.parentElement.classList.contains('cb-filter-control')));
+ ok('Legacy empty option retains prefix',legacy.every(s=>s.options[0].text===s.getAttribute('aria-label')+': All'));
+ const mixed=document.querySelector('#mixed');
+ ok('Category and prefix can override the global outside setting',mixed.querySelectorAll('label').length===1&&mixed.querySelector('label').textContent==='Published');
+ const allIds=[...document.querySelectorAll('select[id]')].map(s=>s.id);
+ ok('IDs are unique across blocks and filter types',allIds.length===new Set(allIds).size);
+ const category=()=>[...q.querySelectorAll('select')].find(s=>s.labels[0].textContent==='Exhibition');
+ category().value='Fair';category().dispatchEvent(new Event('change'));await wait(()=>count()===1);
+ ok('Outside category still filters correctly',q.querySelector('.qb-card').textContent.includes('Older fair'));
+ ok('Labels stay associated after filtering', [...q.querySelectorAll('select')].every(s=>s.labels[0].control===s));
+ q.querySelector('.qb-clear-all').click();await wait(()=>count()===3);
+ ok('Reset returns all cards and All selections', [...q.querySelectorAll('select')].every(s=>s.value===''));
+ // Exercise the production Locator controls renderer independently of Google Maps.
+ const source=await (await fetch('../locator-block.js')).text();
+ const constants=[...source.matchAll(/var (CLS_[A-Z_]+)='([^']*)';/g)].map(m=>`var ${m[1]}=${JSON.stringify(m[2])};`).join('\n');
+ const renderer=source.slice(source.indexOf('function buildControls('),source.indexOf('   function renderCardsProgressive('));
+ const create=Function('cfg','document',constants+`\nvar nextFilterId=0;
+ function escHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+ function getI18n(){return {allZones:'All',itemCount:n=>String(n)}}
+ `+renderer+'\nreturn buildControls;');
+ const config={showZoneFilter:true,filterMode:'dropdown',filterLabel:'District & area',display:{showCount:false}};
+ const container=document.querySelector('#locator');
+ container.innerHTML=create(config,document)(['North','South'],2,'South','');
+ ok('Locator legacy keeps its existing select and active value',container.querySelector('select').getAttribute('aria-label')==='District & area'&&container.querySelector('select').value==='South'&&!container.querySelector('label'));
+ const render=create({...config,filterLabelPosition:'outside'},document);
+ container.innerHTML=render(['North','South'],2,'South','');
+ container.insertAdjacentHTML('beforeend',render(['North','South'],2,'',''));
+ const ls=[...container.querySelectorAll('select')];
+ ok('Locator uses escaped native label and preserves selection',ls[0].labels[0].textContent==='District & area'&&ls[0].value==='South'&&!ls[0].hasAttribute('aria-label'));
+ ok('Locator controls have distinct IDs and labels',ls[0].id!==ls[1].id&&ls.every(s=>s.labels[0].control===s));
+ ok('Locator icon remains within its existing control wrapper',ls.every(s=>s.parentElement.classList.contains('lb-filter-wrap')&&s.nextElementSibling.getAttribute('aria-hidden')==='true'));
+ }catch(error){results.push({error:String(error)})}
+ document.querySelector('#result').textContent=JSON.stringify(results,null,2);
+ document.body.dataset.passed=String(results.every(r=>r.pass));
+});
+</script></html>

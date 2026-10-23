@@ -426,6 +426,29 @@ body:not(.sqs-edit-mode-active) :where(
 
 :where(.cb-filter-group--dropdown).qb-filter-group--dropdown { display: inline-flex; }
 
+/* Optional persistent labels; native dropdown presentation stays unchanged. */
+:where(.cb-filter-group--labeled) {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6em;
+  min-width: 0;
+  max-width: 100%;
+}
+:where(.cb-filter-group--labeled) > :where(.cb-filter-label) { flex: none; }
+:where(.cb-filter-control),
+:where(.cb-filter-group--labeled) > :where(.cb-filter-wrap) {
+  position: relative;
+  display: inline-flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+:where(.cb-filter-group--labeled) :where(.cb-filter-select) { min-width: 0; max-width: 100%; }
+:where(.cb-filter-label).lb-filter-label {
+  font-size: 0.9em;
+  opacity: 0.5;
+  white-space: nowrap;
+}
+
 :where(.cb-filter-select).qb-filter-select {
   appearance: none; -webkit-appearance: none;
   border: 1px solid var(--paragraphMediumColor);

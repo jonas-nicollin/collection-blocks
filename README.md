@@ -221,6 +221,7 @@ Each config is an object inside `window.QUERY_BLOCK_CONFIGS`.
 | --- | --- | --- |
 | `layout` | `'pills'` | Default layout for tag filters. |
 | `tagPrefixes` | `[]` | Tag prefix filters. |
+| `labelPosition` | `'inside'` | Dropdown labels: `'outside'` adds a persistent native label beside the select and uses the All text alone for its empty option. Each category, publication-year or tag-prefix filter can override it with `labelPosition`. Pills and `showLabel` behavior are unchanged. |
 | `publicationYear` | `false` | Year filter derived from `publishOn`, without tags. Accepts `true` or `{ layout, label, showLabel, direction, timeZone }`. Defaults: pills, Year, visible label, descending, UTC. |
 | `datePrefix` | `null` | Prefix treated as ISO date values for sorting/display. |
 | `search` | enabled unless `false` | Full-text search across title, excerpt, location, categories, tags. |
@@ -450,6 +451,7 @@ Each config is an object inside `window.LOCATOR_BLOCK_CONFIGS`.
 | `mapStyle` | `null` | Google Maps style. |
 | `mapOptions` | `{}` | Extra Google Maps options. |
 | `filterMode` | `'dropdown'` | Zone filter UI mode. |
+| `filterLabelPosition` | `'inside'` | Set to `'outside'` for a persistent native label beside the zone dropdown, using `filterLabel`. Buttons are unchanged. |
 | `filterMultiple` | `false` | Multiple zone selection. |
 | `showZoneFilter` | `true` | Shows zone filter. |
 | `sort` | `{ type: 'numero', direction: 'asc' }` | List/marker item sort. |

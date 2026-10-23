@@ -1,5 +1,6 @@
 (function(){
 'use strict';
+var nextFilterId=0;
 var clean=[
   /* Tous les POI off — restaurants, commerces, loisirs, etc. */
   {featureType:'poi',stylers:[{visibility:'off'}]},
@@ -82,6 +83,7 @@ var cfg=Object.assign({
   filterSource:'zones',
   filterOrder:null,
   filterLabel:null,
+  filterLabelPosition:'inside',
   filterMultiple:false,
   showZoneFilter:true,
   showSearch:false,
@@ -695,10 +697,19 @@ function buildControls(zones,total,activeZone,searchValue){
       /* Dropdown (défaut) */
       var opts=['<option value="">'+escHtml(allLabel)+'</option>']
         .concat(zones.map(function(z){return'<option value="'+escHtml(z)+'"'+(z===activeZone?' selected':'')+'>'+escHtml(z)+'</option>';})).join('');
-      f='<div class="'+escHtml(CLS_FILTER_GROUP+' '+CLS_FILTER_WRAP)+'">'
-        +'<select class="'+escHtml(CLS_FILTER_SELECT)+'" aria-label="'+escHtml(filterLabel)+'">'+opts+'</select>'
+      var outside=cfg.filterLabelPosition==='outside';
+      var filterId='';
+      if(outside){
+        do{filterId='cb-lb-filter-'+(++nextFilterId);}while(document.getElementById(filterId));
+      }
+      f='<div class="'+escHtml((outside?'':CLS_FILTER_GROUP+' ')+CLS_FILTER_WRAP)+'">'
+        +'<select class="'+escHtml(CLS_FILTER_SELECT)+'" '+(outside?'id="'+filterId+'"':'aria-label="'+escHtml(filterLabel)+'"')+'>'+opts+'</select>'
         +'<span class="'+escHtml(CLS_FILTER_ICON)+'" aria-hidden="true">expand_more</span>'
         +'</div>';
+      if(outside){
+        f='<div class="'+escHtml(CLS_FILTER_GROUP+' cb-filter-group--labeled lb-filter-group--labeled')+'">'
+          +'<label class="cb-filter-label lb-filter-label" for="'+filterId+'">'+escHtml(filterLabel)+'</label>'+f+'</div>';
+      }
     }
   }
   if(cfg.showSearch){

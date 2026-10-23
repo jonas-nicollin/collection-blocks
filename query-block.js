@@ -1,5 +1,6 @@
 (function () {
   'use strict';
+  var nextFilterId = 0;
 
   /* ════════════════════════════════════
    * 0. UTILITAIRES
@@ -246,6 +247,7 @@
         prefix:       p.prefix,
         layout:       p.layout       || globalLayout || 'pills',
         showLabel:    p.showLabel    !== false,
+        labelPosition: p.labelPosition || null,
         order:        p.order        || null,
         direction:    p.direction    || p.sortDirection || null,
         filterFormat: p.filterFormat || null,
@@ -3010,16 +3012,24 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       return wrap;
     }
 
-    function buildDropdown(vals, displayVals, label, getCurrent, onSelect) {
+    function buildDropdown(vals, displayVals, label, getCurrent, onSelect, labelPosition) {
       var wrap = el('div', { class: CLS_FILTER_GROUP + ' ' + CLS_FILTER_GROUP_DROPDOWN });
-
-      var sel = el('select', {
-        class: CLS_FILTER_SELECT,
-        'aria-label': label,
-      });
+      var outside = (labelPosition || fc.labelPosition) === 'outside';
+      var attrs = { class: CLS_FILTER_SELECT };
+      if (outside) {
+        do { attrs.id = 'cb-qb-filter-' + (++nextFilterId); }
+        while (document.getElementById(attrs.id));
+        addUiClasses(wrap, 'cb-filter-group--labeled qb-filter-group--labeled');
+        var visibleLabel = el('label', { class: CLS_FILTER_LABEL, htmlFor: attrs.id });
+        visibleLabel.textContent = label;
+        wrap.appendChild(visibleLabel);
+      } else {
+        attrs['aria-label'] = label;
+      }
+      var sel = el('select', attrs);
 
       var o0 = el('option', { value: '' });
-      o0.textContent = label + ': ' + i18n.all;
+      o0.textContent = outside ? i18n.all : label + ': ' + i18n.all;
       sel.appendChild(o0);
 
       vals.forEach(function(v, vi) {
@@ -3039,7 +3049,13 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         emit();
       });
 
-      wrap.appendChild(sel);
+      if (outside) {
+        var control = el('span', { class: 'cb-filter-control qb-filter-control' });
+        control.appendChild(sel);
+        wrap.appendChild(control);
+      } else {
+        wrap.appendChild(sel);
+      }
       return wrap;
     }
 
@@ -3061,7 +3077,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
           };
           var yearLabel = yearsCfg.label || 'Year';
           var yearGroup = yearsCfg.layout === 'dropdown'
-            ? buildDropdown(years, null, yearLabel, getYear, selectYear)
+            ? buildDropdown(years, null, yearLabel, getYear, selectYear, yearsCfg.labelPosition)
             : buildPillGroup(years, null, yearLabel, yearsCfg.showLabel !== false, getYear, selectYear);
           addUiClasses(yearGroup, 'cb-filter-group--years qb-filter-group--years');
           yearGroup.setAttribute('data-filter-control', 'publicationYear');
@@ -3096,7 +3112,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
             resetOtherFilters('category', null);
           };
           var grp = catsCfg.layout === 'dropdown'
-            ? buildDropdown(cats, null, catsLabel, getCategory, selectCategory)
+            ? buildDropdown(cats, null, catsLabel, getCategory, selectCategory, catsCfg.labelPosition)
             : buildPillGroup(cats, null, catsLabel, catsShowLbl, getCategory, selectCategory);
 
           addUiClasses(grp, CLS_FILTER_GROUP_CATS);
@@ -3164,7 +3180,8 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
               function(v) {
                 state.tags[prefix] = v;
                 resetOtherFilters('tag', prefix);
-              }
+              },
+              pd.labelPosition
             );
           } else {
             grp = buildPillGroup(
