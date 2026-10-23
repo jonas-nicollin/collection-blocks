@@ -1,17 +1,21 @@
 /* Collection Blocks — Optional native horizontal scroller structure. */
 .cb-scroller { position: relative; min-width: 0; }
 .cb-scroller .cb-scroller-track {
-  display: flex; flex-wrap: nowrap; align-items: flex-start; gap: var(--scroller-gap, 24px);
+  display: flex; flex-wrap: nowrap; align-items: var(--scroller-align, flex-start);
+  gap: var(--scroller-gap, 24px); box-sizing: border-box;
   overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity;
   overscroll-behavior-x: contain; scrollbar-width: thin; padding-block: 4px 18px;
   touch-action: pan-x pan-y pinch-zoom;
+  padding-inline: var(--scroller-inset, 0px);
+  scroll-padding-inline: var(--scroller-inset, 0px);
 }
 .cb-scroller-track > [data-scroller-card] {
   flex: 0 0 var(--scroller-card-width, 280px); min-width: 0; scroll-snap-align: start;
 }
 .cb-scroller-day {
   flex: 0 0 var(--scroller-day-width, 140px); align-self: stretch;
-  display: flex; flex-direction: column; justify-content: center;
+  display: flex; flex-direction: column;
+  justify-content: var(--scroller-day-justify, center);
   gap: 10px; margin: 0; padding: 16px; border-inline: 1px solid currentColor;
   font-size: 1rem; scroll-snap-align: start;
 }
@@ -27,3 +31,29 @@
   outline: 2px solid currentColor; outline-offset: 3px;
 }
 .cb-scroller-dragging { scroll-snap-type: none !important; cursor: grabbing; user-select: none; }
+
+/* Optional side controls share the track's grid row without adding height. */
+.cb-scroller.cb-scroller--side-controls {
+  display: grid; grid-template-columns: minmax(0, 1fr);
+}
+.cb-scroller--side-controls > .cb-heading { grid-area: 1 / 1; }
+.cb-scroller--side-controls > .cb-scroller-track { grid-area: 2 / 1; width: 100%; }
+.cb-scroller--side-controls > .cb-footer { grid-area: 3 / 1; }
+.cb-scroller--side-controls > .cb-scroller-controls {
+  grid-area: 2 / 1; align-self: center; position: relative; z-index: 2;
+  height: 0; margin: 0 var(--scroller-control-offset, -1rem);
+  align-items: center; justify-content: space-between; pointer-events: none;
+}
+.cb-scroller--side-controls > .cb-scroller-controls button { pointer-events: auto; }
+.cb-scroller--side-controls > .cb-scroller-controls button:disabled { visibility: hidden; }
+.cb-scroller--side-controls .cb-scroller-refresh {
+  position: absolute; top: 2rem; right: 0;
+}
+@media (hover: hover) and (pointer: fine) {
+  .cb-scroller--side-controls .cb-scroller-prev,
+  .cb-scroller--side-controls .cb-scroller-next { opacity: 0; }
+  .cb-scroller--side-controls:hover .cb-scroller-prev,
+  .cb-scroller--side-controls:hover .cb-scroller-next,
+  .cb-scroller--side-controls:focus-within .cb-scroller-prev,
+  .cb-scroller--side-controls:focus-within .cb-scroller-next { opacity: 1; }
+}

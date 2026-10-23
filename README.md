@@ -784,7 +784,14 @@ Automatic clock updates do not reorder a focused card or a scrolled rail;
 a visible update button applies pending changes. Native touch/trackpad scroll,
 mouse drag, arrow buttons and keyboard arrows are supported. There is no loop.
 The controller exposes `update(options)`, `refresh()` and `destroy()`.
-CSS hooks: `--scroller-card-width`, `--scroller-day-width`, `--scroller-gap`.
+CSS hooks: `--scroller-card-width`, `--scroller-day-width`, `--scroller-gap`,
+`--scroller-align` (default flex-start), `--scroller-day-justify` (default center),
+and `--scroller-inset` (default 0px, matching track padding and snap inset).
+Add `cb-scroller--side-controls` to the track's parent to overlap navigation at
+the sides of the track, with no reserved controls row. This variant expects the
+common heading / track / footer structure and reveals arrows on hover or focus
+for fine pointers. `--scroller-control-offset` defaults to -1rem. Button design,
+mobile visibility, content widths and host-system gutters belong to site CSS.
 The caller owns site targets, rendering, filtering, image presentation and clocks
 used for development previews. Browser checks: `tests/browser-scroller.html`.
 
