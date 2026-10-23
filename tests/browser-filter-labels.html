@@ -6,7 +6,7 @@
 <div id="outside"></div><div id="legacy"></div><div id="mixed"></div><div id="locator"></div>
 <script src="../collection-blocks.js"></script><script>
 const rows=[
- {id:'a',title:'Recent solo',categories:['Solo'],tags:['Year: 2026'],publishOn:Date.parse('2026-10-22T12:00Z')},
+ {id:'a',title:'Recent solo',categories:['Solo with a much longer exhibition label'],tags:['Year: 2026'],publishOn:Date.parse('2026-10-22T12:00Z')},
  {id:'b',title:'Older fair',categories:['Fair'],tags:['Year: 2025'],publishOn:Date.parse('2025-06-10T12:00Z')},
  {id:'c',title:'Older solo',categories:['Solo'],tags:['Year: 2025'],publishOn:Date.parse('2025-06-10T12:00Z')}
 ].map(i=>({...i,fullUrl:'/'+i.id}));
@@ -37,6 +37,11 @@ window.addEventListener('load',async()=>{
  const groupStyle=getComputedStyle(selects[0].closest('.cb-filter-group--labeled'));
  ok('Outside label spacing overrides the generic group rule',Math.abs(parseFloat(groupStyle.gap)-parseFloat(groupStyle.fontSize)*.6)<.1&&groupStyle.flexWrap==='nowrap');
  ok('Dropdown shape stays rounded by default',parseFloat(getComputedStyle(selects[0]).borderRadius)>0);
+ const rem=parseFloat(getComputedStyle(document.documentElement).fontSize);
+ ok('Outside controls have equal compact widths despite unequal option lengths',selects.every(s=>Math.abs(s.getBoundingClientRect().width-10*rem)<1));
+ q.style.setProperty('--cb-filter-control-width','12rem');
+ ok('Block variable can adjust every outside control width',selects.every(s=>Math.abs(s.getBoundingClientRect().width-12*rem)<1));
+ q.style.removeProperty('--cb-filter-control-width');
  const legacy=[...document.querySelectorAll('#legacy select')];
  ok('Legacy keeps original markup and ARIA',legacy.every(s=>s.hasAttribute('aria-label')&&!s.labels.length&&!s.parentElement.classList.contains('cb-filter-control')));
  ok('Legacy empty option retains prefix',legacy.every(s=>s.options[0].text===s.getAttribute('aria-label')+': All'));
@@ -69,6 +74,7 @@ window.addEventListener('load',async()=>{
  ok('Locator uses escaped native label and preserves selection',ls[0].labels[0].textContent==='District & area'&&ls[0].value==='South'&&!ls[0].hasAttribute('aria-label'));
  ok('Locator controls have distinct IDs and labels',ls[0].id!==ls[1].id&&ls.every(s=>s.labels[0].control===s));
  ok('Locator icon remains within its existing control wrapper',ls.every(s=>s.parentElement.classList.contains('lb-filter-wrap')&&s.nextElementSibling.getAttribute('aria-hidden')==='true'));
+ ok('Locator outside controls use the same compact width',ls.every(s=>Math.abs(s.getBoundingClientRect().width-10*rem)<1));
  }catch(error){results.push({error:String(error)})}
  document.querySelector('#result').textContent=JSON.stringify(results,null,2);
  document.body.dataset.passed=String(results.every(r=>r.pass));

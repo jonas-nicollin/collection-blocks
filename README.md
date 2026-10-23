@@ -237,11 +237,17 @@ Each config is an object inside `window.QUERY_BLOCK_CONFIGS`.
 
 ### Query Tag Prefix Definition
 
+Outside-label Query and Locator dropdowns share a compact control width of
+`10rem`, independent of their longest option. Override
+`--cb-filter-control-width` on the block to change it. The labels keep their
+natural width; legacy inside-label dropdowns retain their existing sizing.
+
 | Option | Default | Description |
 | --- | --- | --- |
 | `prefix` | required | Tag prefix, for example `'Date'`. |
 | `label` | prefix | Visible label. |
 | `showLabel` | `true` | Hides label when `false`. |
+| `hidden` | `false` | Omits the tag filter control while preserving URL/default filtering and reset. Useful for curated selection links without an extra dropdown. |
 | `layout` | inherited from filters | `'pills'` or `'dropdown'`. |
 | `filterFormat` | none | Format displayed in filter controls. |
 | `displayFormat` | none | Format displayed on cards. |

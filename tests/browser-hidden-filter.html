@@ -1,0 +1,51 @@
+<!doctype html><html lang="en"><meta charset="utf-8">
+<title>Hidden URL filters</title><link rel="stylesheet" href="../collection-blocks.css">
+<style>body{font:16px system-ui;margin:20px}#result{white-space:pre-wrap}</style>
+<h1>Hidden URL filters</h1><pre id="result">Running…</pre>
+<div id="query"></div><div id="defaults"></div>
+<script src="../collection-blocks.js"></script><script>
+const rows=[
+ {id:'1',title:'Table One',categories:['Exposition'],tags:['Selection: Art Tables','Theme: Photo']},
+ {id:'2',title:'Town Two',categories:['Exposition'],tags:['Selection: Old Town','Theme: Clay']},
+ {id:'3',title:'Photo Three',categories:['Exposition'],tags:['Theme: Photo']}
+].map(i=>({...i,fullUrl:'/'+i.id}));
+CollectionBlocks.data.getState=async()=>({items:rows,complete:true,pagesLoaded:1});
+history.replaceState({},'',location.pathname+'?selection=Art%20Tables');
+const filters={labelPosition:'outside',categories:false,search:false,clearAll:true,
+ mobilePanel:true,mobilePanelBreakpoint:'always',
+ tagPrefixes:[{prefix:'Selection',hidden:true},{prefix:'Theme',layout:'dropdown'}],
+ urlState:{tags:{Selection:'selection',Theme:'theme'}}};
+const base={sourceCollection:{path:'/fixture'},filters,display:{groups:[{role:'body',children:['title']}]},
+ pagination:{mode:'none'},performance:{lazyInit:false,maxPages:'all',domBatchSize:100}};
+window.QUERY_BLOCK_CONFIGS=[{...base,key:'hidden-url',target:'#query'},
+ {...base,key:'hidden-default',target:'#defaults',filters:{...filters,urlState:false,
+ mobilePanel:false,defaultTags:{Selection:'Old Town'}}}];
+</script><script src="../query-block.js"></script><script>
+window.addEventListener('load',async()=>{
+ const results=[],ok=(test,pass)=>{results.push({test,pass:!!pass});if(!pass)throw Error(test)};
+ const wait=async f=>{for(let i=0;i<100&&!f();i++)await new Promise(r=>setTimeout(r,20));if(!f())throw Error('Timeout')};
+ const q=document.querySelector('#query'),count=()=>q.querySelectorAll('.qb-card').length;
+ try{
+ await wait(()=>count()===1&&document.querySelector('#defaults .qb-card'));
+ ok('Hidden selection restores from URL',q.querySelector('.qb-card').textContent==='Table One');
+ ok('Hidden control is absent from desktop filters',!q.querySelector('[data-prefix="Selection"]'));
+ ok('Visible filter remains present',!!q.querySelector('[data-prefix="Theme"]'));
+ ok('Hidden non-URL defaults still filter',document.querySelectorAll('#defaults .qb-card').length===1&&document.querySelector('#defaults .qb-card').textContent==='Town Two');
+ q.querySelector('.qb-mobile-toggle').click();
+ const panel=document.querySelector('.qb-mobile-panel--open');
+ ok('Hidden control is absent from mobile panel',!!panel&&!panel.querySelector('[data-prefix="Selection"]')&&!!panel.querySelector('[data-prefix="Theme"]'));
+ panel.querySelector('.qb-mobile-panel__close').click();
+ q.querySelector('.qb-clear-all').click();await wait(()=>count()===3);
+ ok('Reset removes hidden selection and restores all cards',!location.search.includes('selection='));
+ history.pushState({},'',location.pathname+'?selection=Old%20Town');window.dispatchEvent(new PopStateEvent('popstate'));await wait(()=>count()===1);
+ ok('History state restores another hidden selection',q.querySelector('.qb-card').textContent==='Town Two');
+ history.pushState({},'',location.pathname+'?selection=Unknown');window.dispatchEvent(new PopStateEvent('popstate'));await wait(()=>count()===0);
+ q.querySelector('.qb-mobile-toggle').click();
+ const activePanel=document.querySelector('.qb-mobile-panel--open');
+ ok('Unknown hidden selection gives zero results and exposes mobile reset',activePanel.querySelector('.qb-clear-all').style.display!=='none');
+ activePanel.querySelector('.qb-clear-all').click();await wait(()=>count()===3);
+ ok('Mobile reset clears the hidden URL filter',!location.search.includes('selection='));
+ }catch(error){results.push({error:String(error)})}
+ document.querySelector('#result').textContent=JSON.stringify(results,null,2);
+ document.body.dataset.passed=String(results.every(r=>r.pass));
+});</script></html>

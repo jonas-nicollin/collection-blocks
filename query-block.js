@@ -247,6 +247,7 @@
         prefix:       p.prefix,
         layout:       p.layout       || globalLayout || 'pills',
         showLabel:    p.showLabel    !== false,
+        hidden:       p.hidden === true,
         labelPosition: p.labelPosition || null,
         order:        p.order        || null,
         direction:    p.direction    || p.sortDirection || null,
@@ -3167,6 +3168,9 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         if (!urlContract && defVal && !state.tags[pd.prefix]) {
           state.tags[pd.prefix] = defVal;
         }
+
+        // Keep URL/default filtering active without rendering a control.
+        if (pd.hidden) return;
 
         var grp;
 
