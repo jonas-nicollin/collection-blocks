@@ -34,6 +34,8 @@ window.addEventListener('load',async()=>{
  ok('Outside empty options do not repeat label',selects.every(s=>s.options[0].text==='All'));
  ok('Visible labels supply accessible name without overriding ARIA',selects.every(s=>!s.hasAttribute('aria-label')));
  ok('showLabel false for pills does not disable explicitly requested dropdown label',selects.find(s=>s.labels[0].textContent==='Year').labels.length===1);
+ const groupStyle=getComputedStyle(selects[0].closest('.cb-filter-group--labeled'));
+ ok('Outside label spacing overrides the generic group rule',Math.abs(parseFloat(groupStyle.gap)-parseFloat(groupStyle.fontSize)*.6)<.1&&groupStyle.flexWrap==='nowrap');
  ok('Dropdown shape stays rounded by default',parseFloat(getComputedStyle(selects[0]).borderRadius)>0);
  const legacy=[...document.querySelectorAll('#legacy select')];
  ok('Legacy keeps original markup and ARIA',legacy.every(s=>s.hasAttribute('aria-label')&&!s.labels.length&&!s.parentElement.classList.contains('cb-filter-control')));

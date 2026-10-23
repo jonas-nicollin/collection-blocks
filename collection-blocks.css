@@ -427,8 +427,9 @@ body:not(.sqs-edit-mode-active) :where(
 :where(.cb-filter-group--dropdown).qb-filter-group--dropdown { display: inline-flex; }
 
 /* Optional persistent labels; native dropdown presentation stays unchanged. */
-:where(.cb-filter-group--labeled) {
+:where(.cb-filter-group).cb-filter-group--labeled {
   display: inline-flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 0.6em;
   min-width: 0;
