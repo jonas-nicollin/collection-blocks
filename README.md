@@ -66,6 +66,103 @@ Exclusions apply before sorting, limiting and pagination, and also to Related
 fallback filling. Query tab filters and card variant filters accept the same
 fields. Load the matching current core and block runtimes together.
 
+## Optional extensions: one configuration entry
+
+Query, Related and Locator accept an optional top-level `extensions` object.
+It activates features on their existing **card grid**. Omit it to retain the
+existing behavior; no optional engine is downloaded or activated automatically.
+The core coordinates lifecycle only: it does not fetch extra content or build
+another set of cards.
+
+```js
+// Inside an existing Query, Related or Locator configuration:
+extensions: {
+  scroller: { label: 'Discover the programme' },
+  fancybox: { mediaAttribute: 'cbMedia' }
+}
+```
+
+Each key accepts `true` for defaults, an options object, or `false` to disable
+that feature. The options are those of the corresponding module documented
+below. Do not activate the same feature both here and through an old render
+hook/global target configuration on the same grid.
+
+| Key | Optional files | Purpose |
+| --- | --- | --- |
+| `masonry` | `extension-masonry.js` | Position cards in columns of unequal heights. |
+| `slider` | `extension-slider.js` | Navigate between featured cards. The site supplies the slider CSS. |
+| `scroller` | `extension-scroller.js`, `extension-scroller.css` | Native horizontal scrolling, optionally with date dividers. |
+| `fancybox` | `extension-fancybox.js` and the separately installed Fancybox library/CSS | Open a media dialog; one card can contain alternate views. |
+| `collapse` | `extension-collapse.js` | Reveal cards already rendered, without fetching another page. |
+
+### Installation
+
+1. Load `collection-blocks.css` and the CSS required by the chosen extensions.
+2. Load `collection-blocks.js`.
+3. Load only the required `extension-[feature].js` files.
+4. Define the site's block configurations before the block runtimes execute.
+5. Load `query-block.js`, `related-block.js` and/or `locator-block.js` as needed.
+
+Classic external scripts can use `defer` in this order. Keep matching core,
+block and extension files from the same release. The new declaration requires
+core 0.20 or later and matching block runtimes. With an older core, continue
+using the legacy hooks and explicit `mount()` calls. Files stay at the repository
+root, preserving installed URLs. This is not an `extensions/` folder migration.
+Fancybox's third-party files remain separate dependencies, installed once per
+site; do not copy them into this repository.
+
+A missing extension file produces a console warning and leaves ordinary cards
+usable. It does not trigger a network download. Correct script ordering is
+required; after loading a missing module manually, call `sync()` again.
+
+### Compatible combinations
+
+- Choose **one** of Masonry, Slider or Scroller for a flat card grid. Grouped
+  Query output and the Query list layout are not flat grids.
+- Fancybox can accompany one of these layouts. Disable the block's built-in
+  lightbox first; otherwise the new activation refuses the duplicate dialog.
+- Collapse requires a complete flat list: Query/Related `pagination.mode: 'none'`
+  or Locator `display.pageSize: 0`. It cannot accompany Slider or Scroller.
+  It can accompany Masonry, which observes hidden cards.
+- A paginated Scroller contains the cards currently rendered. It does not fetch
+  all records or change pagination. The block's load-more control stays available.
+- No styling, targets, taxonomy, selection rotation or site-specific colors
+  are supplied by this activation layer.
+
+Invalid combinations are skipped with a console warning; ordinary rendering
+and compatible features remain available. Existing direct APIs and global
+registries remain supported. When using the new core, direct layout mounts
+also refuse a second, different layout on the same grid.
+
+### Lifecycle and custom rendering
+
+The block runtimes destroy their managed extensions before replacing cards,
+and refresh them after pagination. Unchanged settings retain the current slide,
+scroll position or expanded count. A filter replacement starts with the new
+cards. Settings changes destroy and remount the affected module. Removing a
+managed grid from the document releases its controllers at the next frame.
+
+Custom renderers can use the same optional service:
+
+```js
+const controller = CollectionBlocks.extensions.mount(gridElement, {
+  masonry: { columns: { default: 3, tablet: 2, mobile: 1 } }
+}, { blockPrefix: 'qb' });
+
+controller.refresh();
+controller.update({ scroller: { label: 'Discover' } });
+controller.destroy();
+```
+
+`mount()` and `sync()` are equivalent and idempotent on one grid. They return
+`null` if no module can be activated. `CollectionBlocks.extensions.destroy(grid)`
+is also available. A custom renderer should supply `grouped`, `paginated` and
+`lightbox` booleans in the third argument when applicable, so the same guards
+can apply. `blockPrefix` is normally inferred from the closest block/grid;
+pass `qb`, `rb` or `lb` explicitly only when the owner cannot be inferred.
+Individual controllers keep their existing methods such as Slider `goTo()`;
+the common controller provides only `refresh()`, `update()` and `destroy()`.
+
 ## Optional masonry extension
 
 Load `extension-masonry.js` before the block runtimes (external classic scripts
@@ -87,8 +184,9 @@ window.QUERY_BLOCK_HOOKS['my-query'] = function (grid, items, config, options) {
 };
 ```
 
-For Related, Locator or another rendering lifecycle, explicitly mount the **card
-grid** once it exists. These runtimes do not currently expose Query's registry:
+For a custom rendering lifecycle, or to retain an existing installation,
+explicitly mount the **card grid** once it exists. Query, Related and Locator
+can instead use the common `extensions` configuration above:
 
 ```js
 const masonry = window.CollectionBlocksMasonry.mount(gridElement, {
@@ -640,6 +738,10 @@ be discoverable before pagination.
 
 Common classes start with `cb-*`. Block-specific classes are added alongside them.
 
+New reusable UI must preserve these paired classes for elements and modifiers.
+Update this section when adding a public class contract; site identifiers and
+editorial taxonomies must remain outside the shared naming contract.
+
 | Block | Card class | Block-specific prefix |
 | --- | --- | --- |
 | Query | `cb-card qb-card` | `qb-*` |
@@ -656,6 +758,44 @@ Generated block attributes:
 | `data-lb-key` | Locator |
 | `data-cb-classes` | Custom block classes |
 | `data-cb-tab`, `data-qb-tab` | Active Query tab |
+
+### Extension class contract
+
+With matching core/extension versions, every extension-owned element and state
+receives its `cb-*` class and the owner's `qb-*`, `rb-*` or `lb-*` companion.
+For example, a Query slider next button has `cb-slider__next qb-slider__next`.
+A native gallery outside a block has the common classes only. Fancybox retains
+its origin's prefix even though the dialog is rendered outside that block.
+The third-party library's own internal elements keep its own class contract.
+
+| Feature | Common roots/elements and state families |
+| --- | --- |
+| Masonry | `cb-masonry` on the existing grid; cards retain their block classes. |
+| Slider | `cb-slider`, `cb-slider__track`, `__slide`, `__controls`, `__button`, `__previous`, `__next`, `__dot`, `__icon`; root `--ready`, `--intro-ready`, `--intro-complete`, `--dragging`; slide `--active`, `--previous`, `--before`, `--after`, `--adjacent`, `--distant`; dot `--active`. |
+| Scroller | Existing `cb-scroller`, `cb-scroller-track`, `cb-scroller-controls`, `cb-scroller-prev`, `cb-scroller-next`, `cb-scroller-refresh`, `cb-scroller-dragging`, `cb-scroller-day`, `cb-scroller-day__context`; new `cb-scroller-day__title`. |
+| Collapse | `cb-collapse`, `cb-collapse--collapsed`, `--expanded`, `cb-collapse__controls`, `__more`, `__less`, `__item--hidden`; buttons also retain `cb-load-more` and its block alias. |
+| Fancybox | `cb-fancybox`, `cb-fancybox__carousel`, `__slide`, `__image`, `__caption`, `__category`, `__title`, `__details`, `__year`, `__line`, `__enquire`, `__enquire-link`, `__views`, `__views-group`, `__view`, `__view-image`; view `--primary`, `--alternate`, `--active`; views-group `--primary`, `--alternates`; slide/views `--loading`. |
+
+The Scroller's existing hyphenated names remain supported without a disruptive
+rename. This pass adds their block aliases; generalizing date dividers into
+arbitrary group headings is a separate change. Legacy Slider `is-*` states,
+Fancybox `cap-*`/configured prefixes, Collapse prefixes and custom Slider class
+names remain **alongside** the common classes. A custom prefix no longer removes
+the generic styling hooks. Destroy restores original classes and semantics.
+
+### Tests
+
+`tests/` contains development checks, not scripts to install on a site.
+Run the Node checks with `node --test tests/*.test.cjs`. Serve browser fixtures
+from an isolated local copy containing only shared assets and those fixtures;
+do not expose deployment records or site credentials through a local server.
+
+`tests/browser-extension-lifecycle.html` tests common activation, class aliases,
+option changes, incompatible combinations, removal cleanup, and the real
+Query/Related/Locator rendering paths with local data. It stubs Google Maps and
+Fancybox to test the integration contract, not the third-party services.
+The existing Slider, Scroller, Fancybox/Collapse and filter fixtures cover
+legacy entry points. Site visual checks remain necessary before a rollout.
 
 ## Release Notes Workflow
 
@@ -675,7 +815,8 @@ Use `LICENSE` to define legal reuse terms. For private/internal code, it can be 
 ## Optional slider extension
 
 Load `extension-slider.js` before the block runtimes. Mount on a flat card grid
-from a render hook; Query, Related and Locator card selectors are supported.
+through `extensions.slider` or a render hook; Query, Related and Locator card
+selectors are supported.
 The extension provides behavior; the site supplies its slider layout/CSS.
 
 ```js
@@ -699,7 +840,7 @@ Options include `root` (element), `cardSelector`, `autoplay` (milliseconds, 0 by
 default), `arrows`, `dots`, `drag`, `dragThreshold` (48px), `controlsInGrid`,
 `label`, `previousLabel`, `nextLabel`, `dotLabel`, `previousIcon`, `nextIcon`,
 `step` (offset percentage, default 100), `cssPrefix` (default `--cb-slider`),
-`introDuration`, `onChange` and `classes` overrides. Class keys are `root`,
+`introDuration`, `onChange` and additive `classes` aliases. Class keys are `root`,
 `track`, `slide`, `controls`, `button`, `previous`, `next`, `dot`, `icon`, `ready`,
 `introReady`, `introComplete`, `dragging`; defaults use `cb-slider` names.
 
@@ -726,7 +867,8 @@ made. Custom `keepFields` lists must retain `imageDimensions` / `originalSize`.
 6.1.3). Load the Fancybox library/CSS separately; the extension does not bundle,
 upgrade or license that dependency. Targets and presentation remain site-owned.
 
-Register `window.CB_FANCYBOX_CONFIGS = [...]` before the deferred extension,
+Use `extensions.fancybox` on a block, register
+`window.CB_FANCYBOX_CONFIGS = [...]` before the deferred extension,
 or call `CollectionBlocksFancybox.mount(element, options)` explicitly. Each
 configuration supplies `targets`, `itemSelector`, `triggerSelector`, and
 `selectors: { image, category, title, excerpt }`. Optional `mediaAttribute`
@@ -748,12 +890,14 @@ enquiry destination is built into the engine.
 
 `extension-collapse.js` progressively reveals **already-rendered cards**;
 it does not fetch pages and must not be applied on top of native Query/Related
-pagination. Register `window.CB_COLLAPSE_CONFIGS = [...]`, or call
+pagination. Use `extensions.collapse` on a block, register
+`window.CB_COLLAPSE_CONFIGS = [...]`, or call
 `CollectionBlocksCollapse.mount(element, options)`. Supply `targets`,
 `listSelector`, `itemSelector`, optionally `footerSelector`, `excludeSelector`,
 `threshold` (default 8), `step` (defaults to threshold),
 `labels: { showMore, showLess }`, and `scrollToSectionOnCollapse` (default true).
-`classPrefix` defaults to `cb-collapse`; a site's existing prefix may be kept.
+`classPrefix` defaults to `cb-collapse`; an existing prefix is retained alongside
+the common and block-specific classes.
 Styles must honor `[hidden]` on cards/buttons if local display rules override
 it. The extension itself sets the native hidden attribute.
 
@@ -774,8 +918,9 @@ installation still needs its own visual/interaction verification.
 ### Native selection scrollers
 
 `extension-scroller.js` and `extension-scroller.css` provide an optional horizontal
-rail for existing cards. Load the stylesheet and deferred script, then call
-`CollectionBlocksScroller.mount(track, options)` from the block's render hook.
+rail for existing cards. Load the stylesheet and deferred script, then use
+`extensions.scroller` or call `CollectionBlocksScroller.mount(track, options)`
+from a custom render lifecycle.
 The engine has no site selectors, content source, image ratio, or autoplay.
 Options include `itemSelector`, `label`, `labels`, `locale`, `timeZone`, `now`,
 `refreshInterval` (default 60 seconds), and optional `getSchedule(card)`.
@@ -792,6 +937,8 @@ Automatic clock updates do not reorder a focused card or a scrolled rail;
 a visible update button applies pending changes. Native touch/trackpad scroll,
 mouse drag, arrow buttons and keyboard arrows are supported. There is no loop.
 The controller exposes `update(options)`, `refresh()` and `destroy()`.
+`refresh({ preservePosition: true })` reconciles without forcing pending date
+reordering; the common activation layer uses this mode.
 CSS hooks: `--scroller-card-width`, `--scroller-day-width`, `--scroller-gap`,
 `--scroller-align` (default flex-start), `--scroller-day-justify` (default center),
 and `--scroller-inset` (default 0px, matching track padding and snap inset).

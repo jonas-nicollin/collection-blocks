@@ -1829,6 +1829,8 @@
     function replaceBlockContent(section, items, CFG, currentItem) {
         const inner = section.querySelector(".rb-block__inner");
         if (!inner) return;
+        const extensions = getCollectionBlocks()?.extensions;
+        if (extensions) inner.querySelectorAll('.rb-grid').forEach(grid => extensions.destroy(grid));
         inner.innerHTML = "";
         const heading = buildHeadingElement(items, CFG, false);
         if (heading) inner.appendChild(heading);
@@ -1855,7 +1857,7 @@
                 ? items
                 : items.slice(0, page * pageSize);
             if (list) {
-                const renderedCount = list.children.length;
+                const renderedCount = Array.from(list.children).filter(card => card.classList.contains("rb-card")).length;
                 const extraClasses = String(CFG.classes?.block || "").split(/\s+/).map(s => s.trim()).filter(Boolean);
                 visibleItems.slice(renderedCount).forEach((item, offset) => {
                     list.appendChild(buildCard(item, CFG, extraClasses, currentItem, renderedCount + offset));
@@ -1907,6 +1909,10 @@
                 footer.appendChild(label);
             }
 
+            if (extensions) extensions.sync(list, CFG.extensions, {
+                blockPrefix: 'rb', paginated: paginationMode !== 'none',
+                lightbox: !!getLightboxOptions(CFG)
+            });
             setupLightbox(section, CFG, visibleItems);
             applyStateClasses(section);
         }
@@ -1919,6 +1925,8 @@
     function replaceBlockWithEmptyState(section, CFG) {
         const inner = section.querySelector(".rb-block__inner");
         if (!inner) return;
+        const extensions = getCollectionBlocks()?.extensions;
+        if (extensions) inner.querySelectorAll('.rb-grid').forEach(grid => extensions.destroy(grid));
         inner.innerHTML = "";
         const heading = buildHeadingElement([], CFG, true);
         if (heading) inner.appendChild(heading);

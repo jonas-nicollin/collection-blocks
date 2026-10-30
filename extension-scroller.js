@@ -3,6 +3,12 @@
   'use strict';
   if (window.CollectionBlocksScroller) return;
   var controllers = new Map();
+  function classNames(scope, common, extra, prefix) {
+    var api = window.CollectionBlocks && window.CollectionBlocks.extensions;
+    return api ? api.classes(scope, common, extra, prefix) :
+      [common, extra].filter(Boolean).join(' ');
+  }
+
 
   function wallTime(value, zone) {
     if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/.test(value)) {
@@ -51,20 +57,33 @@
       controllers.get(track).update(config);
       return controllers.get(track);
     }
-    var cfg, labels, zone, cards = [], signature = '', pending = false;
+    var extensions = window.CollectionBlocks && window.CollectionBlocks.extensions;
+    if (extensions && !extensions.claimLayout(track, 'scroller')) return null;
+    var blockPrefix = config && config.blockPrefix;
+    function classes(common) { return classNames(track, common, '', blockPrefix); }
+    var cfg, labels, zone, cards = [], signature = '', pending = false, destroyed = false;
+    var savedClasses = new Map(), dividers = new Set();
+    function toggle(node, common, active) {
+      if (!savedClasses.has(node)) savedClasses.set(node, new Map());
+      var saved = savedClasses.get(node);
+      classes(common).split(/\s+/).forEach(function (name) {
+        if (!saved.has(name)) saved.set(name, node.classList.contains(name));
+        node.classList.toggle(name, active);
+      });
+    }
     var frame = 0, timer = 0, lastInteraction = 0, pointer = null, dragged = false;
     var root = track.parentElement;
     var original = { role: track.getAttribute('role'), label: track.getAttribute('aria-label'),
       tabindex: track.getAttribute('tabindex') };
-    root.classList.add('cb-scroller');
-    track.classList.add('cb-scroller-track');
+    toggle(root, 'cb-scroller', true);
+    toggle(track, 'cb-scroller-track', true);
     track.setAttribute('role', 'region');
     track.setAttribute('tabindex', '0');
     var controls = document.createElement('div');
-    controls.className = 'cb-scroller-controls';
+    controls.className = classes('cb-scroller-controls');
     function button(className, content) {
       var b = document.createElement('button');
-      b.type = 'button'; b.className = className; b.textContent = content;
+      b.type = 'button'; b.className = classes(className); b.textContent = content;
       controls.appendChild(b); return b;
     }
     var refreshButton = button('cb-scroller-refresh', '');
@@ -91,13 +110,14 @@
     }
     function divider(group, date, status, today, archive) {
       var h = document.createElement('h3');
-      h.className = 'cb-scroller-day'; h.dataset.scrollerGroup = group;
+      h.className = classes('cb-scroller-day'); dividers.add(h); h.dataset.scrollerGroup = group;
       var eyebrow = document.createElement('span');
-      eyebrow.className = 'cb-scroller-day__context';
+      eyebrow.className = classes('cb-scroller-day__context');
       eyebrow.textContent = status === 'undated' ? labels.undated :
         (archive ? labels.archive : status === 'past' ? labels.past :
           date === today ? labels.today : '');
       var title = document.createElement('span');
+      title.className = classes('cb-scroller-day__title');
       title.textContent = date ? (typeof cfg.formatDay === 'function' ? cfg.formatDay(date) :
         new Intl.DateTimeFormat(cfg.locale || 'en', {
         weekday: 'short', day: 'numeric', month: 'long', timeZone: 'UTC'
@@ -105,6 +125,7 @@
       h.append(eyebrow, title); return h;
     }
     function refresh(force) {
+      if (destroyed) return;
       if (!track.isConnected) { destroy(); return; }
       cards = Array.from(track.querySelectorAll(cfg.itemSelector || ':scope > .cb-card'));
       var clock = now(), today = clock.slice(0, 10);
@@ -129,7 +150,7 @@
         pending = true; syncButtons(); return;
       }
       observer.disconnect();
-      track.querySelectorAll('.cb-scroller-day').forEach(function (h) { h.remove(); });
+      dividers.forEach(function (h) { h.remove(); }); dividers.clear();
       var lastGroup = '', fragment = document.createDocumentFragment();
       entries.forEach(function (e) {
         e.card.setAttribute('data-scroller-card', '');
@@ -151,7 +172,7 @@
       observe(); syncButtons();
     }
     function schedule() {
-      if (frame) return;
+      if (frame || destroyed) return;
       frame = requestAnimationFrame(function () { frame = 0; refresh(false); });
     }
     function scrollBy(direction) {
@@ -180,14 +201,14 @@
       if (!dragged && Math.abs(delta) < 6) return;
       dragged = true;
       track.setPointerCapture(event.pointerId);
-      track.classList.add('cb-scroller-dragging');
+      toggle(track, 'cb-scroller-dragging', true);
       track.scrollLeft = pointer.left - delta;
     }
     function onUp(event) {
       if (!pointer) return;
       if (track.hasPointerCapture(pointer.id)) track.releasePointerCapture(pointer.id);
       pointer = null; lastInteraction = Date.now();
-      track.classList.remove('cb-scroller-dragging');
+      toggle(track, 'cb-scroller-dragging', false);
     }
     function onClick(event) {
       if (dragged) { event.preventDefault(); event.stopPropagation(); dragged = false; }
@@ -215,16 +236,21 @@
       schedule();
     }
     function destroy() {
+      if (destroyed) return;
+      destroyed = true;
       clearInterval(timer); cancelAnimationFrame(frame); observer.disconnect(); resize.disconnect();
       controls.remove();
-      track.querySelectorAll('.cb-scroller-day').forEach(function (h) { h.remove(); });
+      dividers.forEach(function (h) { h.remove(); }); dividers.clear();
       cards.sort(function (a, b) { return Number(a.dataset.cbIndex || 0) - Number(b.dataset.cbIndex || 0); });
       cards.forEach(function (card) {
         card.removeAttribute('data-scroller-card'); card.removeAttribute('data-scroller-status');
-        card.removeAttribute('data-scroller-start'); track.appendChild(card);
+        card.removeAttribute('data-scroller-start');
+        if (card.parentElement === track) track.appendChild(card);
       });
-      track.classList.remove('cb-scroller-track', 'cb-scroller-dragging');
-      root.classList.remove('cb-scroller');
+      savedClasses.forEach(function (saved, node) {
+        saved.forEach(function (present, name) { node.classList.toggle(name, present); });
+      });
+      if (extensions) extensions.releaseLayout(track, 'scroller');
       [['role',original.role],['aria-label',original.label],['tabindex',original.tabindex]]
         .forEach(function (entry) {
           if (entry[1] === null) track.removeAttribute(entry[0]);
@@ -237,10 +263,10 @@
       track.removeEventListener('click',onClick,true); controllers.delete(track);
       window.removeEventListener('pointerup',onUp); window.removeEventListener('pointercancel',onUp);
     }
-    var controller = { update: update, refresh: function () { refresh(true); }, destroy: destroy };
+    var controller = { update: update, refresh: function (options) { refresh(!(options && options.preservePosition)); }, destroy: destroy };
     controllers.set(track, controller); observe(); update(config); return controller;
   }
   window.CollectionBlocksScroller = {
-    version: '0.1.0', mount: mount, selectOccurrence: selectOccurrence, wallTime: wallTime
+    version: '0.2.0', mount: mount, selectOccurrence: selectOccurrence, wallTime: wallTime
   };
 })();

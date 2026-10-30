@@ -1,0 +1,116 @@
+<!doctype html><html lang="en"><meta charset="utf-8">
+<title>Extension lifecycle and block integration</title>
+<link rel="stylesheet" href="../collection-blocks.css">
+<link rel="stylesheet" href="../extension-scroller.css">
+<style>body{font:16px system-ui;margin:24px}.fixture{width:600px;margin:20px 0}.fixture .cb-scroller-track{--scroller-card-width:240px;scroll-snap-type:none;scroll-behavior:auto}.fixture .cb-card{min-height:100px}#result{white-space:pre-wrap}[hidden]{display:none!important}</style>
+<h1>Extension lifecycle and block integration</h1><pre id="result">Running…</pre>
+<div id="fixtures"></div><div id="query" class="fixture"></div>
+<div id="related" class="fixture"></div><div id="locator" class="fixture"></div>
+<script src="../collection-blocks.js"></script>
+<script src="../extension-masonry.js"></script><script src="../extension-slider.js"></script>
+<script src="../extension-scroller.js"></script><script src="../extension-collapse.js"></script>
+<script src="../extension-fancybox.js"></script>
+<script>
+const rows=Array.from({length:8},(_,i)=>({id:String(i),title:'Item '+i,
+ fullUrl:i===0?location.pathname:'/item-'+i,categories:[i<4?'A':'B'],
+ tags:['Date: 2026-09-'+(16+i%2)+'T12:00','Zone: '+(i<4?'North':'South')],
+ location:{mapLat:46.2+i*.001,mapLng:6.1+i*.001},workflowState:1}));
+CollectionBlocks.data.getState=async()=>({items:rows,complete:true,pagesLoaded:1});
+CollectionBlocks.data.get=async()=>rows;
+const scroller={getSchedule:card=>card.textContent.includes('1')?'2026-09-17':'2026-09-16',now:'2026-09-16T09:00'};
+window.QUERY_BLOCK_CONFIGS=[{key:'integration',target:'#query',sourceCollection:{path:'/fixture'},
+ filters:{search:true,categories:{layout:'dropdown'},clearAll:true},
+ display:{groups:[{role:'body',children:['title']}]},pagination:{mode:'load-more',perPage:3},
+ performance:{lazyInit:false,maxPages:'all',domBatchSize:1},extensions:{scroller}}];
+window.RELATED_BLOCK_CONFIGS=[{key:'integration',target:'#related',sourceCollection:{path:'/fixture'},
+ selection:{constraints:{requireImage:false,requirePublished:false},limit:'all'},
+ display:{groups:[{role:'body',children:['title']}]},pagination:{mode:'load-more',perPage:3},
+ performance:{lazyInit:false},extensions:{scroller}}];
+// Maps is not under test: a local stub lets the real Locator render/filter run.
+function MapStub(){this.addListener=()=>({remove(){}});this.fitBounds=()=>{};this.panTo=()=>{};this.getZoom=()=>12;this.setZoom=()=>{};this.setIcon=()=>{};this.setVisible=()=>{};this.setZIndex=()=>{};this.setPosition=()=>{};this.setMap=()=>{}}
+window.google={maps:{Map:MapStub,Marker:MapStub,Size:MapStub,Point:MapStub,OverlayView:MapStub,
+ LatLng:MapStub,LatLngBounds:function(){this.extend=()=>{}},ControlPosition:{TOP_RIGHT:1}}};
+window.LOCATOR_BLOCK_CONFIGS=[{key:'integration',target:'#locator',sourceCollection:{path:'/fixture'},
+ apiKey:'fixture-only',layout:'grid',showSearch:false,map:{clustering:false,popup:false},
+ display:{pageSize:0,showImage:false},performance:{lazyInit:false},extensions:{masonry:{gap:10}}}];
+</script>
+<script src="../query-block.js"></script><script src="../related-block.js"></script>
+<script src="../locator-block.js"></script>
+<script>
+window.addEventListener('load',async()=>{
+ const results=[],ok=(test,pass)=>{results.push({test,pass:!!pass});if(!pass)throw Error(test)};
+ const delay=ms=>new Promise(r=>setTimeout(r,ms));
+ const wait=async f=>{for(let i=0;i<150&&!f();i++)await delay(20);if(!f())throw Error('Timeout: '+String(f))};
+ const frames=()=>delay(100),api=CollectionBlocks.extensions,host=document.querySelector('#fixtures');
+ function fixture(prefix='qb',count=5){const root=document.createElement('section');root.className='fixture cb-block '+prefix+'-block';const grid=document.createElement('div');grid.className='cb-grid '+prefix+'-grid';root.append(grid);host.append(root);for(let i=0;i<count;i++){const c=document.createElement('a');c.className='cb-card '+prefix+'-card';c.href='#item-'+i;c.innerHTML='<h2 class="cb-card__title">Card '+i+'</h2>';grid.append(c)}return{root,grid}}
+ try{
+ const f=fixture();const options={slider:{dots:true,classes:{root:'legacy-slider',controls:'legacy-controls'}}};
+ const managed=api.mount(f.grid,options);await frames();
+ ok('Custom slider classes retain shared and Query aliases',f.root.classList.contains('legacy-slider')&&f.root.classList.contains('cb-slider')&&f.root.classList.contains('qb-slider')&&!!f.root.querySelector('.legacy-controls.cb-slider__controls.qb-slider__controls'));
+ ok('Every slider control and state has its owner alias',!!f.root.querySelector('.cb-slider__next.qb-slider__next')&&f.grid.firstChild.classList.contains('qb-slider__slide--active'));
+ ok('Repeated activation keeps one controller/control group',api.mount(f.grid,options)===managed&&f.root.querySelectorAll('.cb-slider__controls').length===1);
+ f.root.querySelector('.cb-slider__next').click();api.sync(f.grid,options);await frames();
+ ok('Routine update preserves active slider card',f.grid.children[1].classList.contains('is-active'));
+ ok('A competing direct layout is refused',CollectionBlocksMasonry.mount(f.grid)===null&&!f.grid.classList.contains('cb-masonry'));
+ options.slider.dots=false;managed.update(options);await frames();
+ ok('Nested option edits are applied without duplicate controls',!f.root.querySelector('.cb-slider__dot')&&f.root.querySelectorAll('.cb-slider__controls').length===1);
+ managed.update({masonry:{columns:{default:2},gap:10}});await frames();
+ ok('Changing layout restores previous semantics first',!f.root.classList.contains('cb-slider')&&!f.grid.firstChild.hasAttribute('aria-hidden')&&f.grid.classList.contains('qb-masonry'));
+ managed.destroy();managed.destroy();
+ ok('Destroy is idempotent and restores layout and classes',!f.grid.style.position&&!f.grid.firstChild.style.position&&!f.grid.classList.contains('cb-masonry'));
+ const c=fixture('rb');const collapse=api.mount(c.grid,{collapse:{threshold:2,classPrefix:'legacy-collapse',scrollToSectionOnCollapse:false}});
+ ok('Collapse retains legacy, common and Related classes',c.grid.classList.contains('legacy-collapse')&&c.grid.classList.contains('cb-collapse')&&c.grid.classList.contains('rb-collapse')&&!!c.root.querySelector('.legacy-collapse__more.cb-collapse__more.rb-collapse__more.rb-load-more'));
+ c.root.querySelector('.cb-collapse__more').click();api.sync(c.grid,{collapse:{threshold:2,classPrefix:'legacy-collapse',scrollToSectionOnCollapse:false}});
+ ok('Collapse preserves the visible count on unchanged settings',c.grid.querySelectorAll('.cb-card:not([hidden])').length===4);
+ collapse.destroy();ok('Collapse destruction restores all cards and generated ID',!c.grid.querySelector('[hidden]')&&!c.grid.id&&!c.root.querySelector('.cb-collapse__controls'));
+ ok('Collapse with pagination is refused',api.mount(c.grid,{collapse:true},{paginated:true})===null);
+ ok('Two requested layouts are refused',api.mount(c.grid,{slider:true,scroller:true})===null);
+ ok('Grouped lists reject flat layouts',api.mount(c.grid,{masonry:true},{grouped:true})===null);
+ const savedEngine=window.CollectionBlocksMasonry;delete window.CollectionBlocksMasonry;
+ ok('Missing optional script leaves the original cards usable',api.mount(c.grid,{masonry:true})===null&&c.grid.querySelectorAll('.cb-card:not([hidden])').length===5);
+ window.CollectionBlocksMasonry=savedEngine;
+ const s=fixture('lb',6);const schedule=card=>card.textContent.includes('1')?'2026-09-17':'2026-09-16';
+ const scrollOpts={scroller:{getSchedule:schedule,now:'2026-09-16T12:00'}};
+ const rail=api.mount(s.grid,scrollOpts);await wait(()=>s.grid.querySelector('.cb-scroller-day'));await frames();
+ ok('Scroller controls and both day texts have Locator aliases',!!s.root.querySelector('.cb-scroller-next.lb-scroller-next')&&!!s.grid.querySelector('.cb-scroller-day.lb-scroller-day .cb-scroller-day__title.lb-scroller-day__title')&&!!s.grid.querySelector('.lb-scroller-day__context'));
+ s.grid.scrollLeft=120;api.sync(s.grid,scrollOpts);await frames();
+ ok('Repeated activation does not reset rail position',s.grid.scrollLeft===120);
+ const removed=s.grid.querySelector('.cb-card');removed.remove();rail.destroy();
+ ok('Scroller destroy does not resurrect a removed card',!s.grid.contains(removed)&&s.grid.querySelectorAll('.cb-card').length===5&&!s.root.querySelector('.cb-scroller-controls'));
+ const gallery=fixture('rb',1);let captured;
+ gallery.grid.firstChild.innerHTML+='<img src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22/%3E">';
+ window.Fancybox={show:(slides,options)=>{captured={slides,options};return captured}};
+ const lightbox=api.mount(gallery.grid,{fancybox:{getMedia:()=>[{src:'/a.jpg'},{src:'/b.jpg'}]}});
+ gallery.grid.firstChild.click();
+ ok('Fancybox portal and caption retain block ownership',captured.options.mainClass.includes('rb-fancybox')&&captured.slides[0].caption.includes('cb-fancybox__title rb-fancybox__title'));
+ const slide={...captured.slides[0],el:document.createElement('div'),captionEl:document.createElement('div')};slide.captionEl.innerHTML=slide.caption;
+ const box={getSlide:()=>slide,getContainer:()=>slide.el};
+ captured.options.on['Carousel.createSlide'](box,null,slide);captured.options.on.ready(box);await frames();
+ ok('Alternate view controls have shared, owner and legacy classes',!!slide.captionEl.querySelector('.cb-fancybox__view.rb-fancybox__view.collection-items-view')&&!!slide.captionEl.querySelector('.cb-fancybox__views-group--primary.rb-fancybox__views-group--primary')&&!!slide.captionEl.querySelector('.cb-fancybox__view-image.rb-fancybox__view-image'));
+ lightbox.destroy();captured=null;gallery.grid.firstChild.click();ok('Fancybox destroy removes its delegated listener',captured===null);
+ ok('Built-in lightbox conflict is refused',api.mount(gallery.grid,{fancybox:true},{lightbox:true})===null);
+ const gone=fixture();api.mount(gone.grid,{slider:true});gone.root.remove();await frames();
+ ok('Removing a block releases listeners and controls',!gone.root.querySelector('.cb-slider__controls')&&!gone.grid.firstChild.hasAttribute('aria-hidden'));
+ const q=document.querySelector('#query');await wait(()=>q.querySelectorAll('.qb-card').length===3&&q.querySelector('.qb-scroller-day'));
+ ok('Query declarative scroller mounts after progressive cards',q.querySelectorAll('.qb-scroller-controls').length===1);
+ q.querySelector('.qb-load-more').click();await wait(()=>q.querySelectorAll('.qb-card').length===6);await frames();
+ ok('Query load more adds cards without duplicating controls',q.querySelectorAll('.qb-scroller-controls').length===1&&q.querySelectorAll('[data-scroller-card]').length===6);
+ const category=q.querySelector('select');category.value='B';category.dispatchEvent(new Event('change'));await wait(()=>q.querySelectorAll('.qb-card').length===3&&q.querySelector('.qb-card').textContent==='Item 4');await frames();
+ ok('Filtering replaces cards and resets one extension controller',q.querySelectorAll('.qb-scroller-controls').length===1&&q.querySelectorAll('.qb-card').length===3);
+ const search=q.querySelector('input[type=search],input[type=text]');search.value='no matching item';search.dispatchEvent(new Event('input',{bubbles:true}));
+ await wait(()=>q.querySelector('.qb-empty'));
+ ok('Empty filtered results remove layout controls',!q.querySelector('.qb-scroller-controls')&&!q.querySelector('.cb-scroller-track'));
+ search.value='';search.dispatchEvent(new Event('input',{bubbles:true}));await wait(()=>q.querySelectorAll('.qb-card').length===3&&q.querySelector('.qb-scroller-controls'));
+ ok('Returning from empty results mounts once',q.querySelectorAll('.qb-scroller-controls').length===1);
+ const r=document.querySelector('#related');await wait(()=>r.querySelectorAll('.rb-card').length===3&&r.querySelector('.rb-scroller-day'));
+ r.querySelector('.rb-load-more').click();await wait(()=>r.querySelectorAll('.rb-card').length===6);await frames();
+ ok('Related pagination ignores inserted day dividers',r.querySelectorAll('.rb-card').length===6&&new Set([...r.querySelectorAll('.rb-card')].map(x=>x.dataset.itemId)).size===6&&r.querySelectorAll('.rb-scroller-controls').length===1);
+ const l=document.querySelector('#locator');await wait(()=>l.querySelector('.lb-masonry')&&l.querySelectorAll('.lb-card').length===8);await frames();
+ ok('Locator mounts on its card list and leaves the map intact',l.querySelector('.lb-grid').style.position==='relative'&&!!l.querySelector('.lb-map'));
+ const zone=l.querySelector('select');zone.value='South';zone.dispatchEvent(new Event('change'));await wait(()=>l.querySelectorAll('.lb-card').length===4);await frames();
+ ok('Locator filter remounts after replacement',!!l.querySelector('.lb-masonry')&&l.querySelectorAll('.lb-card').length===4);
+ }catch(e){results.push({error:String(e),stack:e.stack})}
+ document.querySelector('#result').textContent=JSON.stringify(results,null,2);
+ document.body.dataset.passed=String(results.every(x=>x.pass));
+});
+</script></html>

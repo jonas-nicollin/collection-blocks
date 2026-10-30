@@ -2,6 +2,12 @@
   'use strict';
   if (window.CollectionBlocksSlider) return;
   var instances = new WeakMap();
+  function classNames(scope, common, extra, prefix) {
+    var api = window.CollectionBlocks && window.CollectionBlocks.extensions;
+    return api ? api.classes(scope, common, extra, prefix) :
+      [common, extra].filter(Boolean).join(' ');
+  }
+
   var defaults = {
     cardSelector: '.cb-card, .qb-card, .rb-card, .lb-card',
     autoplay: 0, arrows: true, dots: false, drag: true, dragThreshold: 48,
@@ -21,9 +27,15 @@
     if (!grid) return null;
     if (instances.has(grid)) { instances.get(grid).refresh(); return instances.get(grid); }
     options = options || {};
+    var extensions = window.CollectionBlocks && window.CollectionBlocks.extensions;
+    if (extensions && !extensions.claimLayout(grid, 'slider')) return null;
     var cfg = Object.assign({}, defaults, options);
     cfg.classes = Object.assign({}, defaults.classes, options.classes || {});
     var root = options.root || grid.closest('.cb-block, .qb-block, .rb-block, .lb-block') || grid;
+    Object.keys(defaults.classes).forEach(function (key) {
+      var common = defaults.classes[key] || 'cb-slider__icon';
+      cfg.classes[key] = classNames(grid, common, cfg.classes[key], cfg.blockPrefix);
+    });
     var classes = cfg.classes, prefix = cfg.cssPrefix;
     var cards = [], dots = [], index = 0, timer = null, frame = null, introTimer = null;
     var controls = null, destroyed = false, drag = null, suppressClick = false;
@@ -88,12 +100,12 @@
         var offset = i - index;
         if (offset > length / 2) offset -= length;
         if (offset < -length / 2) offset += length;
-        toggle(card, 'is-active', i === index);
-        toggle(card, 'is-previous', previous !== index && i === previous);
-        toggle(card, 'is-before', offset < 0);
-        toggle(card, 'is-after', offset > 0);
-        toggle(card, 'is-adjacent', Math.abs(offset) === 1);
-        toggle(card, 'is-distant', Math.abs(offset) > 1);
+        toggle(card, classNames(grid, 'cb-slider__slide--active', 'is-active', cfg.blockPrefix), i === index);
+        toggle(card, classNames(grid, 'cb-slider__slide--previous', 'is-previous', cfg.blockPrefix), previous !== index && i === previous);
+        toggle(card, classNames(grid, 'cb-slider__slide--before', 'is-before', cfg.blockPrefix), offset < 0);
+        toggle(card, classNames(grid, 'cb-slider__slide--after', 'is-after', cfg.blockPrefix), offset > 0);
+        toggle(card, classNames(grid, 'cb-slider__slide--adjacent', 'is-adjacent', cfg.blockPrefix), Math.abs(offset) === 1);
+        toggle(card, classNames(grid, 'cb-slider__slide--distant', 'is-distant', cfg.blockPrefix), Math.abs(offset) > 1);
         css(card, prefix + '-offset', offset);
         css(card, prefix + '-offset-x', offset * cfg.step + '%');
         attr(card, 'aria-hidden', i !== index);
@@ -105,7 +117,7 @@
           });
       });
       dots.forEach(function(dot, i) {
-        dot.classList.toggle('is-active', i === index);
+        toggle(dot, classNames(grid, 'cb-slider__dot--active', 'is-active', cfg.blockPrefix), i === index);
         dot.setAttribute('aria-current', i === index ? 'true' : 'false');
       });
       if (typeof cfg.onChange === 'function') cfg.onChange({ index: index, card: cards[index], grid: grid, user: !!user });
@@ -123,6 +135,7 @@
       return btn;
     }
     function rebuildControls() {
+      dots.forEach(restore);
       if (controls) controls.remove();
       controls = null; dots = [];
       if (cards.length < 2 || (!cfg.arrows && !cfg.dots)) return;
@@ -221,11 +234,12 @@
         listeners.forEach(function(remove) { remove(); });
         if (controls) controls.remove();
         Array.from(originals.keys()).forEach(restore);
+        if (extensions) extensions.releaseLayout(grid, 'slider');
         instances.delete(grid);
       }
     };
     instances.set(grid, api); refresh();
     return api;
   }
-  window.CollectionBlocksSlider = { version: '1.0.0', mount: mount };
+  window.CollectionBlocksSlider = { version: '1.1.0', mount: mount };
 })();

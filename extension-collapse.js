@@ -13,6 +13,21 @@
     if (!scope || !cfg || !cfg.listSelector || !cfg.itemSelector) return null;
     if (controllers.has(scope)) return controllers.get(scope);
     var prefix = cfg.classPrefix || 'cb-collapse';
+    var extensions = window.CollectionBlocks && window.CollectionBlocks.extensions;
+    function classes(suffix) {
+      var common = 'cb-collapse' + suffix, extra = prefix + suffix;
+      return extensions ? extensions.classes(scope, common, extra, cfg.blockPrefix) :
+        Array.from(new Set([common, extra])).join(' ');
+    }
+    var originalScopeClasses = new Map(), destroyed = false;
+    function toggle(node, names, active) {
+      names.split(/\s+/).forEach(function (name) { node.classList.toggle(name, active); });
+    }
+    ['', '--collapsed', '--expanded'].forEach(function (suffix) {
+      classes(suffix).split(/\s+/).forEach(function (name) {
+        originalScopeClasses.set(name, scope.classList.contains(name));
+      });
+    });
     var threshold = positive(cfg.threshold, 8);
     var step = positive(cfg.step, threshold);
     var visibleCount = threshold, items = [], controls, more, less, list;
@@ -21,19 +36,23 @@
       if (!originals.has(item)) return;
       var original = originals.get(item);
       item.hidden = original.hidden;
-      item.classList.toggle(prefix + '__item--hidden', original.classHidden);
+      original.classes.forEach(function (present, name) {
+        item.classList.toggle(name, present);
+      });
       originals.delete(item);
     }
     function removeControls() {
       if (controls) controls.remove();
       controls = more = less = null;
-      scope.classList.remove(prefix, prefix + '--collapsed', prefix + '--expanded');
+      originalScopeClasses.forEach(function (present, name) {
+        scope.classList.toggle(name, present);
+      });
     }
     function apply() {
       items.forEach(function (item, index) {
         var hidden = index >= visibleCount;
         item.hidden = hidden;
-        item.classList.toggle(prefix + '__item--hidden', hidden);
+        toggle(item, classes('__item--hidden'), hidden);
       });
       if (controls) {
         var complete = visibleCount >= items.length;
@@ -41,8 +60,8 @@
         less.hidden = !complete;
         more.setAttribute('aria-expanded', String(complete));
         less.setAttribute('aria-expanded', String(complete));
-        scope.classList.toggle(prefix + '--expanded', complete);
-        scope.classList.toggle(prefix + '--collapsed', !complete);
+        toggle(scope, classes('--expanded'), complete);
+        toggle(scope, classes('--collapsed'), !complete);
       }
       if (typeof cfg.onChange === 'function') cfg.onChange({
         scope: scope, visibleCount: Math.min(visibleCount, items.length), total: items.length
@@ -57,7 +76,8 @@
       }
     }
     function refresh() {
-      list = scope.querySelector(cfg.listSelector);
+      if (destroyed) return;
+      list = cfg.listSelector === ':scope' ? scope : scope.querySelector(cfg.listSelector);
       var previous = items;
       items = list ? Array.from(scope.querySelectorAll(cfg.itemSelector)).filter(function (item) {
         return list.contains(item) && (!cfg.excludeSelector || !item.matches(cfg.excludeSelector));
@@ -65,7 +85,8 @@
       previous.forEach(function (item) { if (items.indexOf(item) < 0) restore(item); });
       items.forEach(function (item) {
         if (!originals.has(item)) originals.set(item, {
-          hidden: item.hidden, classHidden: item.classList.contains(prefix + '__item--hidden')
+          hidden: item.hidden, classes: new Map(classes('__item--hidden').split(/\s+/)
+            .map(function (name) { return [name, item.classList.contains(name)]; }))
         });
       });
       if (!list || items.length <= threshold) {
@@ -77,11 +98,13 @@
       if (controls && !controls.isConnected) { removeControls(); visibleCount = threshold; }
       if (!controls) {
         controls = document.createElement('div');
-        controls.className = prefix + '__controls';
+        controls.className = classes('__controls');
         more = document.createElement('button'); less = document.createElement('button');
         more.type = less.type = 'button';
-        more.className = 'cb-load-more ' + prefix + '__more';
-        less.className = 'cb-load-more ' + prefix + '__less';
+        var loadMore = extensions
+          ? extensions.classes(scope, 'cb-load-more', '', cfg.blockPrefix) : 'cb-load-more';
+        more.className = loadMore + ' ' + classes('__more');
+        less.className = loadMore + ' ' + classes('__less');
         more.textContent = (cfg.labels && cfg.labels.showMore) || 'View more';
         less.textContent = (cfg.labels && cfg.labels.showLess) || 'View less';
         if (!list.id) { generatedList = list; generatedId = 'cb-collapse-list-' + (++nextId); list.id = generatedId; }
@@ -90,7 +113,7 @@
         controls.append(more, less);
         var footer = cfg.footerSelector ? scope.querySelector(cfg.footerSelector) : null;
         if (footer) footer.appendChild(controls); else list.insertAdjacentElement('afterend', controls);
-        scope.classList.add(prefix);
+        toggle(scope, classes(''), true);
       }
       visibleCount = Math.max(threshold, Math.min(visibleCount, items.length));
       apply();
@@ -98,6 +121,8 @@
     var controller = {
       refresh: refresh, showMore: showMore, collapse: collapse,
       destroy: function () {
+        if (destroyed) return;
+        destroyed = true;
         originals.forEach(function (_value, item) { restore(item); });
         removeControls();
         if (generatedList && generatedList.id === generatedId) generatedList.removeAttribute('id');
@@ -118,7 +143,7 @@
       });
     });
   }
-  window.CollectionBlocksCollapse = { version: '1.0.0', mount: mount, refresh: refresh };
+  window.CollectionBlocksCollapse = { version: '1.1.0', mount: mount, refresh: refresh };
   var scheduled = false;
   function schedule() {
     if (scheduled) return;
