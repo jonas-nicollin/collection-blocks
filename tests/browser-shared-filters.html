@@ -80,7 +80,7 @@ addEventListener('load',async()=>{
  ok('Mobile panel moves the same controls instead of copying them',panel.contains(controls)&&document.querySelectorAll('#'+controls.querySelector('select').id).length===1);
  ok('Panel controls use a vertical full-width layout',getComputedStyle(controls).flexDirection==='column'&&getComputedStyle(controls).alignItems==='stretch');
  select('Theme','Photo',panel);await wait(()=>counts()==='(150),(150)');
- ok('Mobile selection updates shared chips and counts',get('.cb-filter-chip').textContent.includes('Photo'));
+ ok('Mobile selection updates shared chips and counts',panel.querySelector('.cb-filter-chip').textContent.includes('Photo'));
  panel.querySelector('.qb-mobile-panel__close').click();
  ok('Closing restores controls, value and focus',q.contains(controls)&&controls.querySelector('[data-filter-control="Theme"] select').value==='Photo'&&document.activeElement===toggle);
  toggle.click();panel.querySelector('.qb-clear-all').click();await wait(()=>counts()==='(300),(300)');

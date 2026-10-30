@@ -35,3 +35,14 @@ test('configured temporal selection uses explicit timezone and reference time',(
  assert.equal(selection.matchesConfigured(item,{dateStatus:{prefix:'Date',include:['upcoming']}},{timeZone:'Europe/Zurich',now:new Date('2026-09-17T20:00Z')}),true);
  assert.equal(selection.matchesConfigured(item,{dateStatus:{prefix:'Date',include:['past']}},{timeZone:'Europe/Zurich',now:new Date('2026-09-18T00:30Z')}),true);
 });
+test('metadata projection keeps originals intact and shares OR criteria and word search',()=>{
+ const item={title:'Clay work',excerpt:'<p>another world</p>',categories:['Work'],tags:['Theme: Clay']};
+ const before=JSON.stringify(item),filters={searchMode:'words',projectItem:(value,state)=>({...value,
+ categories:[...value.categories,'Featured'],tags:[...value.tags,'Day: '+(state.category==='Featured'?'2026-09-17':'2026-09-16')]})};
+ assert.equal(selection.matches(item,{category:'Featured',tags:{Theme:['Photo','Clay'],Day:'2026-09-17'},search:'world clay'},filters),true);
+ assert.equal(selection.matches(item,{tags:{Theme:['Photo','Drawing']}},filters),false);
+ assert.equal(selection.matches(item,{tags:{Theme:[]}},filters),true);
+ assert.equal(selection.matches(item,{search:'world clay'}),false);
+ assert.equal(JSON.stringify(item),before);
+ assert.equal(selection.filter([item],{category:'Featured'},filters)[0],item);
+});
