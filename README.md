@@ -794,6 +794,7 @@ The third-party library's own internal elements keep its own class contract.
 | Slider | `cb-slider`, `cb-slider__track`, `__slide`, `__controls`, `__button`, `__previous`, `__next`, `__dot`, `__icon`; root `--ready`, `--intro-ready`, `--intro-complete`, `--dragging`; slide `--active`, `--previous`, `--before`, `--after`, `--adjacent`, `--distant`; dot `--active`. |
 | Scroller | Existing `cb-scroller`, `cb-scroller-track`, `cb-scroller-controls`, `cb-scroller-prev`, `cb-scroller-next`, `cb-scroller-refresh`, `cb-scroller-dragging`, `cb-scroller-day`, `cb-scroller-day__context`; new `cb-scroller-day__title`. |
 | Collapse | `cb-collapse`, `cb-collapse--collapsed`, `--expanded`, `cb-collapse__controls`, `__more`, `__less`, `__item--hidden`; buttons also retain `cb-load-more` and its block alias. |
+| Explorer | `cb-explorer`, root `--form` / `--links`, `__form`, `__status` / `__status--quiet`, `__submit`, `__links`, `__link`, `__label`, `__count`, `__description`; Query-backed elements also have `qb-*` aliases. |
 | Fancybox | `cb-fancybox`, `cb-fancybox__carousel`, `__slide`, `__image`, `__caption`, `__category`, `__title`, `__details`, `__year`, `__line`, `__enquire`, `__enquire-link`, `__views`, `__views-group`, `__view`, `__view-image`; view `--primary`, `--alternate`, `--active`; views-group `--primary`, `--alternates`; slide/views `--loading`. |
 
 The Scroller's existing hyphenated names remain supported without a disruptive
@@ -1118,9 +1119,9 @@ Query retains a fallback for older core versions, but use matching assets when
 activating the new shared mode. Related and Locator keep their current filters;
 this release does not create a cross-block controller.
 
-A remote/standalone Explorer will use this service in a later module. It is
-not installed or activated by `scope: 'all-tabs'`, and this release does not
-provide an `extension-explorer.js` file or a public block-state setter yet.
+The optional remote Explorer below uses the same predicates and Query controls.
+It is not installed or activated by `scope: 'all-tabs'`. There is still no public
+controller for synchronizing several result blocks on the same page.
 
 Verification: `tests/selection.test.cjs` checks predicate parity and timezone
 rules; `tests/browser-shared-filters.html` checks counts, DOM limits, pagination,
@@ -1178,3 +1179,134 @@ no duplicate input IDs are introduced. Labels are configurable through
 `tests/browser-filter-projection.html` covers virtual metadata, combined links,
 facet counts, date groups, responsive controls and pending mobile search. Domain
 rules and client configurations remain outside this public repository.
+
+
+## Remote Explorer (optional, v0.8.0)
+
+Explorer prepares a selection here and opens its results on another page.
+It uses **Query's source loading, selection rules, controls and URL mapping**;
+it never builds result cards or a hidden grid. Internal filters above Query tabs
+remain part of Query itself. Explorer is optional for pages with remote forms
+or links, and currently targets Query destinations only.
+
+Install matching shared core, CSS and Query first, then load
+`extension-explorer.js` and `extension-explorer.css` on pages that need Explorer.
+Use immutable release URLs in production. No third-party library is required.
+Unlike layout modules in `extensions`, this component has its own target:
+
+```html
+<div id="programme-explorer"></div>
+```
+
+```js
+/* ==================================================
+   QB — Homepage — Remote programme filters
+   ================================================== */
+window.CB_EXPLORER_CONFIGS = [{
+  target: '#programme-explorer',
+  destination: '/programme',
+  query: 'programme',
+  layout: 'form',
+  hideSubmitWhenEmpty: true
+}];
+```
+
+`query` is either a Query configuration object or its key in
+`QUERY_BLOCK_CONFIGS`. That definition must be available on both pages, with the
+same source, prefilter, tab membership, projection and `filters.urlState`
+mapping. Its result target need not exist on the homepage. Do not duplicate or
+change its selection rules in Explorer. Set `performance.maxPages: 'all'` for
+exact complete counts when collection size permits; a bounded source keeps `+`
+counts and never disables a choice based on an incomplete zero.
+
+Form presentation reuses `filters.categories`, `tagPrefixes`, `controlOrder`,
+`labelPosition`, `optionCounts`, `controlSizing`, `clearAll`, `activeChips`,
+`search` and Query's `i18n`. Sticky tabs and card settings do not apply here.
+`mobilePanel: true` on the Explorer opts into the existing panel; the default
+keeps its compact form visible. Styles inherit common filters; site decoration
+belongs in the site's Custom CSS.
+
+| Explorer option | Meaning |
+| --- | --- |
+| `target`, `destination`, `query` | Required mounting point, results URL and shared Query definition. |
+| `layout` | `form` (default) or `links`. |
+| `state` | Initial `{ category, tags, search, tabIndex }`; defaults to no criteria. |
+| `hideSubmitWhenEmpty` | Hide the form action until a criterion is selected. |
+| `mobilePanel` | Opt into the common mobile panel. |
+| `counts` | Show link counts by default; `false` omits them. |
+| `hideEmpty` | Hide a link only when its complete count is zero. |
+| `i18n` | Optional `loading`, `results`, `empty`, `unavailable`, `fallback`, `form`, `links` labels. |
+| `onChange` | Receives copied `state`, `summary` and destination `href`. |
+| `data` | Advanced reuse: a snapshot or Promise of `{items, complete}` from `QueryBlock.filters.load(query)`. |
+
+The submit control is a real link, so opening in a new tab works. Changing
+criteria does not modify the homepage URL. It preserves unrelated destination
+parameters and anchors, encodes repeated values, and chooses a nonempty result
+tab when complete counts allow it. Partial counts are marked `+`; load failures
+leave a plain link to the destination. Hidden criteria can remain as removable
+chips. For overlapping tabs, the total counts each record once, so it need not
+equal the sum of tab counts.
+
+### Automatic and editorial links
+
+To build a row from every `Year:` tag, without typing its values manually:
+
+```js
+/* ==================================================
+   QB — Homepage — Programme by year
+   ================================================== */
+window.CB_EXPLORER_CONFIGS.push({
+  target: '#programme-years',
+  destination: '/programme',
+  query: 'programme',
+  layout: 'links',
+  links: { prefix: 'Year', order: 'numeric', direction: 'desc' }
+});
+```
+
+The destination must map that prefix in `filters.urlState.tags`. Omit `prefix`
+to enumerate categories. `values` supplies a controlled list instead of automatic
+values; `include` / `exclude` restrict it. `order` accepts an explicit list,
+`'numeric'` or alphabetical ordering; `direction: 'desc'` reverses the latter two.
+`formatLabel(value)` changes display only. `state` supplies shared base criteria.
+
+For explicit selections, use `links.items`:
+
+```js
+links: {
+  items: [{
+    label: 'Partner selection',
+    description: 'Thursday evening',
+    state: { tags: { Selection: 'Partner name' } }
+  }]
+}
+```
+
+Each explicit item supplies its full selection, including combined tags or
+categories. Dates can be explicit values or items; Explorer does not invent an
+edition calendar or opening hours. Illustrated editorial cards should continue
+using Query/Related's existing media and `sourceUrl` features. This module does
+not add another card or video renderer.
+
+### Programmatic use and lifecycle
+
+`CBExplorer.mount(target, options)` returns an idempotent controller with
+`ready`, `getState()`, `getSummary()`, `setState(next)`, `href(next)`,
+`subscribe(listener)` and `destroy()`. Setters replace the whole selection;
+state reads are copied. Removing its target releases controls, panel, timers,
+listeners and observer. `CBExplorer.init()` mounts `CB_EXPLORER_CONFIGS` on
+DOMContentLoaded and Squarespace navigation. There is no automatic refresh of
+an already loaded source snapshot during a visit.
+
+`QueryBlock.filters` exposes `load(config)`, `cloneState(state)`,
+`summary(items, config, state, complete)`,
+`href(address, config, state, complete, items)`,
+`readURL(filters, fallbackTabIndex, address)` and `mount(target, options)` for
+this integration. `mount` receives `{config, items, complete, state, mobilePanel,
+onChange}` and returns control lifecycle methods; it does not control a live
+result grid. Metadata must use Query's normalized fields; prefer `load` over
+supplying raw CMS records, particularly for text search and date handling.
+
+`tests/browser-explorer.html` verifies metadata-only rendering, source/destination
+count parity, combined URLs, hidden chips, incomplete counts, automatic links,
+remounts and panel cleanup. Browser and site checks still accompany deployment.

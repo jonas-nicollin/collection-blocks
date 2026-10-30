@@ -1,0 +1,55 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Remote Explorer</title>
+<link rel="stylesheet" href="../collection-blocks.css"><link rel="stylesheet" href="../extension-explorer.css">
+<style>body{font:16px system-ui}#results{white-space:pre-wrap}</style>
+<h1>Remote metadata-only exploration</h1><pre id="results">Running…</pre>
+<div id="explorer"></div><div id="links"></div><div id="partial"></div><div id="destination"></div>
+<script src="../collection-blocks.js"></script><script>
+const rows=Array.from({length:600},(_,i)=>({id:String(i),fullUrl:'/item-'+i,title:'Item '+i,categories:[i<300?'Work':'Talk'],tags:['Theme: '+(i%2?'Clay':'Photo'),'Year: '+(i%3?2025:2026),'Selection: '+(i%4?'General':'Partner')]}));
+const calls=[];CollectionBlocks.data.getState=async(path)=>{calls.push(path);return{items:path==='/partial'?rows.slice(0,2):rows,complete:path!=='/partial',fetchError:path==='/failed'}};
+const config={key:'destination',target:'#destination',sourceCollection:'/all',performance:{maxPages:'all',lazyInit:false},pagination:{mode:'load-more',perPage:4},display:{groups:[{role:'body',children:['title']}]},
+ filters:{scope:'all-tabs',labelPosition:'outside',layout:'dropdown',clearAll:true,search:true,optionCounts:true,activeChips:true,controlSizing:'content',
+ categories:{layout:'dropdown'},tagPrefixes:['Theme',{prefix:'Year',direction:'desc'},{prefix:'Selection',hidden:true}],urlState:{tab:'type',category:'kind',tags:{Theme:'theme',Year:'year',Selection:'selection'}},
+ tabs:[{id:'works',label:'Works',filter:{categories:['Work']}},{id:'talks',label:'Talks',filter:{categories:['Talk']}}]}};
+window.QUERY_BLOCK_CONFIGS=[config];
+</script><script src="../query-block.js"></script><script src="../extension-explorer.js"></script><script>
+addEventListener('load',async()=>{
+const results=[],ok=(test,pass)=>{results.push({test,pass:!!pass});if(!pass)throw Error(test)};
+const delay=ms=>new Promise(r=>setTimeout(r,ms)),wait=async f=>{for(let i=0;i<150&&!f();i++)await delay(20);if(!f())throw Error('Timeout')};
+try{
+const q=document.querySelector('#explorer');const baseURL=location.href;
+const instance=CBExplorer.mount(q,{query:config,destination:location.pathname+'?keep=1#destination',hideSubmitWhenEmpty:true});await instance.ready;
+await wait(()=>document.querySelectorAll('#destination .cb-card').length===4);
+ok('Metadata counted without constructing cards in Explorer',instance.getSummary().total===600&&!q.querySelector('.cb-card')&&q.querySelector('.cb-explorer__submit').hidden);
+ok('Mount is idempotent',CBExplorer.mount(q,{query:config,destination:'/other'})===instance&&q.querySelectorAll('form').length===1);
+const select=(key,value)=>{const el=q.querySelector('[data-filter-control="'+key+'"] select');el.value=value;el.dispatchEvent(new Event('change'));};
+select('Theme','Clay');ok('Shared counts and a real filtered destination',instance.getSummary().total===300&&new URL(instance.href()).searchParams.get('theme')==='Clay'&&!q.querySelector('.cb-explorer__submit').hidden);
+ok('Editing remote controls does not change current URL',location.href===baseURL);
+select('categories','Talk');ok('Destination chooses a nonempty tab',new URL(instance.href()).searchParams.get('type')==='talks'&&instance.getSummary().total===150);
+const next={category:'Talk',tags:{Theme:['Clay','Photo'],Selection:'Partner'},search:''};instance.setState(next);next.tags.Theme.push('Unknown');
+ok('State is copied, OR values distinct and hidden criteria removable',instance.getSummary().total===75&&q.querySelectorAll('.cb-filter-chip').length===4&&new URL(instance.href()).searchParams.getAll('theme').length===2);
+const read=instance.getState();read.tags.Theme.push('Unknown');ok('Reading state cannot mutate it',instance.getState().tags.Theme.length===2);
+const dest=new URL(instance.href());ok('URL preserves unrelated parameters and anchor',dest.searchParams.get('keep')==='1'&&dest.hash==='#destination');
+history.pushState({},'',dest);dispatchEvent(new PopStateEvent('popstate'));await wait(()=>document.querySelector('#destination .cb-tab-btn__count')?.textContent.includes('0'));
+ok('Destination Query and Explorer agree', [...document.querySelectorAll('#destination .cb-tab-btn__count')].map(x=>x.textContent.trim()).join()==='(0),(75)'&&document.querySelectorAll('#destination .cb-card').length===4);
+q.querySelector('.cb-filter-chip[aria-label*="Selection"]').click();ok('Hidden chip removal preserves other criteria',instance.getSummary().total===300&&!new URL(instance.href()).searchParams.has('selection'));
+instance.setState({tags:{Theme:'Missing'}});ok('Empty choice stays removable and cannot navigate',q.querySelector('.cb-explorer__submit').getAttribute('aria-disabled')==='true'&&q.querySelector('.cb-filter-chip').textContent.includes('Missing'));
+q.querySelector('.cb-clear-all').click();ok('Reset hides action and restores all metadata',instance.getSummary().total===600&&q.querySelector('.cb-explorer__submit').hidden);
+const links=CBExplorer.mount('#links',{query:config,destination:'/result',layout:'links',links:{prefix:'Year',order:'numeric',direction:'desc'}});await links.ready;
+ok('Automatic prefix links are ordered and counted',[...document.querySelectorAll('#links .cb-explorer__label')].map(x=>x.textContent).join()==='2026,2025'&&document.querySelector('#links .cb-explorer__count').textContent==='200'&&new URL(document.querySelector('#links a').href).searchParams.get('year')==='2026');
+const failedTarget=document.createElement('div');document.body.append(failedTarget);
+const failed=CBExplorer.mount(failedTarget,{query:{...config,sourceCollection:'/failed'},destination:'/result'});await failed.ready;
+ok('Source failure leaves a working destination link',failed.element.dataset.cbExplorerStatus==='unavailable'&&failed.element.querySelector('a').getAttribute('href').endsWith('/result'));failed.destroy();
+let unmapped=false;try{CBExplorer.mount(document.createElement('div'),{query:config,destination:'/result',layout:'links',links:{prefix:'Missing'}})}catch{unmapped=true}
+ok('Unmapped link prefixes cannot silently open unfiltered results',unmapped);
+const partial=CBExplorer.mount('#partial',{query:{...config,sourceCollection:'/partial'},destination:'/result'});await partial.ready;
+ok('Incomplete counts remain lower bounds without disabling choices',partial.getSummary().complete===false&&document.querySelector('#partial .cb-explorer__submit').textContent.includes('2+')&&![...document.querySelectorAll('#partial option')].some(o=>o.disabled));
+const before=document.querySelectorAll('.cb-mobile-panel').length;instance.destroy();ok('Destroy removes UI and permits remount',!q.children.length&&document.querySelectorAll('.cb-mobile-panel').length===before);
+const mobile=CBExplorer.mount(q,{query:config,destination:'/result',mobilePanel:true});await mobile.ready;
+Object.defineProperty(window,'innerWidth',{configurable:true,value:428});document.body.style.width='428px';dispatchEvent(new Event('resize'));await delay(100);q.querySelector('.cb-mobile-toggle').click();
+ok('Optional panel uses the same controls',!!document.querySelector('.cb-mobile-panel--open select')&&document.querySelectorAll('select[id]').length===new Set([...document.querySelectorAll('select[id]')].map(x=>x.id)).size);
+mobile.destroy();ok('Destroy while open removes portals and scroll lock',!document.querySelector('.cb-mobile-panel--open')&&!document.body.classList.contains('cb-panel-open'));
+let unsafe=false;try{CBExplorer.mount(q,{query:config,destination:'javascript:alert(1)'})}catch(e){unsafe=true}ok('Unsafe destinations are rejected before mount',unsafe&&!q.children.length);
+const pending=CBExplorer.mount(q,{query:config,destination:'/result',data:new Promise(r=>setTimeout(()=>r({items:rows,complete:true}),50))});pending.destroy();await pending.ready;ok('Async completion cannot revive a destroyed component',!q.children.length);
+}catch(error){results.push({error:String(error)})}
+document.querySelector('#results').textContent=JSON.stringify(results,null,2);document.body.dataset.passed=String(results.every(r=>r.pass));
+});</script></html>

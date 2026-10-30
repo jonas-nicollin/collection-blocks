@@ -2813,7 +2813,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       if (e.target === panel) close();
     });
 
-    document.addEventListener('keydown', function(e) {
+    function onPanelKeydown(e) {
       if (isOpen && e.key === 'Tab') {
         var focusable = Array.from(panel.querySelectorAll('button:not([disabled]), select, input, a[href]'))
           .filter(function(node) { return node.offsetParent !== null; });
@@ -2824,7 +2824,8 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       if (e.key === 'Escape' && panel.classList.contains('qb-mobile-panel--open')) {
         close();
       }
-    });
+    }
+    document.addEventListener('keydown', onPanelKeydown);
 
     return {
       panel: panel,
@@ -2833,6 +2834,11 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       panelClearBtn: panelClearBtn,
       syncContext: syncContext,
       applyBtn: applyBtn,
+      destroy: function() {
+        close();
+        document.removeEventListener('keydown', onPanelKeydown);
+        panel.remove(); backdrop.remove();
+      },
     };
   }
 
@@ -2857,10 +2863,10 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       search: options.search || 'search', tags: tags };
   }
 
-  function readFilterURL(fc, fallbackIndex) {
+  function readFilterURL(fc, fallbackIndex, address) {
     var contract = filterURLContract(fc);
     if (!contract) return null;
-    var params = new URL(window.location.href).searchParams;
+    var params = new URL(address || window.location.href, window.location.href).searchParams;
     var tabs = fc.tabs || [], index = fallbackIndex;
     var tabValue = params.get(contract.tab);
     tabs.forEach(function(tab, i) {
@@ -2936,18 +2942,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     }
     function writeURL(replace) {
       if (!urlContract || restoringURL) return;
-      var url = new URL(window.location.href);
-      [urlContract.tab, urlContract.category, urlContract.search]
-        .concat(Object.values(urlContract.tags)).forEach(function(key) { url.searchParams.delete(key); });
-      var tab = (fc.tabs || [])[activeTabIndex];
-      if (tab) url.searchParams.set(urlContract.tab, tab.id || slugify(tab.label || String(activeTabIndex)));
-      if (state.category) url.searchParams.set(urlContract.category, state.category);
-      if (state.search) url.searchParams.set(urlContract.search, state.search);
-      Object.keys(urlContract.tags).forEach(function(prefix) {
-        [].concat(state.tags[prefix] || []).filter(Boolean).forEach(function(value) {
-          url.searchParams.append(urlContract.tags[prefix], value);
-        });
-      });
+      var url = encodeFilterURL(window.location.href, fc, state, activeTabIndex);
       if (url.href !== window.location.href) {
         window.history[replace ? 'replaceState' : 'pushState'](window.history.state, '', url.href);
       }
@@ -2965,6 +2960,8 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     var searchTimers = new Set();
     var defaultsResolved = false;
     var dropdownFacets = new Map();
+    var destroyed = false, breakpointObserver = null;
+    var breakpointListener = null, urlRestore = null;
 
     function projectedPool(pool) {
       var service = getCollectionBlocks() && getCollectionBlocks().selection;
@@ -2973,6 +2970,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     }
 
     function refreshDropdowns() {
+      if (destroyed) return;
       var complete = !areCountsComplete || areCountsComplete();
       dropdownFacets.forEach(function(facet, select) {
         if (!secondaryEl || !secondaryEl.contains(select)) {
@@ -3016,6 +3014,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     }
 
     function emit(replaceURL) {
+      if (destroyed) return;
       updateTabCounts(true);
       refreshDropdowns();
       renderChips();
@@ -3667,6 +3666,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       var isMobileMode = false;
 
       function checkBreakpoint() {
+        if (destroyed) return;
         var shouldBeMobile = window.innerWidth < mobilePanelBp;
 
         if (shouldBeMobile === isMobileMode) return;
@@ -3691,10 +3691,12 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         }
       }
 
+      breakpointListener = checkBreakpoint;
       checkBreakpoint();
 
       if ('ResizeObserver' in window) {
-        new ResizeObserver(checkBreakpoint).observe(document.body);
+        breakpointObserver = new ResizeObserver(checkBreakpoint);
+        breakpointObserver.observe(document.body);
       } else {
         window.addEventListener('resize', checkBreakpoint);
       }
@@ -3758,6 +3760,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         restoringURL = false;
         if (shared) writeURL(true);
       }
+      urlRestore = restoreURL;
       window.addEventListener('popstate', restoreURL);
     }
     updateTabCounts(true);
@@ -3785,6 +3788,31 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     };
 
     wrapper.qbRefreshCounts = function() { updateTabCounts(false); refreshDropdowns(); };
+    wrapper.qbSetFilterState = function(next) {
+      if (destroyed) return;
+      next = cloneFilterState(next);
+      resetSec();
+      state.category = next.category; state.tags = next.tags; state.search = next.search;
+      if (tabs[next.tabIndex]) {
+        activeTabIndex = next.tabIndex; state.tab = tabs[activeTabIndex].filter || null;
+        if (onTabChange) onTabChange(tabs[activeTabIndex]);
+      }
+      rebuildSecondary(); emit();
+    };
+    wrapper.qbFlushFilterSearch = function() {
+      var search = secondaryEl.querySelector('input[type="search"]');
+      if (search && search.value.trim() !== state.search) {
+        clearSearchTimers(); state.search = search.value.trim(); emit();
+      }
+    };
+    wrapper.qbDestroyFilters = function() {
+      destroyed = true; clearSearchTimers(); dropdownFacets.clear();
+      if (breakpointObserver) breakpointObserver.disconnect();
+      if (breakpointListener) window.removeEventListener('resize', breakpointListener);
+      if (urlRestore) window.removeEventListener('popstate', urlRestore);
+      if (mobileObj) mobileObj.destroy();
+      wrapper.remove(); if (tabsWrapper) tabsWrapper.remove();
+    };
     return wrapper;
   }
 
@@ -3838,6 +3866,143 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
     return cfg;
   }
+
+  // Shared metadata and filter UI services. Explorer never mounts a card grid.
+  function cloneFilterState(value) {
+    value = value || {};
+    var tags = {};
+    Object.keys(value.tags || {}).forEach(function(key) {
+      var values = [].concat(value.tags[key] || []).filter(Boolean).map(String);
+      if (values.length) tags[key] = values.length === 1 ? values[0] : values;
+    });
+    return { category: value.category || null, tags: tags,
+      search: value.search || '', tabIndex: Number(value.tabIndex) || 0 };
+  }
+
+  function encodeFilterURL(address, fc, state, tabIndex) {
+    var contract = filterURLContract(fc);
+    if (!contract) throw new Error('A filters.urlState mapping is required');
+    var url = new URL(address, window.location.href);
+    if (!/^https?:$/.test(url.protocol)) throw new Error('Unsupported destination protocol');
+    [contract.tab, contract.category, contract.search].concat(Object.values(contract.tags))
+      .forEach(function(key) { url.searchParams.delete(key); });
+    var tab = (fc.tabs || [])[tabIndex];
+    if (tab) url.searchParams.set(contract.tab, tab.id || slugify(tab.label || String(tabIndex)));
+    if (state.category) url.searchParams.set(contract.category, state.category);
+    if (state.search) url.searchParams.set(contract.search, state.search);
+    Object.keys(contract.tags).forEach(function(prefix) {
+      [].concat((state.tags || {})[prefix] || []).filter(Boolean).forEach(function(value) {
+        url.searchParams.append(contract.tags[prefix], value);
+      });
+    });
+    return url;
+  }
+
+  async function fetchConfigSources(cfg, maxPages) {
+    var perf = cfg.performance || {};
+    return Promise.all(cfg.sources.map(function(src) {
+      var stripFields = src.stripFields;
+      if (stripFields === undefined) stripFields = perf.stripFields;
+      if (stripFields === undefined) stripFields = ['body'];
+      var options = Object.assign({}, pickCollectionOptions(cfg),
+        pickCollectionOptions(perf), pickCollectionOptions(src));
+      return fetchCollectionState(src.path, maxPages, perf.sessionCache === true,
+        perf.sessionCacheTTL || 300, stripFields, options).then(function(state) {
+        return { state: state,
+          items: (state.items || []).map(function(raw) { return mapItem(raw, src.path); }) };
+      });
+    }));
+  }
+
+  function filterUniverse(items, cfg) {
+    var tabs = (cfg.filters || {}).tabs || [];
+    return applyPreFilter(uniqBy(items, function(item) { return item.fullUrl || item.id; }),
+      cfg.preFilter || null, cfg).filter(function(item) {
+      return !tabs.length || tabs.some(function(tab) {
+        return matchesConfiguredFilter(item, tab.filter, cfg);
+      });
+    });
+  }
+
+  function summarizeSelection(items, cfg, state, complete) {
+    state = cloneFilterState(state);
+    var tabs = (cfg.filters || {}).tabs || [];
+    var matched = filterUniverse(items, cfg).filter(function(item) {
+      return matchesUIFilters(item, state, cfg.filters);
+    });
+    var counts = tabs.map(function(tab) {
+      return { id: tab.id || slugify(tab.label), label: tab.label,
+        count: matched.filter(function(item) {
+          return matchesConfiguredFilter(item, tab.filter, cfg);
+        }).length };
+    });
+    var tabIndex = Math.max(0, Math.min(state.tabIndex || 0, tabs.length - 1));
+    if (complete && counts.length && !counts[tabIndex].count) {
+      var available = counts.findIndex(function(tab) { return tab.count > 0; });
+      if (available !== -1) tabIndex = available;
+    }
+    return { total: matched.length, complete: complete === true,
+      tabs: counts, tabIndex: tabIndex };
+  }
+
+  var filterServices = {
+    version: '1.0.0',
+    validate: function(config) {
+      var fc = config.filters || {}, contract = filterURLContract(fc);
+      if (!contract) throw new Error('A filters.urlState mapping is required');
+      normalizePrefixes(fc.tagPrefixes, fc.layout || 'pills').forEach(function(def) {
+        if (!contract.tags[def.prefix]) throw new Error('Unmapped Explorer prefix: ' + def.prefix);
+      });
+      return true;
+    },
+    cloneState: cloneFilterState,
+    readURL: readFilterURL,
+    href: function(address, config, state, complete, items) {
+      state = cloneFilterState(state);
+      var contract = filterURLContract(config.filters || {});
+      Object.keys(state.tags).forEach(function(prefix) {
+        if (!contract || !contract.tags[prefix]) {
+          throw new Error('Unmapped Explorer prefix: ' + prefix);
+        }
+      });
+      var summary = summarizeSelection(items || [], config, state, complete);
+      return encodeFilterURL(address, config.filters || {}, state, summary.tabIndex).href;
+    },
+    summary: summarizeSelection,
+    load: async function(config) {
+      var cfg = normalizeConfig(config);
+      if (!cfg.sources.length) throw new Error('Explorer requires a sourceCollection');
+      var results = await fetchConfigSources(cfg, cfg.performance.maxPages || 'all');
+      if (results.some(function(result) { return result.state.fetchError; })) {
+        throw new Error('Explorer source unavailable');
+      }
+      return { items: filterUniverse(results.flatMap(function(result) { return result.items; }), cfg),
+        complete: results.every(function(result) {
+          return result.state.complete && !result.state.fetchError;
+        }) };
+    },
+    mount: function(target, options) {
+      var cfg = options.config, items = filterUniverse(options.items || [], cfg);
+      // No tabs are rendered here; the destination retains its own tabs and cards.
+      var controlsConfig = Object.assign({}, cfg, { filters: Object.assign({}, cfg.filters, {
+        scope: 'all-tabs', tabs: [], urlState: false, sticky: false,
+        mobilePanel: options.mobilePanel === true, returnToFilters: false
+      }) });
+      var initial = cloneFilterState(options.state);
+      var wrapper = buildFilterBar(items, controlsConfig, function(state) {
+        if (options.onChange) options.onChange(cloneFilterState(state));
+      }, null, null, target, null, 0, initial, function() { return options.complete === true; });
+      target.appendChild(wrapper);
+      return {
+        element: wrapper,
+        getState: function() { return cloneFilterState(wrapper.qbFilterState()); },
+        setState: wrapper.qbSetFilterState,
+        flush: wrapper.qbFlushFilterSearch,
+        refresh: wrapper.qbRefreshCounts,
+        destroy: wrapper.qbDestroyFilters
+      };
+    }
+  };
 
   async function runConfig(cfg) {
   cfg = normalizeConfig(cfg);
@@ -3983,34 +4148,7 @@ requestAnimationFrame(function() {
 
     async function loadSources(maxPagesValue, options) {
       options = options || {};
-      var results = await Promise.all(sourceList.map(function(src) {
-        var stripFields = src.stripFields;
-        if (stripFields === undefined) stripFields = perf.stripFields;
-        if (stripFields === undefined) stripFields = ['body'];
-
-        var sourceOptions = Object.assign(
-          {},
-          pickCollectionOptions(cfg),
-          pickCollectionOptions(perf),
-          pickCollectionOptions(src)
-        );
-
-        return fetchCollectionState(
-          src.path,
-          maxPagesValue,
-          perf.sessionCache === true,
-          perf.sessionCacheTTL || 300,
-          stripFields,
-          sourceOptions
-        ).then(function(state) {
-          return {
-            state: state,
-            items: (state.items || []).map(function(raw) {
-            return mapItem(raw, src.path);
-            }),
-          };
-        });
-      }));
+      var results = await fetchConfigSources(cfg, maxPagesValue);
 
       var merged = [];
       var states = [];
@@ -4749,6 +4887,7 @@ function scheduleConfig(cfg) {
 }
 
   window.QueryBlock = Object.assign({}, window.QueryBlock || {}, {
+    filters: filterServices,
     observeMedia: observeQueryMedia
   });
 
