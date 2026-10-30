@@ -1713,3 +1713,26 @@ body.sqs-edit-mode-active :where(.cb-block).lb-block {
   padding: 0;
   border: 0;
 }
+/* Optional shared filter controls. Site colors and typefaces remain inherited. */
+:where(.cb-filter-return) {
+  margin-inline-start: auto;
+  padding: .5em;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  line-height: 1;
+}
+:where(.cb-filters--mobile-mode) :where(.cb-filter-return) { display: none; }
+:where(.cb-mobile-panel__apply) {
+  margin-block-start: auto;
+  padding: .8em 1em;
+  width: 100%;
+  border: 1px solid currentColor;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}

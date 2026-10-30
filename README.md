@@ -776,6 +776,8 @@ or `lb-*` UI is generated for this feature.
 | `cb-filter-chip` | Button removing one criterion. |
 | `cb-filter-chip__label` | Visible criterion value. |
 | `cb-filter-chip__remove` | Decorative removal icon; accessible name is on the button. |
+| `cb-filter-return` | Optional button returning to the shared filter controls. |
+| `cb-mobile-panel__apply` | Optional result-count button closing the mobile panel. |
 
 ### Extension class contract
 
@@ -1086,8 +1088,10 @@ a tab on their basis. As additional data arrives, counts are refreshed.
 For very large collections, measure index size and latency before enabling
 exact counts; shared filters do not make unbounded data loading free.
 
-The field rules are unchanged: criteria across category, tag prefixes and
-search combine with AND; a configured tab's `tagValuesAny` combines with OR.
+Criteria across category, tag prefixes and search combine with AND. Within one
+prefix, an array of selected values combines with OR and counts each item once.
+Repeated mapped URL parameters preserve those values; chips remove them individually.
+A configured tab's `tagValuesAny` also combines with OR.
 A date-prefix value matches the tagged calendar day, not an exhibition's
 opening hours or a date interval. Domain-specific mappings such as an opening
 reception represented by an exhibition tag remain site integration work.
@@ -1122,3 +1126,55 @@ Verification: `tests/selection.test.cjs` checks predicate parity and timezone
 rules; `tests/browser-shared-filters.html` checks counts, DOM limits, pagination,
 URL/history, empty results, hidden criteria, defaults, rapid changes and mobile
 control identity. These fixtures are development checks, not site installs.
+
+
+### Optional filter adaptation and presentation (v0.7.0)
+
+These options extend Query and the common selection service; they do not add
+another card renderer. Install matching core 0.22, Query and CSS from v0.7.0.
+Existing configurations keep their previous behavior when these options are absent.
+
+| Filter option | Default | Purpose |
+| --- | --- | --- |
+| `projectItem(item, state)` | absent | Pure metadata projection for matching and filter choices. Return an item-shaped object; never mutate the source. Cards retain their original fields. |
+| `searchMode` | phrase | `'words'` requires each word, in any order, and strips HTML from the searchable text. Search uses the original item. |
+| `optionCounts` | false | Recalculate dropdown option counts with the other current criteria. Exact empty choices are disabled; incomplete counts retain `+`. |
+| `controlSizing` | fixed | `'content'` measures the selected label with its actual typeface and sets `--cb-filter-control-width` on its wrapper. CSS controls minimum and maximum widths. |
+| `mobilePanelApply` | false | Add a result-count button to the shared mobile panel. Pending search text is applied before closing. |
+| `returnToFilters` | false | With shared sticky tabs, add a button that scrolls/focuses the filters. The existing mobile toggle is used on mobile. |
+| `resolveView(state, tab)` | absent | Pure choice of `sort`, `groups`, `groupBy`, `groupOrder` for the current criteria. Returning null restores the configured tab presentation. |
+
+`categories.values` and each prefix descriptor's `values` can explicitly set the
+available choices. Prefix descriptors also accept `label` and `allLabel`.
+Data-derived choices and existing `order` remain the default. Explicit choices
+are configuration, not a claim that every value has results.
+
+`projectItem` is a narrow integration boundary: for example, a site can expose
+an opening reception stored as a tag as a virtual filter category, or map a
+published date interval to configured edition days. The common predicate still
+combines all criteria and supplies both results and counts. It does not infer
+opening hours. The callback must be synchronous, deterministic, inexpensive and
+free of DOM/network operations. Use an immutable/cached projection for larger
+indexes. `CollectionBlocks.selection.project(item, state, filters)` exposes the
+same projection to future controllers.
+
+Dropdown counts cost a metadata pass per option. They are opt-in: measure them
+before using large indexes or hundreds of choices. This work does not create
+hidden cards, request images or fetch an independent collection index.
+
+For date-tag grouping, `groupBy.filterPrefix` can identify a different selected
+prefix that limits visible day groups. `groupBy.scopeDates: true` limits the
+rendered card's grouping-prefix dates to its day and sorts occurrences within
+that group; it leaves the source unchanged. `sort.filterPrefix` similarly limits
+the tag dates used for sorting to selected days. Multiple days use OR. Other
+grouping modes keep their existing behavior. `groupBy.headingLevel` sets the
+accessible heading level (default 3).
+
+The shared mobile panel moves both the original controls and their active chips;
+no duplicate input IDs are introduced. Labels are configurable through
+`i18n.returnToFilters`, `filterReturnIcon` (default `tune`) and `filterApply`
+(default `Voir les résultats`). Install the needed icon glyphs on the site.
+
+`tests/browser-filter-projection.html` covers virtual metadata, combined links,
+facet counts, date groups, responsive controls and pending mobile search. Domain
+rules and client configurations remain outside this public repository.

@@ -255,6 +255,9 @@
         filterGranularity: p.filterGranularity || null,
         includeAny: p.includeAny === true,
         anyLabel: p.anyLabel || null,
+        label: p.label || p.prefix,
+        allLabel: p.allLabel || null,
+        values: Array.isArray(p.values) ? p.values : null,
       };
     });
   }
@@ -684,7 +687,7 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
     return parsed ? parsed.ts : null;
   }
 
-  function sortItems(items, sort) {
+  function sortItems(items, sort, state) {
     if (!sort) return items;
 
     var type = sort.type || 'collection';
@@ -698,8 +701,19 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
       if (type === 'category') return norm(a.categories[0] || '').localeCompare(norm(b.categories[0] || '')) * dir;
 
       if (typeof type === 'object' && type.tagPrefix) {
-        var av = getTagValuesByPrefix(a, type.tagPrefix)[0] || '';
-        var bv = getTagValuesByPrefix(b, type.tagPrefix)[0] || '';
+        function value(item) {
+          var values = getTagValuesByPrefix(item, type.tagPrefix);
+          if (sort.filterPrefix && state) {
+            var day = state.tags && state.tags[sort.filterPrefix];
+            values = values.filter(function(v) {
+              return !day || [].concat(day).some(function(d) {
+                return getISODatePart(v) === (getISODatePart(d) || d);
+              });
+            }).sort();
+          }
+          return values[0] || '';
+        }
+        var av = value(a), bv = value(b);
         var ad = tryISODateValue(av);
         var bd = tryISODateValue(bv);
         var an = tryNum(av);
@@ -2373,7 +2387,9 @@ var isPriority = options.priority === true || imgIndex < 3;
       if (!keys.length) keys = [getGroupKey(item, groupBy)];
 
       keys.forEach(function(key) {
-        if (activeGroupFilter && norm(key) !== norm(activeGroupFilter)) return;
+        if (activeGroupFilter && ![].concat(activeGroupFilter).some(function(value) {
+          return norm(key) === norm(value);
+        })) return;
 
         if (!groups.has(key)) {
           groups.set(key, []);
@@ -2434,10 +2450,16 @@ var isPriority = options.priority === true || imgIndex < 3;
     sortedKeys.forEach(function(key) {
       var gi = groups.get(key) || [];
       if (!gi.length) return;
+      if (gbCfg && gbCfg.scopeDates && gbCfg.groupByDay) {
+        gi = sortItems(gi, { type: { tagPrefix: gbCfg.tagPrefix },
+          filterPrefix: gbCfg.tagPrefix }, { tags: { [gbCfg.tagPrefix]: key } });
+      }
 
       var h = el('div', {
         class: 'cb-group-heading qb-group-heading',
         'data-group': key,
+        role: 'heading',
+        'aria-level': String((gbCfg && gbCfg.headingLevel) || 3),
         style: 'grid-column:1 / -1',
       });
 
@@ -2460,6 +2482,12 @@ var isPriority = options.priority === true || imgIndex < 3;
       grid.appendChild(h);
 
       gi.forEach(function(item) {
+        if (gbCfg && gbCfg.scopeDates && gbCfg.groupByDay && gbCfg.tagPrefix) {
+          item = Object.assign({}, item, { tags: (item.tags || []).filter(function(tag) {
+            var parsed = parseTag(tag);
+            return norm(parsed.prefix) !== norm(gbCfg.tagPrefix) || getISODatePart(parsed.value) === key;
+          }) });
+        }
         grid.appendChild(buildCard(item, cfg, idx++));
       });
     });
@@ -2610,7 +2638,8 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
    * 11. PANNEAU MOBILE
    * ════════════════════════════════════ */
 
-  function buildMobilePanel(appendSecondary, tabPool, i18n, ownerBlock, sharedControls) {
+  function buildMobilePanel(appendSecondary, tabPool, i18n, ownerBlock, sharedControls, options) {
+    options = options || {};
     var panel = el('div', {
       class: CLS_MOBILE_PANEL,
       'aria-hidden': 'true',
@@ -2658,6 +2687,13 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
     var filtersZone = el('div', { class: CLS_MOBILE_FILTERS_ZONE });
     inner.appendChild(filtersZone);
+    var applyBtn = null;
+    if (options.apply) {
+      applyBtn = el('button', { type: 'button', class: 'cb-mobile-panel__apply qb-mobile-panel__apply' });
+      applyBtn.textContent = i18n.filterApply || 'Voir les résultats';
+      applyBtn.addEventListener('click', close);
+      inner.appendChild(applyBtn);
+    }
     panel.appendChild(inner);
 
     var backdrop = el('div', { class: CLS_BACKDROP });
@@ -2722,6 +2758,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     var previousFocus = null;
     var placeholder = sharedControls ? document.createComment('Filter controls') : null;
     var isOpen = false;
+    var extra = null, extraPlaceholder = document.createComment('Active filters');
     function open() {
       if (isOpen) return;
       previousFocus = document.activeElement;
@@ -2743,6 +2780,11 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         sharedControls.parentNode.insertBefore(placeholder, sharedControls);
         filtersZone.appendChild(sharedControls);
       } else appendSecondary(tabPool(), filtersZone);
+      extra = options.activeChips && options.activeChips();
+      if (extra && extra.parentNode) {
+        extra.parentNode.insertBefore(extraPlaceholder, extra);
+        filtersZone.appendChild(extra);
+      }
 
       panel.setAttribute('aria-hidden', 'false');
       addUiClasses(panel, CLS_MOBILE_PANEL_OPEN);
@@ -2755,7 +2797,9 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     function close() {
       if (!isOpen) return;
       isOpen = false;
+      if (options.beforeClose) options.beforeClose();
       if (sharedControls && placeholder.parentNode) placeholder.replaceWith(sharedControls);
+      if (extra && extraPlaceholder.parentNode) extraPlaceholder.replaceWith(extra);
       if (previousFocus && previousFocus.isConnected) previousFocus.focus();
       panel.setAttribute('aria-hidden', 'true');
       removeUiClasses(panel, CLS_MOBILE_PANEL_OPEN);
@@ -2788,6 +2832,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       close: close,
       panelClearBtn: panelClearBtn,
       syncContext: syncContext,
+      applyBtn: applyBtn,
     };
   }
 
@@ -2827,8 +2872,9 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     var definitions = normalizePrefixes(fc.scope === 'all-tabs' ? fc.tagPrefixes :
       (part.tagPrefixes || fc.tagPrefixes), fc.layout || 'pills');
     definitions.forEach(function(pd) {
-      var key = contract.tags[pd.prefix], value = key && params.get(key);
-      if (value && (value !== '*' || pd.includeAny)) tags[pd.prefix] = value;
+      var key = contract.tags[pd.prefix], values = key ? params.getAll(key).filter(Boolean) : [];
+      values = values.filter(function(value) { return value !== '*' || pd.includeAny; });
+      if (values.length) tags[pd.prefix] = values.length === 1 ? values[0] : Array.from(new Set(values));
     });
     if (fc.publicationYear && hasURLState) {
       var yearValue = params.get(contract.tags[PUBLICATION_YEAR_FILTER_KEY]);
@@ -2898,7 +2944,9 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       if (state.category) url.searchParams.set(urlContract.category, state.category);
       if (state.search) url.searchParams.set(urlContract.search, state.search);
       Object.keys(urlContract.tags).forEach(function(prefix) {
-        if (state.tags[prefix]) url.searchParams.set(urlContract.tags[prefix], state.tags[prefix]);
+        [].concat(state.tags[prefix] || []).filter(Boolean).forEach(function(value) {
+          url.searchParams.append(urlContract.tags[prefix], value);
+        });
       });
       if (url.href !== window.location.href) {
         window.history[replace ? 'replaceState' : 'pushState'](window.history.state, '', url.href);
@@ -2916,6 +2964,50 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     var tabsWrapper = null;
     var searchTimers = new Set();
     var defaultsResolved = false;
+    var dropdownFacets = new Map();
+
+    function projectedPool(pool) {
+      var service = getCollectionBlocks() && getCollectionBlocks().selection;
+      return service && service.project
+        ? pool.map(function(item) { return service.project(item, state, fc); }) : pool;
+    }
+
+    function refreshDropdowns() {
+      var complete = !areCountsComplete || areCountsComplete();
+      dropdownFacets.forEach(function(facet, select) {
+        if (!secondaryEl || !secondaryEl.contains(select)) {
+          dropdownFacets.delete(select); return;
+        }
+        Array.from(select.options).forEach(function(option) {
+          if (!fc.optionCounts || !option.value) return;
+          var candidate = Object.assign({}, state, { tags: Object.assign({}, state.tags) });
+          var value = option.__cbValues || option.value;
+          if (facet === 'categories') candidate.category = value;
+          else candidate.tags[facet] = value;
+          var count = tabPool().filter(function(item) {
+            return matchesUIFilters(item, candidate, fc);
+          }).length;
+          option.textContent = option.dataset.cbLabel + ' (' + count + (complete ? '' : '+') + ')';
+          option.disabled = complete && count === 0 && !option.selected;
+        });
+        if (fc.controlSizing === 'content' && select.selectedOptions.length) {
+          // Measure only the chosen label, not the longest hidden option.
+          var style = getComputedStyle(select), ruler = document.createElement('span');
+          ruler.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;pointer-events:none';
+          ['fontFamily', 'fontSize', 'fontStretch', 'fontWeight', 'fontStyle',
+            'fontVariant', 'fontFeatureSettings', 'textTransform'].forEach(function(key) {
+            ruler.style[key] = style[key];
+          });
+          ruler.style.letterSpacing = style.letterSpacing;
+          ruler.textContent = select.selectedOptions[0].textContent;
+          document.body.appendChild(ruler);
+          var width = ruler.getBoundingClientRect().width +
+            (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0) + 6;
+          ruler.remove();
+          select.parentNode.style.setProperty('--cb-filter-control-width', Math.ceil(width) + 'px');
+        }
+      });
+    }
 
     function getBaseItems() {
       return typeof baseItemsOrGetter === 'function'
@@ -2925,6 +3017,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
     function emit(replaceURL) {
       updateTabCounts(true);
+      refreshDropdowns();
       renderChips();
       writeURL(replaceURL === true);
       var t = {};
@@ -3074,7 +3167,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       return wrap;
     }
 
-    function buildDropdown(vals, displayVals, label, getCurrent, onSelect, labelPosition) {
+    function buildDropdown(vals, displayVals, label, getCurrent, onSelect, labelPosition, facet, allLabel) {
       var wrap = el('div', { class: CLS_FILTER_GROUP + ' ' + CLS_FILTER_GROUP_DROPDOWN });
       var outside = (labelPosition || fc.labelPosition) === 'outside';
       var attrs = { class: CLS_FILTER_SELECT };
@@ -3091,13 +3184,15 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       var sel = el('select', attrs);
 
       var o0 = el('option', { value: '' });
-      o0.textContent = outside ? i18n.all : label + ': ' + i18n.all;
+      o0.textContent = allLabel || (outside ? i18n.all : label + ': ' + i18n.all);
       sel.appendChild(o0);
 
       vals.forEach(function(v, vi) {
         var dv = (displayVals && displayVals[vi]) ? displayVals[vi] : v;
-        var o = el('option', { value: v });
-        o.textContent = dv;
+        var o = el('option', { value: Array.isArray(v) ? JSON.stringify(v) : v });
+        o.textContent = Array.isArray(dv) ? dv.join(i18n.filterOr || ' ou ') : dv;
+        o.dataset.cbLabel = o.textContent;
+        if (Array.isArray(v)) o.__cbValues = v;
 
         if (getCurrent() && norm(v) === norm(getCurrent())) {
           o.selected = true;
@@ -3107,9 +3202,10 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       });
 
       sel.addEventListener('change', function() {
-        onSelect(sel.value || null);
+        onSelect(sel.selectedOptions[0].__cbValues || sel.value || null);
         emit();
       });
+      if (facet) dropdownFacets.set(sel, facet);
 
       if (outside) {
         var control = el('span', { class: 'cb-filter-control qb-filter-control' });
@@ -3122,6 +3218,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     }
 
     function appendSecondary(pool, container) {
+      pool = projectedPool(pool);
       if (fc.publicationYear) {
         var yearsCfg = typeof fc.publicationYear === 'object' ? fc.publicationYear : {};
         var years = uniqBy(pool.map(function(item) {
@@ -3152,7 +3249,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         var catsShowLbl = catsCfg.showLabel !== false;
         var catsLabel = catsCfg.label || 'Cat\u00e9gorie';
 
-        var cats = uniqBy(pool.reduce(function(a, i) {
+        var cats = catsCfg.values ? catsCfg.values.slice() : uniqBy(pool.reduce(function(a, i) {
           return a.concat(i.categories);
         }, []).filter(Boolean), norm).sort(function(a, b) {
           return norm(a).localeCompare(norm(b));
@@ -3174,7 +3271,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
             resetOtherFilters('category', null);
           };
           var grp = catsCfg.layout === 'dropdown'
-            ? buildDropdown(cats, null, catsLabel, getCategory, selectCategory, catsCfg.labelPosition)
+            ? buildDropdown(cats, null, catsLabel, getCategory, selectCategory, catsCfg.labelPosition, 'categories', catsCfg.allLabel)
             : buildPillGroup(cats, null, catsLabel, catsShowLbl, getCategory, selectCategory);
 
           addUiClasses(grp, CLS_FILTER_GROUP_CATS);
@@ -3193,7 +3290,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         }, []).filter(Boolean), norm);
 
         var fmt = pd.filterFormat || (datePrefix && norm(pd.prefix) === norm(datePrefix) ? 'day' : null);
-        var vals = sortTagValues(raw, pd.prefix, datePrefix);
+        var vals = pd.values ? pd.values.slice() : sortTagValues(raw, pd.prefix, datePrefix);
         var collapseByDay = shouldCollapseDateFilter(pd, datePrefix, fmt);
 
         if (collapseByDay) vals = collapseDateFilterValues(vals);
@@ -3240,13 +3337,13 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
             grp = buildDropdown(
               vals,
               displayVals,
-              prefix,
+              pd.label || prefix,
               function() { return state.tags[prefix] || null; },
               function(v) {
                 state.tags[prefix] = v;
                 resetOtherFilters('tag', prefix);
               },
-              pd.labelPosition
+              pd.labelPosition, prefix, pd.allLabel
             );
           } else {
             grp = buildPillGroup(
@@ -3320,7 +3417,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     }
 
     function updateTabCounts(allowSwitch) {
-      if (!showCounts || !tabButtons.length) return;
+      if ((!showCounts || !tabButtons.length) && !(mobileObj && mobileObj.applyBtn)) return;
       countsComplete = !areCountsComplete || areCountsComplete();
       var items = getBaseItems().filter(function(item) {
         return matchesUIFilters(item, state, fc);
@@ -3328,6 +3425,15 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       var counts = tabs.map(function(tab) {
         return applyTabFilter(items, tab.filter, cfg).length;
       });
+      if (mobileObj && mobileObj.applyBtn) {
+        mobileObj.applyBtn.textContent = (i18n.filterApply || 'Voir les résultats') +
+          ' (' + items.filter(function(item) {
+            return !tabs.length || tabs.some(function(tab) {
+              return matchesConfiguredFilter(item, tab.filter, cfg);
+            });
+          }).length + (countsComplete ? '' : '+') + ')';
+      }
+      if (!showCounts || !tabButtons.length) return;
       // An exact zero may select a useful sibling. Incomplete counts never do.
       if (shared && countsComplete && allowSwitch && !counts[activeTabIndex]) {
         var available = counts.findIndex(function(count) { return count > 0; });
@@ -3354,17 +3460,19 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       if (state.category) entries.push({ type: 'category', label: state.category,
         name: (fc.categories && fc.categories.label) || 'Catégorie' });
       Object.keys(state.tags).forEach(function(prefix) {
-        var value = state.tags[prefix];
-        if (!value) return;
+        var values = [].concat(state.tags[prefix] || []).filter(Boolean);
+        if (!values.length) return;
         var pd = prefixDefs.find(function(def) { return def.prefix === prefix; }) || {};
         if (!shared && getTabPrefixes) pd = normalizePrefixes(getTabPrefixes(), globalLayout)
           .find(function(def) { return def.prefix === prefix; }) || pd;
+        values.forEach(function(value) {
         var label = value === '*' ? (pd.anyLabel || prefix) : value;
         var fmt = pd.filterFormat || (datePrefix && norm(prefix) === norm(datePrefix) ? 'day' : null);
         if (fmt && value !== '*') label = formatISOTag(value, fmt) || value;
-        entries.push({ type: 'tag', key: prefix, label: label,
+        entries.push({ type: 'tag', key: prefix, value: value, label: label,
           name: prefix === PUBLICATION_YEAR_FILTER_KEY
-            ? ((fc.publicationYear || {}).label || 'Year') : prefix });
+            ? ((fc.publicationYear || {}).label || 'Year') : (pd.label || prefix) });
+        });
       });
       if (state.search) entries.push({ type: 'search', label: state.search,
         name: i18n.searchPlaceholder });
@@ -3389,7 +3497,11 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
           clearSearchTimers();
           if (entry.type === 'category') state.category = null;
           else if (entry.type === 'search') state.search = '';
-          else delete state.tags[entry.key];
+          else {
+            var remainingValues = [].concat(state.tags[entry.key]).filter(function(v) { return v !== entry.value; });
+            if (!remainingValues.length) delete state.tags[entry.key];
+            else state.tags[entry.key] = remainingValues.length === 1 ? remainingValues[0] : remainingValues;
+          }
           rebuildSecondary(); emit();
           var remaining = chipsEl.querySelectorAll('button');
           var next = remaining[Math.min(index, remaining.length - 1)] || toggleBtn ||
@@ -3521,7 +3633,16 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       }
 
       i18n.filterResetIcon = i18n.filterResetIcon || (shared ? 'close' : 'refresh');
-      mobileObj = buildMobilePanel(appendSecondary, tabPool, i18n, ownerBlock, shared ? secondaryEl : null);
+      mobileObj = buildMobilePanel(appendSecondary, tabPool, i18n, ownerBlock, shared ? secondaryEl : null, {
+        apply: shared && fc.mobilePanelApply === true,
+        activeChips: shared ? function() { return chipsEl; } : null,
+        beforeClose: shared ? function() {
+          var search = secondaryEl.querySelector('input[type="search"]');
+          if (search && search.value.trim() !== state.search) {
+            clearSearchTimers(); state.search = search.value.trim(); emit(true);
+          }
+        } : null
+      });
       mobileObj.syncContext();
 
       toggleBtn.addEventListener('click', function() {
@@ -3555,6 +3676,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         toggleUiClasses(wrapper, CLS_FILTERS_MOBILE_MODE, isMobileMode);
         if (tabsWrapper) toggleUiClasses(tabsWrapper, CLS_FILTERS_MOBILE_MODE, isMobileMode);
         if (!isMobileMode && mobileObj) mobileObj.close();
+        if (fc.controlSizing === 'content') requestAnimationFrame(refreshDropdowns);
 
         if (toggleBtn) toggleBtn.style.display = isMobileMode ? '' : 'none';
 
@@ -3591,6 +3713,24 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         tabsWrapper.appendChild(tabsNode);
         toggleUiClasses(tabsWrapper, CLS_FILTERS_MOBILE_MODE, !!isMobileMode);
         wrapper.qbTabsWrapper = tabsWrapper;
+        if (fc.returnToFilters) {
+          var returnBtn = el('button', { type: 'button',
+            class: 'cb-filter-return qb-filter-return',
+            'aria-label': i18n.returnToFilters || 'Modifier les filtres' });
+          var returnIcon = el('span', { class: CLS_ICON, 'aria-hidden': 'true' });
+          returnIcon.textContent = i18n.filterReturnIcon || 'tune';
+          returnBtn.appendChild(returnIcon);
+          tabsNode.appendChild(returnBtn);
+          returnBtn.addEventListener('click', function() {
+            if (isMobileMode && mobileObj) mobileObj.open();
+            else {
+              wrapper.scrollIntoView({ block: 'start', behavior:
+                matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+              var first = secondaryEl.querySelector('select, input, button');
+              if (first) first.focus({ preventScroll: true });
+            }
+          });
+        }
       } else bar.appendChild(tabsNode);
     }
 
@@ -3621,6 +3761,9 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       window.addEventListener('popstate', restoreURL);
     }
     updateTabCounts(true);
+    // Initial widths are measured after the detached filter UI is inserted.
+    requestAnimationFrame(refreshDropdowns);
+    if (fc.controlSizing === 'content' && document.fonts) document.fonts.ready.then(refreshDropdowns);
     if (shared) writeURL(true);
     renderChips();
     updateToggleBadge();
@@ -3635,12 +3778,13 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     wrapper.qbRebuildSecondary = function() {
       rebuildSecondary();
       updateTabCounts(false);
+      refreshDropdowns();
       renderChips();
       updateToggleBadge();
       if (mobileObj && mobileObj.syncContext) mobileObj.syncContext();
     };
 
-    wrapper.qbRefreshCounts = function() { updateTabCounts(false); };
+    wrapper.qbRefreshCounts = function() { updateTabCounts(false); refreshDropdowns(); };
     return wrapper;
   }
 
@@ -4148,6 +4292,7 @@ requestAnimationFrame(function() {
     var currentCardClassName = baseCardClassName;
     var baseGridClassName = cfg.gridClassName || '';
     var currentGridClassName = baseGridClassName;
+    var currentTab = null;
 
     function getTabCardClassName(tab) {
       if (!tab) return '';
@@ -4204,6 +4349,7 @@ requestAnimationFrame(function() {
     }
 
     function onTabChange(tab) {
+      currentTab = tab;
       updateTabClass(tab.labelIcon ? (tab.label || '') : (tab.label || ''));
       updateTabIntro(tabIntroEl, tab.intro);
 
@@ -4317,6 +4463,22 @@ requestAnimationFrame(function() {
         ioInfinite = null;
       }
 
+      // A site may choose presentation from the selection, without replacing
+      // matching, card construction, pagination or the source data.
+      if (typeof fc.resolveView === 'function') {
+        if (currentTab) onTabChange(currentTab);
+        else {
+          currentSort = cfg.sort || null;
+          currentGroups = disp.groups || null;
+          currentGroupBy = disp.groupBy || null;
+          currentGroupOrder = disp.groupOrder || 'collection';
+        }
+        var view = fc.resolveView(activeFilters, currentTab) || {};
+        if (view.sort !== undefined) currentSort = view.sort;
+        if (view.groups !== undefined) currentGroups = view.groups;
+        if (view.groupBy !== undefined) currentGroupBy = view.groupBy;
+        if (view.groupOrder !== undefined) currentGroupOrder = view.groupOrder;
+      }
       grid.__qbRenderToken = (grid.__qbRenderToken || 0) + 1;
       target.classList.toggle('cb-block--list', currentLayout === 'list');
       target.classList.toggle('qb-block--list', currentLayout === 'list');
@@ -4327,13 +4489,15 @@ requestAnimationFrame(function() {
         ? applyTabFilter(rawItems, activeFilters.tab, cfg)
         : rawItems;
 
-      var poolSorted = currentSort ? sortItems(pool, currentSort) : pool;
+      var poolSorted = currentSort ? sortItems(pool, currentSort, activeFilters) : pool;
 
       var filtered = poolSorted.filter(function(item) {
         return matchesUIFilters(item, activeFilters, fc);
       });
 
-      if (filterWrapper && filterWrapper.qbRefreshCounts) filterWrapper.qbRefreshCounts();
+      if (!fromFilter && !fromPagination && filterWrapper && filterWrapper.qbRefreshCounts) {
+        filterWrapper.qbRefreshCounts();
+      }
       var total = filtered.length;
       var shown = filtered.slice(0, currentPage * perPage);
 
@@ -4391,10 +4555,12 @@ requestAnimationFrame(function() {
       var activeGroupFilter = null;
 
       if (currentGroupBy && currentGroupBy.tagPrefix && activeFilters.tags) {
-        activeGroupFilter = activeFilters.tags[currentGroupBy.tagPrefix] || null;
+        activeGroupFilter = activeFilters.tags[currentGroupBy.filterPrefix || currentGroupBy.tagPrefix] || null;
 
         if (activeGroupFilter && currentGroupBy.groupByDay) {
-          activeGroupFilter = getISODatePart(activeGroupFilter) || activeGroupFilter;
+          activeGroupFilter = [].concat(activeGroupFilter).map(function(value) {
+            return getISODatePart(value) || value;
+          });
         }
       }
 if (canAppendIncrementally) {

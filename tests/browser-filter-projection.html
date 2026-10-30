@@ -1,0 +1,51 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Filter projection</title>
+<link rel="stylesheet" href="../collection-blocks.css"><style>body{font:16px system-ui;--siteBackgroundColor:white;--paragraphMediumColor:black}#results{white-space:pre-wrap}.cb-grid{margin-top:80px}</style>
+<h1>Metadata projection and faceted controls</h1><pre id="results">Running…</pre><div id="block"></div>
+<script src="../collection-blocks.js"></script><script>
+const rows=[{id:'a',title:'Alpha',categories:['Work'],tags:['Theme: Clay','Date: 2026-09-16','Opening: 2026-09-17T18:00','Opening: 2026-09-18T12:00']},
+{id:'b',title:'Beta',categories:['Talk'],tags:['Theme: Photo','Date: 2026-09-17']},
+{id:'c',title:'Gamma',categories:['Work'],tags:['Theme: Photo','Date: 2026-09-18']}];
+rows.forEach(item=>item.fullUrl='/item-'+item.id);
+CollectionBlocks.data.getState=async()=>({items:rows,complete:true,pagesLoaded:1});
+history.replaceState({},'',location.pathname+'?theme=Clay&theme=Photo&keep=yes');
+window.QUERY_BLOCK_CONFIGS=[{key:'projection',target:'#block',sourceCollection:{path:'/sample'},
+ performance:{lazyInit:false,maxPages:'all',progressive:false},pagination:{mode:'load-more',perPage:1},
+ filters:{scope:'all-tabs',sticky:'tabs',returnToFilters:true,mobilePanel:true,mobilePanelApply:true,
+ labelPosition:'outside',layout:'dropdown',clearAll:true,scrollOnFilter:false,optionCounts:true,controlSizing:'content',
+ categories:{layout:'dropdown',values:['Work','Opening','Talk','Unknown']},
+ tagPrefixes:[{prefix:'Date',label:'When',allLabel:'Any day',values:['2026-09-16','2026-09-17','2026-09-18']},'Theme'],
+ urlState:{tags:{Theme:'theme',Date:'date'}},tabs:[{label:'Works',filter:{categories:['Work']}},{label:'Talks',filter:{categories:['Talk']}}],
+ projectItem:(item,state)=>({...item,categories:item.id==='a'?[...item.categories,'Opening']:item.categories,
+ tags:state.category==='Opening'?item.tags.filter(t=>!t.startsWith('Date:')).concat(item.tags.filter(t=>t.startsWith('Opening:')).map(t=>t.replace('Opening:','Date:'))):item.tags}),
+ resolveView:state=>state.category==='Opening'?{groupBy:{tagPrefix:'Opening',filterPrefix:'Date',groupByDay:true,highlightToday:false,scopeDates:true},groups:[{role:'body',children:['title',{type:'tagPrefix',prefix:'Opening'}]}]}:null},
+ display:{groups:[{role:'body',children:['title',{type:'tagPrefix',prefix:'Date'}]}]}}];
+</script><script src="../query-block.js"></script><script>
+addEventListener('load',async()=>{
+ const results=[],ok=(test,pass)=>{results.push({test,pass:!!pass});if(!pass)throw Error(test)};
+ const delay=ms=>new Promise(r=>setTimeout(r,ms)),wait=async f=>{for(let i=0;i<120&&!f();i++)await delay(20);if(!f())throw Error('Timeout')};
+ const q=document.querySelector('#block'),get=s=>q.querySelector(s),counts=()=>[...q.querySelectorAll('.cb-tab-btn__count')].map(x=>x.textContent.trim()).join();
+ const select=(key,value)=>{let s=get('[data-filter-control="'+key+'"] select');s.value=value;s.dispatchEvent(new Event('change'));return s};
+ try{
+ await wait(()=>counts()==='(2),(1)');await delay(50);
+ ok('OR URL is counted once, with individual chips',q.querySelectorAll('.cb-filter-chip').length===2&&new URL(location).searchParams.getAll('theme').length===2);
+ const theme=get('[data-filter-control="Theme"] select');ok('Combined values are legible in the dropdown',theme.selectedOptions[0].textContent==='Clay ou Photo (3)');
+ ok('Exact empty options are disabled',get('[data-filter-control="categories"] select option[value="Unknown"]').disabled);
+ const originalWidth=get('[data-filter-control="categories"] select').offsetWidth;
+ select('categories','Opening');await wait(()=>counts()==='(1),(0)');
+ ok('Virtual category uses unchanged source cards and two day groups',q.querySelectorAll('.cb-card').length===2&&q.querySelectorAll('.cb-group-heading').length===2&&rows[0].categories.length===1);
+ select('Date','2026-09-18');await delay(50);
+ ok('Group day scopes the card date and chosen grouping filter',q.querySelectorAll('.cb-card').length===1&&get('.cb-group-heading').dataset.group==='2026-09-18'&&!get('.cb-card').textContent.includes('17'));
+ ok('Chosen label changes control width',get('[data-filter-control="categories"] select').offsetWidth>originalWidth);
+ get('.cb-filter-chip[aria-label*="Clay"]').click();await wait(()=>counts()==='(0),(0)');
+ ok('One OR chip removed while others and URL remain',new URL(location).searchParams.getAll('theme').join()==='Photo'&&location.search.includes('keep=yes'));
+ get('.cb-clear-all').click();await wait(()=>counts()==='(2),(1)');
+ ok('Reset restores the default presentation',!get('.cb-group-heading')&&get('.cb-card').textContent.includes('2026'));
+ Object.defineProperty(window,'innerWidth',{configurable:true,value:428});document.body.style.width='428px';dispatchEvent(new Event('resize'));await delay(100);
+ get('.cb-mobile-toggle').click();let panel=document.querySelector('.cb-mobile-panel--open');
+ ok('Panel has a reusable result button and unique controls',!!panel.querySelector('.cb-mobile-panel__apply')&&document.querySelectorAll('select').length===3);
+ let search=panel.querySelector('input');search.value='nothing';search.dispatchEvent(new Event('input'));panel.querySelector('.cb-mobile-panel__apply').click();
+ await wait(()=>counts()==='(0),(0)');ok('Apply flushes a pending search before closing',!document.querySelector('.cb-mobile-panel--open')&&location.search.includes('search=nothing'));
+ }catch(error){results.push({error:String(error)})}
+ document.querySelector('#results').textContent=JSON.stringify(results,null,2);document.body.dataset.passed=String(results.every(r=>r.pass));
+});
+</script></html>

@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.21';
+  var VERSION = '0.22';
   var STORE_KEY_PREFIX = 'collection-blocks::v0.7::';
 
   var memoryCache = new Map();
@@ -2689,8 +2689,16 @@
     }
   }
 
+  // Optional pure metadata projection. It never changes the item used by cards.
+  function projectFilterItem(item, state, filters) {
+    return filters && typeof filters.projectItem === 'function'
+      ? filters.projectItem(item, state || {}) || item : item;
+  }
+
   function matchesUIFilters(item, state, filters) {
     state = state || {};
+    var searchItem = item;
+    item = projectFilterItem(item, state, filters);
     if (state.category && !(item.categories || []).some(function(c) {
       return norm(c) === norm(state.category);
     })) return false;
@@ -2702,21 +2710,30 @@
         if (getPublicationYear(item, filters.publicationYear) !== tags[prefix]) return false;
         continue;
       }
+      var selectedValues = [].concat(tags[prefix]).filter(Boolean);
+      if (!selectedValues.length) continue;
       if (!getTagValuesByPrefix(item, prefix).some(function(v) {
-        if (tags[prefix] === '*') return true;
-        var selectedDatePart = getISODatePart(tags[prefix]);
-        if (selectedDatePart) {
-          var valueDatePart = getISODatePart(v);
-          if (valueDatePart && valueDatePart === selectedDatePart) return true;
-        }
+        return selectedValues.some(function(selected) {
+          if (selected === '*') return true;
+          var selectedDatePart = getISODatePart(selected);
+          if (selectedDatePart) {
+            var valueDatePart = getISODatePart(v);
+            if (valueDatePart && valueDatePart === selectedDatePart) return true;
+          }
 
-        return norm(v) === norm(tags[prefix]);
+          return norm(v) === norm(selected);
+        });
       })) return false;
     }
 
     if (state.search) {
       var q = norm(state.search);
-      if (norm([item.title, item.excerpt, item.location].concat(item.categories, item.tags).join(' ')).indexOf(q) === -1) {
+      var searchText = [searchItem.title, searchItem.excerpt, searchItem.location]
+        .concat(searchItem.categories, searchItem.tags).join(' ');
+      if (filters && filters.searchMode === 'words') searchText = searchText.replace(/<[^>]*>/g, ' ');
+      var haystack = norm(searchText);
+      var terms = filters && filters.searchMode === 'words' ? q.split(/\s+/) : [q];
+      if (!terms.every(function(term) { return haystack.indexOf(term) !== -1; })) {
         return false;
       }
     }
@@ -2726,6 +2743,7 @@
 
   // Pure selection: no DOM, network access, pagination or presentation.
   var selectionApi = {
+    project: projectFilterItem,
     matches: matchesUIFilters,
     matchesConfigured: matchesConfiguredFilter,
     publicationYear: getPublicationYear,
