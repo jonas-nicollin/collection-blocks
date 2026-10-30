@@ -568,6 +568,14 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
   }
 
   function matchesConfiguredFilter(item, filter, cfg) {
+    var selection = getCollectionBlocks() && getCollectionBlocks().selection;
+    if (selection) {
+      var context = {};
+      if (QUERY_TZ) context.timeZone = QUERY_TZ;
+      var mock = cfg && cfg.debug && parseISO(cfg.debug.mockDate);
+      if (mock) context.now = new Date(mock.year, mock.month, mock.day, 12, 0, 0, 0);
+      return selection.matchesConfigured(item, filter, context);
+    }
     if (!filter) return true;
 
     var utils = getCollectionUtils();
@@ -610,6 +618,8 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
   var PUBLICATION_YEAR_FILTER_KEY = '__publicationYear';
 
   function getPublicationYear(item, options) {
+    var selection = getCollectionBlocks() && getCollectionBlocks().selection;
+    if (selection) return selection.publicationYear(item, options);
     var timestamp = Number(item.publishOn || 0);
     if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
     var date = new Date(timestamp);
@@ -624,6 +634,8 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
   }
 
   function matchesUIFilters(item, state, filters) {
+    var selection = getCollectionBlocks() && getCollectionBlocks().selection;
+    if (selection) return selection.matches(item, state, filters);
     if (state.category && !item.categories.some(function(c) {
       return norm(c) === norm(state.category);
     })) return false;
@@ -2456,12 +2468,15 @@ var isPriority = options.priority === true || imgIndex < 3;
 
 function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, done) {
   var utils = getCollectionUtils();
+  var token = grid.__qbRenderToken;
+  function isCurrent() { return token === grid.__qbRenderToken; }
 
   if (utils && typeof utils.appendProgressiveDOM === 'function') {
     return utils.appendProgressiveDOM(items, grid, function(item, cardIndex) {
       return buildCard(item, cfg, cardIndex);
     }, {
       startIndex: startIndex,
+      isCurrent: isCurrent,
       batchSize: batchSize,
       done: done,
     });
@@ -2471,6 +2486,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
   var size = Math.max(1, Number(batchSize || 8));
 
   function appendBatch() {
+    if (!isCurrent()) return;
     var frag = document.createDocumentFragment();
     var end = Math.min(index + size, items.length);
 
@@ -2594,12 +2610,13 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
    * 11. PANNEAU MOBILE
    * ════════════════════════════════════ */
 
-  function buildMobilePanel(appendSecondary, tabPool, i18n, ownerBlock) {
+  function buildMobilePanel(appendSecondary, tabPool, i18n, ownerBlock, sharedControls) {
     var panel = el('div', {
       class: CLS_MOBILE_PANEL,
       'aria-hidden': 'true',
       role: 'dialog',
       'aria-modal': 'true',
+      'aria-label': i18n.filterToggle || 'Filtrer',
     });
 
     var inner = el('div', { class: CLS_MOBILE_PANEL_INNER });
@@ -2615,7 +2632,8 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       });
 
       var panelClearIcon = el('span', { class: CLS_ICON });
-      panelClearIcon.textContent = 'refresh';
+      panelClearIcon.textContent = i18n.filterResetIcon || 'refresh';
+      panelClearIcon.setAttribute('aria-hidden', 'true');
 
       panelClearBtn.appendChild(panelClearIcon);
       panelClearBtn.appendChild(document.createTextNode(' ' + (i18n._clearAllText || 'Réinitialiser')));
@@ -2632,6 +2650,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
     var closeIcon = el('span', { class: CLS_ICON });
     closeIcon.textContent = i18n.filterClose || 'close';
+    closeIcon.setAttribute('aria-hidden', 'true');
     closeBtn.appendChild(closeIcon);
     header.appendChild(closeBtn);
 
@@ -2700,7 +2719,13 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       }
     }
 
+    var previousFocus = null;
+    var placeholder = sharedControls ? document.createComment('Filter controls') : null;
+    var isOpen = false;
     function open() {
+      if (isOpen) return;
+      previousFocus = document.activeElement;
+      isOpen = true;
       if (!panel.parentNode || panel.parentNode !== document.body) {
         document.body.appendChild(panel);
       }
@@ -2714,7 +2739,10 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       syncContext();
 
       filtersZone.innerHTML = '';
-      appendSecondary(tabPool(), filtersZone);
+      if (sharedControls) {
+        sharedControls.parentNode.insertBefore(placeholder, sharedControls);
+        filtersZone.appendChild(sharedControls);
+      } else appendSecondary(tabPool(), filtersZone);
 
       panel.setAttribute('aria-hidden', 'false');
       addUiClasses(panel, CLS_MOBILE_PANEL_OPEN);
@@ -2725,6 +2753,10 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     }
 
     function close() {
+      if (!isOpen) return;
+      isOpen = false;
+      if (sharedControls && placeholder.parentNode) placeholder.replaceWith(sharedControls);
+      if (previousFocus && previousFocus.isConnected) previousFocus.focus();
       panel.setAttribute('aria-hidden', 'true');
       removeUiClasses(panel, CLS_MOBILE_PANEL_OPEN);
       removeUiClasses(backdrop, CLS_BACKDROP_VISIBLE);
@@ -2738,6 +2770,13 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     });
 
     document.addEventListener('keydown', function(e) {
+      if (isOpen && e.key === 'Tab') {
+        var focusable = Array.from(panel.querySelectorAll('button:not([disabled]), select, input, a[href]'))
+          .filter(function(node) { return node.offsetParent !== null; });
+        var first = focusable[0], last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
       if (e.key === 'Escape' && panel.classList.contains('qb-mobile-panel--open')) {
         close();
       }
@@ -2785,7 +2824,8 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     var owned = [contract.tab, contract.category, contract.search].concat(Object.values(contract.tags));
     var hasURLState = owned.some(function(key) { return params.has(key); });
     var part = tabs[index] || {}, tags = hasURLState ? {} : Object.assign({}, fc.defaultTags || {});
-    var definitions = normalizePrefixes(part.tagPrefixes || fc.tagPrefixes, fc.layout || 'pills');
+    var definitions = normalizePrefixes(fc.scope === 'all-tabs' ? fc.tagPrefixes :
+      (part.tagPrefixes || fc.tagPrefixes), fc.layout || 'pills');
     definitions.forEach(function(pd) {
       var key = contract.tags[pd.prefix], value = key && params.get(key);
       if (value && (value !== '*' || pd.includeAny)) tags[pd.prefix] = value;
@@ -2799,10 +2839,13 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       tags: tags, search: fc.search !== false ? (params.get(contract.search) || '') : '' };
   }
 
-  function buildFilterBar(baseItemsOrGetter, cfg, onFilter, onTabChange, getTabPrefixes, ownerBlock, ensureFilterOptions, defaultTabIndex, initialURLState) {
+  function buildFilterBar(baseItemsOrGetter, cfg, onFilter, onTabChange, getTabPrefixes, ownerBlock, ensureFilterOptions, defaultTabIndex, initialURLState, areCountsComplete) {
     if (cfg.filters === false) return null;
 
     var fc = cfg.filters || {};
+    var shared = fc.scope === 'all-tabs';
+    var showCounts = fc.tabCounts === true || (shared && fc.tabCounts !== false);
+    var showChips = fc.activeChips === true || (shared && fc.activeChips !== false);
     var globalLayout = fc.layout || 'pills';
     var datePrefix = fc.datePrefix || null;
 
@@ -2825,6 +2868,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       : Number(fc.mobilePanelBreakpoint || 768);
 
     var wrapper = el('div', { class: CLS_FILTERS_WRAPPER });
+    if (shared) addUiClasses(wrapper, 'cb-filters-wrapper--shared qb-filters-wrapper--shared');
     var bar = el('div', { class: CLS_FILTERS });
     wrapper.appendChild(bar);
 
@@ -2866,6 +2910,12 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     var toggleBtn = null;
     var panelClearBtn = null;
     var clearAllBtn = null;
+    var chipsEl = null;
+    var tabButtons = [];
+    var countsComplete = false;
+    var tabsWrapper = null;
+    var searchTimers = new Set();
+    var defaultsResolved = false;
 
     function getBaseItems() {
       return typeof baseItemsOrGetter === 'function'
@@ -2874,6 +2924,8 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     }
 
     function emit(replaceURL) {
+      updateTabCounts(true);
+      renderChips();
       writeURL(replaceURL === true);
       var t = {};
 
@@ -2894,7 +2946,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       var alwaysPanel = mobilePanelBp === Infinity;
 
       if (clearAllBtn) {
-        clearAllBtn.style.display = (hasActive && !alwaysPanel) ? '' : 'none';
+        clearAllBtn.style.display = (hasActive && !alwaysPanel && !isMobileMode) ? '' : 'none';
       }
 
       if (panelClearBtn) {
@@ -2908,11 +2960,12 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
     function resetOtherFilters(exceptType, exceptKey) {
       if (!fc.resetOthers) return;
+      clearSearchTimers();
 
       if (exceptType !== 'category') state.category = null;
       if (exceptType !== 'publicationYear') state.tags[PUBLICATION_YEAR_FILTER_KEY] = null;
 
-      var activePrefixDefs = (getTabPrefixes && getTabPrefixes())
+      var activePrefixDefs = (!shared && getTabPrefixes && getTabPrefixes())
         ? normalizePrefixes(getTabPrefixes(), globalLayout)
         : prefixDefs;
 
@@ -2964,10 +3017,18 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
     function tabPool() {
       var items = getBaseItems();
+      if (shared && tabs.length) return items.filter(function(item) {
+        return tabs.some(function(tab) { return matchesConfiguredFilter(item, tab.filter, cfg); });
+      });
       return state.tab ? applyTabFilter(items, state.tab, cfg) : items;
     }
 
+    function clearSearchTimers() {
+      searchTimers.forEach(clearTimeout); searchTimers.clear();
+    }
+
     function resetSec() {
+      clearSearchTimers();
       state.category = null;
       state.tags = {};
       state.search = '';
@@ -3102,8 +3163,8 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         }
         if (catsOrder) cats = applyCustomOrder(cats, catsOrder);
 
-        if (cats.length > 1) {
-          if (!urlContract && fc.defaultCategory && state.category == null) {
+        if (cats.length > 1 || (shared && (cats.length || state.category))) {
+          if (!urlContract && (!shared || !defaultsResolved) && fc.defaultCategory && state.category == null) {
             state.category = fc.defaultCategory;
           }
 
@@ -3122,7 +3183,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         }
       }
 
-      var activePrefixDefs = (getTabPrefixes && getTabPrefixes())
+      var activePrefixDefs = (!shared && getTabPrefixes && getTabPrefixes())
         ? normalizePrefixes(getTabPrefixes(), globalLayout)
         : prefixDefs;
 
@@ -3165,7 +3226,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         if (usingURLDefaults && (state.tags[pd.prefix] === 'first' || state.tags[pd.prefix] === 'last')) {
           state.tags[pd.prefix] = defVal;
         }
-        if (!urlContract && defVal && !state.tags[pd.prefix]) {
+        if (!urlContract && (!shared || !defaultsResolved) && defVal && !state.tags[pd.prefix]) {
           state.tags[pd.prefix] = defVal;
         }
 
@@ -3222,12 +3283,14 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         var timer;
 
         inp.addEventListener('input', function() {
-          clearTimeout(timer);
+          clearTimeout(timer); searchTimers.delete(timer);
 
           timer = setTimeout(function() {
+            searchTimers.delete(timer);
             state.search = inp.value.trim();
             emit(true);
           }, 200);
+          searchTimers.add(timer);
         });
 
         sg.appendChild(inp);
@@ -3249,10 +3312,92 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     }
 
     function rebuildSecondary() {
+      clearSearchTimers();
       if (secondaryEl) {
         secondaryEl.innerHTML = '';
         appendSecondary(tabPool(), secondaryEl);
       }
+    }
+
+    function updateTabCounts(allowSwitch) {
+      if (!showCounts || !tabButtons.length) return;
+      countsComplete = !areCountsComplete || areCountsComplete();
+      var items = getBaseItems().filter(function(item) {
+        return matchesUIFilters(item, state, fc);
+      });
+      var counts = tabs.map(function(tab) {
+        return applyTabFilter(items, tab.filter, cfg).length;
+      });
+      // An exact zero may select a useful sibling. Incomplete counts never do.
+      if (shared && countsComplete && allowSwitch && !counts[activeTabIndex]) {
+        var available = counts.findIndex(function(count) { return count > 0; });
+        if (available !== -1) {
+          activeTabIndex = available;
+          state.tab = tabs[available].filter || null;
+          if (onTabChange) onTabChange(tabs[available]);
+        }
+      }
+      tabButtons.forEach(function(button, index) {
+        var value = String(counts[index]) + (countsComplete ? '' : '+');
+        button.querySelector('.cb-tab-btn__count').textContent = ' (' + value + ')';
+        button.setAttribute('aria-label', (tabs[index].label || 'Tab') + ' (' + value + ')');
+        button.setAttribute('aria-pressed', index === activeTabIndex ? 'true' : 'false');
+        toggleUiClasses(button, CLS_TAB_BTN_ACTIVE, index === activeTabIndex);
+        var empty = shared && countsComplete && counts[index] === 0 && index !== activeTabIndex;
+        button.disabled = empty;
+        toggleUiClasses(button, 'cb-tab-btn--empty qb-tab-btn--empty', empty);
+      });
+    }
+
+    function chipEntries() {
+      var entries = [];
+      if (state.category) entries.push({ type: 'category', label: state.category,
+        name: (fc.categories && fc.categories.label) || 'Catégorie' });
+      Object.keys(state.tags).forEach(function(prefix) {
+        var value = state.tags[prefix];
+        if (!value) return;
+        var pd = prefixDefs.find(function(def) { return def.prefix === prefix; }) || {};
+        if (!shared && getTabPrefixes) pd = normalizePrefixes(getTabPrefixes(), globalLayout)
+          .find(function(def) { return def.prefix === prefix; }) || pd;
+        var label = value === '*' ? (pd.anyLabel || prefix) : value;
+        var fmt = pd.filterFormat || (datePrefix && norm(prefix) === norm(datePrefix) ? 'day' : null);
+        if (fmt && value !== '*') label = formatISOTag(value, fmt) || value;
+        entries.push({ type: 'tag', key: prefix, label: label,
+          name: prefix === PUBLICATION_YEAR_FILTER_KEY
+            ? ((fc.publicationYear || {}).label || 'Year') : prefix });
+      });
+      if (state.search) entries.push({ type: 'search', label: state.search,
+        name: i18n.searchPlaceholder });
+      return entries;
+    }
+
+    function renderChips() {
+      if (!chipsEl) return;
+      chipsEl.innerHTML = '';
+      var entries = chipEntries();
+      chipsEl.hidden = !entries.length;
+      entries.forEach(function(entry, index) {
+        var button = el('button', { type: 'button', class: 'cb-filter-chip qb-filter-chip',
+          'aria-label': (i18n.removeFilter || 'Retirer le filtre') + ' ' + entry.name + ' : ' + entry.label });
+        var label = el('span', { class: 'cb-filter-chip__label qb-filter-chip__label' });
+        label.textContent = entry.label;
+        var icon = el('span', { class: CLS_ICON + ' cb-filter-chip__remove qb-filter-chip__remove',
+          'aria-hidden': 'true' });
+        icon.textContent = i18n.filterRemoveIcon || 'close';
+        button.appendChild(label); button.appendChild(icon);
+        button.addEventListener('click', function() {
+          clearSearchTimers();
+          if (entry.type === 'category') state.category = null;
+          else if (entry.type === 'search') state.search = '';
+          else delete state.tags[entry.key];
+          rebuildSecondary(); emit();
+          var remaining = chipsEl.querySelectorAll('button');
+          var next = remaining[Math.min(index, remaining.length - 1)] || toggleBtn ||
+            secondaryEl.querySelector('select, input, button');
+          if (next && next.offsetParent) next.focus();
+        });
+        chipsEl.appendChild(button);
+      });
     }
 
     var tabs = Array.isArray(fc.tabs) ? fc.tabs : [];
@@ -3279,6 +3424,11 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
           setText(btn, tab.label || 'Tab');
         }
 
+        if (showCounts) {
+          btn.appendChild(el('span', { class: 'cb-tab-btn__count qb-tab-btn__count', 'aria-hidden': 'true' }));
+          tabButtons.push(btn);
+        }
+
         if (active) {
           state.tab = tab.filter || null;
           if (onTabChange) onTabChange(tab);
@@ -3295,7 +3445,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
           activeTabIndex = idx;
           state.tab = tab.filter || null;
-          resetSec();
+          if (!shared) resetSec();
 
           if (onTabChange) onTabChange(tab);
 
@@ -3316,6 +3466,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
     secondaryEl = el('div', { class: CLS_FILTERS_SECONDARY });
     appendSecondary(tabPool(), secondaryEl);
+    defaultsResolved = true;
     bar.appendChild(secondaryEl);
 
     if (fc.clearAll) {
@@ -3325,7 +3476,8 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       });
 
       var _cai = el('span', { class: CLS_ICON });
-      _cai.textContent = 'refresh';
+      _cai.textContent = i18n.filterResetIcon || (shared ? 'close' : 'refresh');
+      _cai.setAttribute('aria-hidden', 'true');
 
       clearAllBtn.appendChild(_cai);
       clearAllBtn.appendChild(document.createTextNode(' ' + (
@@ -3335,9 +3487,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       clearAllBtn.style.display = 'none';
 
       clearAllBtn.addEventListener('click', function() {
-        state.category = null;
-        state.tags = {};
-        state.search = '';
+        resetSec();
 
         secondaryEl.innerHTML = '';
         appendSecondary(tabPool(), secondaryEl);
@@ -3370,7 +3520,8 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         bar.appendChild(mobileRow);
       }
 
-      mobileObj = buildMobilePanel(appendSecondary, tabPool, i18n, ownerBlock);
+      i18n.filterResetIcon = i18n.filterResetIcon || (shared ? 'close' : 'refresh');
+      mobileObj = buildMobilePanel(appendSecondary, tabPool, i18n, ownerBlock, shared ? secondaryEl : null);
       mobileObj.syncContext();
 
       toggleBtn.addEventListener('click', function() {
@@ -3381,9 +3532,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
       if (panelClearBtn) {
         panelClearBtn.addEventListener('click', function() {
-          state.category = null;
-          state.tags = {};
-          state.search = '';
+          resetSec();
 
           if (secondaryEl) {
             secondaryEl.innerHTML = '';
@@ -3404,6 +3553,8 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         isMobileMode = shouldBeMobile;
 
         toggleUiClasses(wrapper, CLS_FILTERS_MOBILE_MODE, isMobileMode);
+        if (tabsWrapper) toggleUiClasses(tabsWrapper, CLS_FILTERS_MOBILE_MODE, isMobileMode);
+        if (!isMobileMode && mobileObj) mobileObj.close();
 
         if (toggleBtn) toggleBtn.style.display = isMobileMode ? '' : 'none';
 
@@ -3427,6 +3578,22 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       }
     }
 
+    if (showChips) {
+      chipsEl = el('div', { class: 'cb-filters-active qb-filters-active', hidden: true,
+        role: 'group', 'aria-label': i18n.activeFilters || 'Filtres actifs' });
+      bar.appendChild(chipsEl);
+    }
+    if (shared && tabs.length) {
+      var tabsNode = bar.querySelector('.qb-tabs-row') || tabGroup;
+      if (fc.sticky === 'tabs') {
+        tabsWrapper = el('div', { class: CLS_FILTERS_WRAPPER +
+          ' cb-filters-wrapper--tabs-only qb-filters-wrapper--tabs-only' });
+        tabsWrapper.appendChild(tabsNode);
+        toggleUiClasses(tabsWrapper, CLS_FILTERS_MOBILE_MODE, !!isMobileMode);
+        wrapper.qbTabsWrapper = tabsWrapper;
+      } else bar.appendChild(tabsNode);
+    }
+
     if (urlContract) {
       function restoreURL() {
         if (!ownerBlock.isConnected) {
@@ -3439,7 +3606,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         state.tab = tabs[activeTabIndex] ? tabs[activeTabIndex].filter || null : null;
         state.category = restored.category; state.tags = restored.tags; state.search = restored.search;
         if (tabs[activeTabIndex] && onTabChange) onTabChange(tabs[activeTabIndex]);
-        wrapper.querySelectorAll('.qb-tab-btn').forEach(function(btn, index) {
+        (tabGroup || wrapper).querySelectorAll('.qb-tab-btn').forEach(function(btn, index) {
           toggleUiClasses(btn, CLS_TAB_BTN_ACTIVE, index === activeTabIndex);
         });
         rebuildSecondary();
@@ -3449,11 +3616,15 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         restoringURL = true;
         emit();
         restoringURL = false;
+        if (shared) writeURL(true);
       }
       window.addEventListener('popstate', restoreURL);
     }
+    updateTabCounts(true);
+    if (shared) writeURL(true);
+    renderChips();
     updateToggleBadge();
-    if (clearAllBtn && countActive() > 0 && mobilePanelBp !== Infinity) {
+    if (clearAllBtn && countActive() > 0 && mobilePanelBp !== Infinity && !isMobileMode) {
       clearAllBtn.style.display = '';
     }
     wrapper.qbFilterState = function() {
@@ -3463,10 +3634,13 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
     wrapper.qbRebuildSecondary = function() {
       rebuildSecondary();
+      updateTabCounts(false);
+      renderChips();
       updateToggleBadge();
       if (mobileObj && mobileObj.syncContext) mobileObj.syncContext();
     };
 
+    wrapper.qbRefreshCounts = function() { updateTabCounts(false); };
     return wrapper;
   }
 
@@ -3535,6 +3709,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     var pag = cfg.pagination || {};
     var disp = cfg.display || {};
     var fc = (cfg.filters && cfg.filters !== false) ? cfg.filters : {};
+    var sharedFilters = fc.scope === 'all-tabs';
     var defaultTabIndex = resolveDefaultTabIndex(fc, cfg);
     var initialURLState = readFilterURL(fc, defaultTabIndex);
     if (initialURLState) defaultTabIndex = initialURLState.tabIndex;
@@ -3610,6 +3785,7 @@ requestAnimationFrame(function() {
     var filterIndexLoaded = false;
     var filterIndexComplete = false;
     var filterIndexPromise = null;
+    var rawItemsComplete = false;
     var sourceList = Array.isArray(cfg.sources) ? cfg.sources : [];
 
     var initialMaxPages = perf.maxPages || 1;
@@ -3702,6 +3878,14 @@ requestAnimationFrame(function() {
 
       if (options.updateRemoteState !== false) {
         updateRemoteLoadedState(states, maxPagesValue);
+        rawItemsComplete = states.every(function(state) { return state && state.complete && !state.fetchError; });
+      }
+
+      if (options.filterIndex) {
+        filterIndexComplete = states.every(function(state) { return state && state.complete && !state.fetchError; });
+        if (sharedFilters) loadedMaxPages = Math.max.apply(null, states.map(function(state) {
+          return Number(state.pagesLoaded || 1);
+        }));
       }
 
       merged = uniqBy(merged, function(i) {
@@ -3733,11 +3917,11 @@ requestAnimationFrame(function() {
       if (filterIndexPromise) return filterIndexPromise;
 
       filterIndexPromise = loadSources(perf.filterIndexMaxPages || progressiveMaxPages || 'all', {
-        updateRemoteState: false,
+        updateRemoteState: sharedFilters, filterIndex: true,
       }).then(function(items) {
-        filterItems = items && items.length ? items : rawItems;
+        filterItems = filterIndexComplete || (items && items.length) ? items : rawItems;
         filterIndexLoaded = true;
-        filterIndexComplete = true;
+        if (sharedFilters) rawItems = filterItems;
         return filterItems;
       }).catch(function(err) {
         if (cfg.debug) console.warn('[QueryBlock]', cfg.key, 'filter index failed', err);
@@ -3792,7 +3976,7 @@ requestAnimationFrame(function() {
 
       if (fc && fc.tagPrefixes) add(fc.tagPrefixes);
 
-      if (fc && Array.isArray(fc.tabs)) {
+      if (!sharedFilters && fc && Array.isArray(fc.tabs)) {
         fc.tabs.forEach(function(tab) {
           if (tab && tab.tagPrefixes) add(tab.tagPrefixes);
         });
@@ -3812,7 +3996,7 @@ requestAnimationFrame(function() {
     }
 
     function getActiveFilterPrefixes() {
-      var list = currentTagPrefixes || (fc && fc.tagPrefixes) || [];
+      var list = (!sharedFilters && currentTagPrefixes) || (fc && fc.tagPrefixes) || [];
       return normalizePrefixes(list, (fc && fc.layout) || 'pills').map(function(pd) {
         return pd.prefix;
       }).filter(Boolean);
@@ -3942,7 +4126,7 @@ requestAnimationFrame(function() {
       if (!fc.sticky) return;
 
       requestAnimationFrame(function() {
-        var wrapperBottom = filterWrapper.getBoundingClientRect().bottom;
+        var wrapperBottom = (filterWrapper.qbTabsWrapper || filterWrapper).getBoundingClientRect().bottom;
         var gridTop = grid.getBoundingClientRect().top;
 
         if (gridTop >= wrapperBottom - 8 && gridTop <= wrapperBottom + window.innerHeight * 0.5) {
@@ -4069,9 +4253,10 @@ requestAnimationFrame(function() {
         });
       },
       defaultTabIndex,
-      initialURLState
+      initialURLState,
+      function() { return filterIndexComplete || rawItemsComplete; }
     );
-    if (initialURLState && filterWrapper) activeFilters = filterWrapper.qbFilterState();
+    if ((sharedFilters || initialURLState) && filterWrapper) activeFilters = filterWrapper.qbFilterState();
 
     var grid = el('div', { class: buildGridClassName(currentLayout) });
 
@@ -4082,7 +4267,10 @@ requestAnimationFrame(function() {
 
     var footer = el('div', { class: 'cb-footer qb-footer' });
 
-    if (filterWrapper) root.appendChild(filterWrapper);
+    if (filterWrapper) {
+      root.appendChild(filterWrapper);
+      if (filterWrapper.qbTabsWrapper) root.appendChild(filterWrapper.qbTabsWrapper);
+    }
 
     if (tabIntroEl) root.appendChild(tabIntroEl);
 
@@ -4098,11 +4286,12 @@ requestAnimationFrame(function() {
         style: 'height:1px;pointer-events:none;visibility:hidden',
       });
 
-      filterWrapper.parentNode.insertBefore(sentinel, filterWrapper);
-      setupSticky(sentinel, filterWrapper, fc.stickyTop || '0px');
+      var stickyWrapper = filterWrapper.qbTabsWrapper || filterWrapper;
+      stickyWrapper.parentNode.insertBefore(sentinel, stickyWrapper);
+      setupSticky(sentinel, stickyWrapper, fc.stickyTop || '0px');
     }
 
-    if (Array.isArray(fc.tabs) && fc.tabs.length) {
+    if (!sharedFilters && Array.isArray(fc.tabs) && fc.tabs.length) {
       var initTab = fc.tabs[defaultTabIndex];
 
       if (initTab) {
@@ -4128,6 +4317,7 @@ requestAnimationFrame(function() {
         ioInfinite = null;
       }
 
+      grid.__qbRenderToken = (grid.__qbRenderToken || 0) + 1;
       target.classList.toggle('cb-block--list', currentLayout === 'list');
       target.classList.toggle('qb-block--list', currentLayout === 'list');
 
@@ -4143,6 +4333,7 @@ requestAnimationFrame(function() {
         return matchesUIFilters(item, activeFilters, fc);
       });
 
+      if (filterWrapper && filterWrapper.qbRefreshCounts) filterWrapper.qbRefreshCounts();
       var total = filtered.length;
       var shown = filtered.slice(0, currentPage * perPage);
 
