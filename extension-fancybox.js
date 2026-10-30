@@ -517,8 +517,7 @@
       return controllers.get(scope);
     }
     var extensions = window.CollectionBlocks && window.CollectionBlocks.extensions;
-    cfg = Object.assign({}, cfg, { blockPrefix: extensions
-      ? extensions.prefix(scope, cfg.blockPrefix) : cfg.blockPrefix });
+    cfg = Object.assign({}, cfg);
     var originalLinks = new Map();
     function prepareLinks() {
       if (!cfg.linkMedia) return;
@@ -540,10 +539,12 @@
     }
     function open(card) {
       if (!window.Fancybox) return null;
-      var collection = collectFancyboxSlides(scope, cfg);
+      var openConfig = Object.assign({}, cfg, { blockPrefix: extensions
+        ? extensions.prefix(card, cfg.blockPrefix) : cfg.blockPrefix });
+      var collection = collectFancyboxSlides(scope, openConfig);
       var index = collection.starts.get(card);
       if (!collection.slides.length || index === undefined) return null;
-      var options = fancyboxOptions(index, cfg);
+      var options = fancyboxOptions(index, openConfig);
       options.triggerEl = card.querySelector(cfg.triggerSelector || 'a') || card;
       var instance = window.Fancybox.show(collection.slides, options);
       if (typeof cfg.onOpen === 'function') cfg.onOpen(instance, card);

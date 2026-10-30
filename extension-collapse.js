@@ -21,7 +21,12 @@
     }
     var originalScopeClasses = new Map(), destroyed = false;
     function toggle(node, names, active) {
-      names.split(/\s+/).forEach(function (name) { node.classList.toggle(name, active); });
+      names.split(/\s+/).forEach(function (name) {
+        if (node === scope && !originalScopeClasses.has(name)) {
+          originalScopeClasses.set(name, node.classList.contains(name));
+        }
+        node.classList.toggle(name, active);
+      });
     }
     ['', '--collapsed', '--expanded'].forEach(function (suffix) {
       classes(suffix).split(/\s+/).forEach(function (name) {

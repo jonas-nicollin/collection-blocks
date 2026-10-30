@@ -158,7 +158,8 @@ controller.destroy();
 `null` if no module can be activated. `CollectionBlocks.extensions.destroy(grid)`
 is also available. A custom renderer should supply `grouped`, `paginated` and
 `lightbox` booleans in the third argument when applicable, so the same guards
-can apply. `blockPrefix` is normally inferred from the closest block/grid;
+can apply. `blockPrefix` is normally inferred from the closest block/grid or a wrapper
+containing one block;
 pass `qb`, `rb` or `lb` explicitly only when the owner cannot be inferred.
 Individual controllers keep their existing methods such as Slider `goTo()`;
 the common controller provides only `refresh()`, `update()` and `destroy()`.

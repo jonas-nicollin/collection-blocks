@@ -2437,10 +2437,18 @@
   }
   function extensionPrefix(scope, explicit) {
     if (/^(qb|rb|lb)$/.test(explicit || '')) return explicit;
-    var owner = scope && scope.closest && scope.closest(
-      '[data-qb-key], [data-rb-key], [data-lb-key], .qb-block, .rb-block, ' +
-      '.lb-block, .qb-grid, .rb-grid, .lb-grid'
-    );
+    var selector = '[data-qb-key], [data-rb-key], [data-lb-key], .qb-block, ' +
+      '.rb-block, .lb-block, .qb-grid, .rb-grid, .lb-grid';
+    var owner = scope && scope.closest && scope.closest(selector);
+    // Squarespace code-block targets may wrap a single generated block.
+    // Do not infer an owner for a container gathering independent blocks.
+    if (!owner && scope && scope.querySelectorAll) {
+      var nested = Array.from(scope.querySelectorAll(selector));
+      var first = nested[0];
+      if (first && nested.every(function (node) { return first.contains(node); })) {
+        owner = first;
+      }
+    }
     if (!owner) return '';
     return ['qb', 'rb', 'lb'].find(function (prefix) {
       return owner.hasAttribute('data-' + prefix + '-key') ||

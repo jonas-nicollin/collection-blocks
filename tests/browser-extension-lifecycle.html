@@ -89,6 +89,17 @@ window.addEventListener('load',async()=>{
  ok('Alternate view controls have shared, owner and legacy classes',!!slide.captionEl.querySelector('.cb-fancybox__view.rb-fancybox__view.collection-items-view')&&!!slide.captionEl.querySelector('.cb-fancybox__views-group--primary.rb-fancybox__views-group--primary')&&!!slide.captionEl.querySelector('.cb-fancybox__view-image.rb-fancybox__view-image'));
  lightbox.destroy();captured=null;gallery.grid.firstChild.click();ok('Fancybox destroy removes its delegated listener',captured===null);
  ok('Built-in lightbox conflict is refused',api.mount(gallery.grid,{fancybox:true},{lightbox:true})===null);
+ const outer=document.createElement('div');host.append(outer);
+ const lateBox=CollectionBlocksFancybox.mount(outer,{itemSelector:'.cb-card',getMedia:()=>[{src:'/late.jpg'}]});
+ const lateCollapse=CollectionBlocksCollapse.mount(outer,{listSelector:'.rb-grid',itemSelector:'.cb-card',threshold:1});
+ const late=fixture('rb',3);outer.append(late.root);lateCollapse.refresh();
+ ok('A wrapper around one late block inherits its prefix',!!outer.querySelector('.cb-collapse__more.rb-collapse__more'));
+ captured=null;late.grid.firstChild.click();
+ ok('Late Fancybox cards pass their owner to the portal',captured.options.mainClass.includes('rb-fancybox'));
+ lateBox.destroy();lateCollapse.destroy();
+ ok('Late owner classes are restored when Collapse is destroyed',!outer.classList.contains('rb-collapse')&&!outer.classList.contains('rb-collapse--collapsed'));
+ const second=fixture('qb');outer.append(second.root);
+ ok('A wrapper around different blocks does not guess an owner',api.prefix(outer)==='');
  const gone=fixture();api.mount(gone.grid,{slider:true});gone.root.remove();await frames();
  ok('Removing a block releases listeners and controls',!gone.root.querySelector('.cb-slider__controls')&&!gone.grid.firstChild.hasAttribute('aria-hidden'));
  const q=document.querySelector('#query');await wait(()=>q.querySelectorAll('.qb-card').length===3&&q.querySelector('.qb-scroller-day'));
