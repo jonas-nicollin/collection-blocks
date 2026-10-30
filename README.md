@@ -330,7 +330,7 @@ Each config is an object inside `window.QUERY_BLOCK_CONFIGS`.
 | `defaultTags` | `{}` | Initial tag-prefix filters. |
 | `mobilePanel` | `false` | Moves secondary filters into a mobile panel. |
 | `mobilePanelBreakpoint` | `768` | Pixel breakpoint, or `'always'`. |
-| `sticky` | `false` | Makes the filter wrapper sticky. |
+| `sticky` | `false` | `true` makes the filter wrapper sticky; `'tabs'` in `all-tabs` mode keeps only the tabs/mobile filter button sticky. |
 | `stickyTop` | `'0px'` | Sticky offset. |
 | `clearAll` | `false` | Adds a reset control. Can be a custom label string. |
 
@@ -365,7 +365,7 @@ natural width; legacy inside-label dropdowns retain their existing sizing.
 | `groups` | display groups | Card group override while tab is active. |
 | `groupBy` | display groupBy | Grouping override while tab is active. |
 | `groupOrder` | display groupOrder | Group order override. |
-| `tagPrefixes` | global filters | Filter controls visible for this tab. |
+| `tagPrefixes` | global filters | Controls visible for this tab in legacy mode. Ignored in `all-tabs` mode, which uses `filters.tagPrefixes`. |
 
 ### Query `display`
 
@@ -760,6 +760,23 @@ Generated block attributes:
 | `data-cb-classes` | Custom block classes |
 | `data-cb-tab`, `data-qb-tab` | Active Query tab |
 
+### Shared Query filter classes
+
+Each name below also has its `qb-*` alias. Existing filter and mobile panel
+classes remain unchanged. These controls currently belong to Query; no `rb-*`
+or `lb-*` UI is generated for this feature.
+
+| Common class | Role |
+| --- | --- |
+| `cb-filters-wrapper--shared` | Shared control/chip wrapper. |
+| `cb-filters-wrapper--tabs-only` | Separate wrapper when only tabs are sticky. |
+| `cb-tab-btn__count` | Visible filtered count within a tab button. |
+| `cb-tab-btn--empty` | Inactive tab with an exact zero count; also natively disabled. |
+| `cb-filters-active` | Group of active criteria, hidden when empty. |
+| `cb-filter-chip` | Button removing one criterion. |
+| `cb-filter-chip__label` | Visible criterion value. |
+| `cb-filter-chip__remove` | Decorative removal icon; accessible name is on the button. |
+
 ### Extension class contract
 
 With matching core/extension versions, every extension-owned element and state
@@ -978,7 +995,8 @@ the hash are retained. Only one block should own a given set of parameter names
 on a page; use distinct names for independent blocks. `urlState: true` defaults
 to `tab`, `category`, `search` and `tag.<prefix>` for configured prefixes.
 Tab IDs fall back to label slugs. Unknown tabs fall back to the configured tab.
-Only prefixes exposed by the active tab can be restored from the URL.
+In legacy mode, only prefixes declared for the active tab can be restored.
+In `all-tabs` mode, the global `filters.tagPrefixes` apply, including hidden ones.
 
 A tag-prefix filter can opt into `includeAny: true` and `anyLabel` to offer an
 “any value” selection, encoded as `*`. `filterGranularity: 'day'` allows a dated
@@ -999,3 +1017,108 @@ Scroller `formatDay(day)` can return a site-specific day label for an ISO
 `YYYY-MM-DD` value. Omitting it preserves the standard localized label.
 For exhibition selections spanning multiple days, omit `getSchedule` to keep
 the supplied card order and dates without generating day separators.
+
+
+### One filter state above all Query tabs
+
+This is built into Query, not an optional extension. Install matching
+`collection-blocks.js` (core 0.21 or later), `query-block.js` and
+`collection-blocks.css`. No extra script is required. In an existing config:
+
+```js
+filters: {
+  scope: 'all-tabs',
+  layout: 'dropdown',
+  labelPosition: 'outside',
+  categories: { layout: 'dropdown', label: 'Category' },
+  tagPrefixes: ['Theme', 'Area', { prefix: 'Selection', hidden: true }],
+  tabs: [
+    { id: 'exhibitions', label: 'Exhibitions', filter: { categories: ['Exhibition'] } },
+    { id: 'events', label: 'Events', filter: { excludeCategories: ['Exhibition'] } }
+  ],
+  sticky: 'tabs',
+  mobilePanel: true,
+  clearAll: 'Reset',
+  urlState: {
+    tab: 'type', category: 'category', search: 'q',
+    tags: { Theme: 'theme', Area: 'area', Selection: 'selection' }
+  }
+}
+```
+
+- Global controls use the union of items admitted by the tabs, after `preFilter`.
+  Each tab keeps its own selection rule, sorting, card layout and grouping.
+- Changing a tab preserves category, tag, year and search criteria. Initial
+  defaults apply once; removing a chip or resetting does not reapply them.
+- Counts apply the same active criteria to every tab, before pagination. Tabs
+  may overlap by configuration: adding their counts need not give a unique total.
+- An inactive tab with an exact zero is disabled. When filtering empties the
+  current tab but another has results, Query switches to the first nonempty
+  tab. If all tabs are empty, the active tab stays usable and chips explain
+  the selection. `tabCounts: false` opts out of counts and this automatic switch.
+- Controls, chips and tabs are in that DOM order. With `sticky: 'tabs'`, only
+  the tabs and mobile toggle stick; existing sticky-state background rules
+  apply. Group headings keep their normal block behavior.
+- With `mobilePanel: true`, the same controls move into the existing panel.
+  They are not duplicated. Closing restores their values and keyboard focus;
+  Escape closes the panel and Tab stays within its controls while open.
+- Hidden prefix criteria still filter, appear as chips, and can be removed.
+  Each chip announces the criterion it removes. `i18n.removeFilter` and
+  `i18n.activeFilters` translate their accessible labels. Removal/reset icons
+  use `close` by default in this mode (`i18n.filterRemoveIcon` and
+  `i18n.filterResetIcon` override it); install that Material Symbol through
+  the site's `--ui-font-font-family` convention.
+
+#### Data, counts and performance
+
+Exact counts require the complete **data index**, not all rendered cards.
+Query's existing filter-index loader is reused. In shared mode the loaded
+index also supplies the current page of results, avoiding a second traversal
+of collection pages. Only the active tab and requested pagination slice are
+rendered; inactive tabs have no hidden card tree. Images are not loaded merely
+for counting.
+
+`performance.filterIndex: false` / `'progressive'` and
+`filterIndexMaxPages` remain available to bound data loading. When the index
+is incomplete or a source fails, counts use a lower bound such as `4+` or `0+`.
+These are not exact totals, so Query neither disables nor automatically chooses
+a tab on their basis. As additional data arrives, counts are refreshed.
+For very large collections, measure index size and latency before enabling
+exact counts; shared filters do not make unbounded data loading free.
+
+The field rules are unchanged: criteria across category, tag prefixes and
+search combine with AND; a configured tab's `tagValuesAny` combines with OR.
+A date-prefix value matches the tagged calendar day, not an exhibition's
+opening hours or a date interval. Domain-specific mappings such as an opening
+reception represented by an exhibition tag remain site integration work.
+
+#### Common selection service
+
+Query delegates its predicates to `CollectionBlocks.selection`:
+
+```js
+const state = { category: null, tags: { Theme: 'Photography' }, search: '' };
+const matches = CollectionBlocks.selection.filter(items, state, filters);
+const admitted = CollectionBlocks.selection.matchesConfigured(item, tab.filter, {
+  timeZone: 'Europe/Zurich', now: new Date()
+});
+```
+
+`matches(item, state, filters)` is the boolean UI predicate; `filter` returns
+matching items in the supplied order without modifying them.
+`matchesConfigured(item, rule, context)` applies prefilter/tab-style rules;
+`publicationYear(item, options)` returns a year or null. Items use the existing
+normalized Collection Blocks fields (`categories`, `tags`, `publishOn`, etc.).
+The service is pure: no DOM, fetch, URL navigation or extra card renderer.
+Query retains a fallback for older core versions, but use matching assets when
+activating the new shared mode. Related and Locator keep their current filters;
+this release does not create a cross-block controller.
+
+A remote/standalone Explorer will use this service in a later module. It is
+not installed or activated by `scope: 'all-tabs'`, and this release does not
+provide an `extension-explorer.js` file or a public block-state setter yet.
+
+Verification: `tests/selection.test.cjs` checks predicate parity and timezone
+rules; `tests/browser-shared-filters.html` checks counts, DOM limits, pagination,
+URL/history, empty results, hidden criteria, defaults, rapid changes and mobile
+control identity. These fixtures are development checks, not site installs.

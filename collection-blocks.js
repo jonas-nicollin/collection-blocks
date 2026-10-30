@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.20';
+  var VERSION = '0.21';
   var STORE_KEY_PREFIX = 'collection-blocks::v0.7::';
 
   var memoryCache = new Map();
@@ -2118,6 +2118,7 @@
     var startIndex = Number(options.startIndex || 0);
 
     function appendBatch() {
+      if (options.isCurrent && !options.isCurrent()) return;
       var frag = document.createDocumentFragment();
       var end = Math.min(index + size, items.length);
 
@@ -2596,6 +2597,145 @@
     claimLayout: claimExtensionLayout, releaseLayout: releaseExtensionLayout
   };
 
+  function matchesCats(item, cats) {
+    return !cats || !cats.length || (item.categories || []).some(function(c) {
+      return cats.some(function(w) {
+        return norm(w) === norm(c);
+      });
+    });
+  }
+
+  function matchesConfiguredTagValue(item, tagValue) {
+    if (!tagValue || !tagValue.prefix) return false;
+
+    var expectedDatePart = getISODatePart(tagValue.value);
+    return getTagValuesByPrefix(item, tagValue.prefix).some(function(value) {
+      if (expectedDatePart) {
+        var valueDatePart = getISODatePart(value);
+        if (valueDatePart && valueDatePart === expectedDatePart) return true;
+      }
+
+      return norm(value) === norm(tagValue.value);
+    });
+  }
+
+  function getConfiguredDateStatus(item, definition, context) {
+    var def = definition && typeof definition === 'object' ? definition : {};
+    return getDateStatus(item, Object.assign({}, context || {}, {
+      prefix: def.prefix || def.tagPrefix || 'Date',
+      endOverridePrefix: def.endOverridePrefix
+    }));
+  }
+
+  function matchesConfiguredDateStatus(item, definition, cfg) {
+    if (!definition) return true;
+
+    var def = Array.isArray(definition)
+      ? { include: definition }
+      : (typeof definition === 'object' ? definition : { include: [definition] });
+    var status = getConfiguredDateStatus(item, def, cfg);
+
+    if (!status) return def.includeUndated === true;
+
+    var include = Array.isArray(def.include) ? def.include.map(norm) : [];
+    var exclude = Array.isArray(def.exclude) ? def.exclude.map(norm) : [];
+    var normalizedStatus = norm(status);
+
+    if (include.length && include.indexOf(normalizedStatus) === -1) return false;
+    if (exclude.indexOf(normalizedStatus) !== -1) return false;
+    return true;
+  }
+
+  function matchesConfiguredFilter(item, filter, cfg) {
+    if (!filter) return true;
+
+    if (isItemExcluded(item, filter)) return false;
+
+    if (!matchesCats(item, filter.categories)) return false;
+    if (filter.excludeCategories && filter.excludeCategories.length && matchesCats(item, filter.excludeCategories)) return false;
+
+    if (filter.tagValues) {
+      for (var i = 0; i < filter.tagValues.length; i++) {
+        if (!matchesConfiguredTagValue(item, filter.tagValues[i])) return false;
+      }
+    }
+
+    if (
+      Array.isArray(filter.tagValuesAny) &&
+      filter.tagValuesAny.length &&
+      !filter.tagValuesAny.some(function(tagValue) {
+        return matchesConfiguredTagValue(item, tagValue);
+      })
+    ) return false;
+
+    if (!matchesConfiguredDateStatus(item, filter.dateStatus, cfg)) return false;
+
+    return true;
+  }
+
+  var PUBLICATION_YEAR_FILTER_KEY = '__publicationYear';
+
+  function getPublicationYear(item, options) {
+    var timestamp = Number(item.publishOn || 0);
+    if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
+    var date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return null;
+    try {
+      return new Intl.DateTimeFormat('en', {
+        year: 'numeric', timeZone: (options && options.timeZone) || 'UTC'
+      }).format(date);
+    } catch (_) {
+      return String(date.getUTCFullYear());
+    }
+  }
+
+  function matchesUIFilters(item, state, filters) {
+    state = state || {};
+    if (state.category && !(item.categories || []).some(function(c) {
+      return norm(c) === norm(state.category);
+    })) return false;
+
+    var tags = state.tags || {};
+    for (var prefix in tags) {
+      if (!Object.prototype.hasOwnProperty.call(tags, prefix) || !tags[prefix]) continue;
+      if (prefix === PUBLICATION_YEAR_FILTER_KEY && filters && filters.publicationYear) {
+        if (getPublicationYear(item, filters.publicationYear) !== tags[prefix]) return false;
+        continue;
+      }
+      if (!getTagValuesByPrefix(item, prefix).some(function(v) {
+        if (tags[prefix] === '*') return true;
+        var selectedDatePart = getISODatePart(tags[prefix]);
+        if (selectedDatePart) {
+          var valueDatePart = getISODatePart(v);
+          if (valueDatePart && valueDatePart === selectedDatePart) return true;
+        }
+
+        return norm(v) === norm(tags[prefix]);
+      })) return false;
+    }
+
+    if (state.search) {
+      var q = norm(state.search);
+      if (norm([item.title, item.excerpt, item.location].concat(item.categories, item.tags).join(' ')).indexOf(q) === -1) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  // Pure selection: no DOM, network access, pagination or presentation.
+  var selectionApi = {
+    matches: matchesUIFilters,
+    matchesConfigured: matchesConfiguredFilter,
+    publicationYear: getPublicationYear,
+    filter: function (items, state, filters) {
+      return (items || []).filter(function (item) {
+        return matchesUIFilters(item, state, filters);
+      });
+    }
+  };
+
   var utilsApi = {
     isItemExcluded: isItemExcluded,
     norm: norm,
@@ -2635,6 +2775,7 @@
 
   window.CollectionBlocks = {
     extensions: extensionsApi,
+    selection: selectionApi,
     isItemExcluded: isItemExcluded,
     version: VERSION,
     data: dataApi,

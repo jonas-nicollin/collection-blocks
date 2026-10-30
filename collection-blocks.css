@@ -337,6 +337,42 @@ body:not(.sqs-edit-mode-active) :where(
 
 :where(.cb-filters).qb-filters { display: flex; flex-direction: column; }
 
+/* Shared filters keep controls above tabs in the DOM and keyboard order. */
+:where(.cb-filters-wrapper--shared) > :where(.cb-filters) >
+:where(.cb-filter-group--tabs, .cb-tabs-row) {
+  margin-top: 1rem;
+}
+:where(.cb-filters-active) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+:where(.cb-filters-active)[hidden] { display: none; }
+:where(.cb-filter-chip) {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  max-width: 100%;
+  padding: 0.35em 0.65em;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+:where(.cb-filter-chip__label) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:where(.cb-filter-chip__remove) { flex: none; }
+:where(.cb-filter-chip):focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+:where(.cb-tab-btn--empty) { opacity: 0.5; cursor: default; }
 /* Filtres secondaires — inline sur une ligne */
 :where(.cb-filters-secondary).qb-filters-secondary {
   display: flex;
@@ -647,6 +683,19 @@ body:where(.cb-panel-open).qb-panel-open { overflow: hidden; }
 
 .cb-mobile-filters-zone :where(.cb-filter-select, .cb-filter-search) {
   width: 100%; max-width: 100%; box-sizing: border-box; font-size: 1em;
+}
+
+
+/* Shared controls move into the panel; they retain their existing elements. */
+:where(.cb-mobile-filters-zone).qb-mobile-filters-zone >
+:where(.cb-filters-secondary).qb-filters-secondary {
+  flex-direction: column;
+  align-items: stretch;
+  padding-top: 0;
+  gap: 1.25rem;
+}
+:where(.cb-mobile-filters-zone).qb-mobile-filters-zone :where(.cb-filter-control) {
+  width: 100%;
 }
 
 

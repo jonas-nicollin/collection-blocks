@@ -1,0 +1,92 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Shared Query filters</title>
+<link rel="stylesheet" href="../collection-blocks.css">
+<style>body{font:16px system-ui;margin:20px;--siteBackgroundColor:white;--paragraphMediumColor:black}#results{white-space:pre-wrap}.qb-block{margin:20px 0}</style>
+<h1>Shared filters without hidden cards</h1><pre id="results">Running…</pre>
+<div id="shared"></div><div id="partial"></div><div id="default"></div><div id="progressive"></div>
+<script src="../collection-blocks.js"></script><script>
+const rows=Array.from({length:600},(_,i)=>({id:String(i),fullUrl:'/item-'+i,title:'Item '+i,
+ categories:[i<300?'Exposition':'Talk'],tags:['Theme: '+(i%2?'Clay':'Photo'),'Selection: '+(i%3?'General':'Partner')]}));
+const calls=[];
+CollectionBlocks.data.getState=async(path,options)=>{
+ calls.push({path,maxPages:options.maxPages});
+ if(path==='/progressive'){const pages=Number(options.maxPages);return{items:rows.slice(0,pages*4),pagesLoaded:pages,complete:pages>=3}}
+ if(path==='/partial')return{items:rows.slice(0,4),complete:false,pagesLoaded:1,fetchError:true};
+ return options.maxPages==='all'?{items:rows,complete:true,pagesLoaded:3}:{items:rows.slice(0,4),complete:false,pagesLoaded:1};
+};
+history.replaceState({fixture:true},'',location.pathname+'?keep=yes#anchor');
+const config={key:'shared',target:'#shared',sourceCollection:{path:'/shared'},
+ filters:{scope:'all-tabs',sticky:'tabs',scrollOnFilter:false,labelPosition:'outside',layout:'dropdown',
+ categories:{layout:'dropdown'},clearAll:true,mobilePanel:true,
+ tagPrefixes:['Theme',{prefix:'Selection',hidden:true}],urlState:{tab:'type',tags:{Theme:'theme',Selection:'selection'}},
+ tabs:[{id:'exhibitions',label:'Expositions',filter:{categories:['Exposition']}},
+ {id:'events',label:'Events',filter:{categories:['Talk']},tagPrefixes:['Ignored local control']}]},
+ display:{groups:[{role:'body',children:['title']}]},pagination:{mode:'load-more',perPage:5},
+ performance:{lazyInit:false,maxPages:1,domBatchSize:2}};
+window.QUERY_BLOCK_CONFIGS=[config,
+ {...config,key:'progressive',target:'#progressive',sourceCollection:{path:'/progressive'},performance:{...config.performance,filterIndex:false},filters:{...config.filters,urlState:false,mobilePanel:false,sticky:false}},
+ {...config,key:'partial',target:'#partial',sourceCollection:{path:'/partial'},filters:{...config.filters,urlState:false,mobilePanel:false,sticky:false}},
+ {...config,key:'default',target:'#default',filters:{...config.filters,urlState:false,defaultTags:{Theme:'Photo'},mobilePanel:false,sticky:false}}];
+</script><script src="../query-block.js"></script><script>
+addEventListener('load',async()=>{
+ const results=[],ok=(test,pass)=>{results.push({test,pass:!!pass});if(!pass)throw Error(test)};
+ const delay=ms=>new Promise(r=>setTimeout(r,ms)),wait=async f=>{for(let i=0;i<150&&!f();i++)await delay(20);if(!f())throw Error('Timeout')};
+ const q=document.querySelector('#shared'),get=selector=>q.querySelector(selector),cards=()=>q.querySelectorAll('.qb-card');
+ const tab=i=>q.querySelectorAll('.qb-tab-btn')[i],counts=()=>[...q.querySelectorAll('.cb-tab-btn__count')].map(n=>n.textContent.trim()).join(',');
+ const select=(name,value,root=q)=>{const control=root.querySelector('[data-filter-control="'+name+'"] select');control.value=value;control.dispatchEvent(new Event('change'));return control};
+ try{
+ await wait(()=>cards().length===5&&counts()==='(300),(300)');
+ ok('Exact counts use complete data while only five cards exist',q.querySelectorAll('.qb-card').length===5&&calls.filter(c=>c.path==='/shared'&&c.maxPages==='all').length>=1);
+ ok('Shared controls precede a separate sticky tab wrapper',get('.cb-filters-secondary').compareDocumentPosition(tab(0))&Node.DOCUMENT_POSITION_FOLLOWING&&get('.cb-filters-wrapper--tabs-only').classList.contains('cb-filters-wrapper--sticky')&&!get('.cb-filters-wrapper--shared').classList.contains('cb-filters-wrapper--sticky'));
+ ok('Tabs share globally configured controls',!q.textContent.includes('Ignored local control'));
+ select('Theme','Photo');await wait(()=>counts()==='(150),(150)'&&cards().length===5);
+ ok('Both counts update and URL preserves unrelated state',location.search.includes('theme=Photo')&&location.search.includes('keep=yes')&&location.hash==='#anchor'&&history.state.fixture);
+ tab(1).click();await wait(()=>get('.qb-card')?.textContent==='Item 300'&&cards().length===5);
+ ok('Changing tabs retains theme and only renders current results',get('[data-filter-control="Theme"] select').value==='Photo'&&q.querySelectorAll('.cb-filter-chip').length===1&&cards().length===5);
+ get('.qb-load-more').click();await wait(()=>cards().length===10);
+ ok('Load more preserves shared counts',counts()==='(150),(150)');
+ select('categories','Exposition');await wait(()=>counts()==='(150),(0)'&&get('.qb-card').textContent==='Item 0');
+ ok('Exact empty sibling is disabled and matching tab is active',tab(1).disabled&&tab(0).getAttribute('aria-pressed')==='true'&&location.search.includes('type=exhibitions'));
+ get('.cb-filter-chip[aria-label*="Catégorie"]').click();await wait(()=>counts()==='(150),(150)');
+ ok('Removing one chip preserves other criteria',get('[data-filter-control="categories"] select').value===''&&get('[data-filter-control="Theme"] select').value==='Photo'&&!tab(1).disabled);
+ history.pushState(history.state,'',location.pathname+'?keep=yes&type=events&theme=Photo&selection=Partner#anchor');dispatchEvent(new PopStateEvent('popstate'));await wait(()=>counts()==='(50),(50)');
+ ok('Hidden URL criteria apply across tabs and appear as removable chips',q.querySelectorAll('.cb-filter-chip').length===2&&!get('[data-filter-control="Selection"]'));
+ get('.cb-filter-chip[aria-label*="Selection"]').click();await wait(()=>counts()==='(150),(150)');
+ ok('Removing hidden criterion clears its URL only',!location.search.includes('selection=')&&location.search.includes('theme=Photo'));
+ history.back();await wait(()=>counts()==='(50),(50)');
+ ok('Back restores shared counts and hidden chip',q.querySelectorAll('.cb-filter-chip').length===2);
+ history.forward();await wait(()=>counts()==='(150),(150)');
+ ok('Forward restores the selected result tab',tab(1).getAttribute('aria-pressed')==='true');
+ select('Theme','Clay');select('Theme','Photo');select('Theme','Clay');await delay(150);
+ ok('Rapid filtering cannot append stale batch cards',cards().length===5&&[...cards()].every(n=>Number(n.textContent.split(' ')[1])%2===1));
+ const search=get('input');search.value='no such work';search.dispatchEvent(new Event('input'));get('.qb-clear-all').click();await delay(300);
+ ok('Reset cancels a pending debounced search',counts()==='(300),(300)'&&get('input').value===''&&q.querySelectorAll('.cb-filter-chip').length===0);
+ history.pushState(history.state,'',location.pathname+'?theme=Unknown&type=events');dispatchEvent(new PopStateEvent('popstate'));await wait(()=>!!get('.qb-empty'));
+ ok('All-empty selection remains explainable and removable',counts()==='(0),(0)'&&!tab(1).disabled&&get('.cb-filter-chip').textContent.includes('Unknown'));
+ get('.qb-clear-all').click();await wait(()=>counts()==='(300),(300)');
+ ok('Reset restores results without reverting the tab',tab(1).getAttribute('aria-pressed')==='true');
+ const partial=document.querySelector('#partial');
+ ok('Incomplete index has lower-bound counts and no disabled tab',[...partial.querySelectorAll('.cb-tab-btn__count')].map(n=>n.textContent.trim()).join(',')==='(4+),(0+)'&&![...partial.querySelectorAll('.qb-tab-btn')].some(n=>n.disabled));
+ const progressive=document.querySelector('#progressive');
+ const progressCounts=()=>[...progressive.querySelectorAll('.cb-tab-btn__count')].map(n=>n.textContent.trim()).join(',');
+ ok('Bounded index begins with honest lower-bound counts',progressCounts()==='(4+),(0+)');
+ progressive.querySelector('.qb-load-more').click();await wait(()=>progressCounts()==='(8+),(0+)'&&progressive.querySelectorAll('.qb-card').length===8);
+ progressive.querySelector('.qb-load-more').click();await wait(()=>progressCounts()==='(12),(0)'&&progressive.querySelectorAll('.qb-card').length===12);
+ ok('Loading later source pages makes totals exact without stale index counts',progressive.querySelectorAll('.qb-tab-btn')[1].disabled&&!progressive.querySelector('.qb-load-more'));
+ const def=document.querySelector('#default');def.querySelector('.cb-filter-chip').click();await wait(()=>def.querySelector('.cb-tab-btn__count').textContent.includes('300'));
+ ok('Removing an initial default does not reapply it',def.querySelector('[data-filter-control="Theme"] select').value==='');
+ const originalWidth=innerWidth;Object.defineProperty(window,'innerWidth',{configurable:true,value:428});dispatchEvent(new Event('resize'));document.body.style.width='428px';await delay(100);
+ const toggle=get('.qb-mobile-toggle');await wait(()=>toggle.style.display!=='none');const controls=get('.qb-filters-secondary');toggle.focus();toggle.click();
+ const panel=document.querySelector('.qb-mobile-panel--open');
+ ok('Mobile panel moves the same controls instead of copying them',panel.contains(controls)&&document.querySelectorAll('#'+controls.querySelector('select').id).length===1);
+ ok('Panel controls use a vertical full-width layout',getComputedStyle(controls).flexDirection==='column'&&getComputedStyle(controls).alignItems==='stretch');
+ select('Theme','Photo',panel);await wait(()=>counts()==='(150),(150)');
+ ok('Mobile selection updates shared chips and counts',get('.cb-filter-chip').textContent.includes('Photo'));
+ panel.querySelector('.qb-mobile-panel__close').click();
+ ok('Closing restores controls, value and focus',q.contains(controls)&&controls.querySelector('[data-filter-control="Theme"] select').value==='Photo'&&document.activeElement===toggle);
+ toggle.click();panel.querySelector('.qb-clear-all').click();await wait(()=>counts()==='(300),(300)');
+ ok('Mobile reset clears selection without duplicates',!q.querySelector('.cb-filter-chip')&&panel.querySelector('input').value==='');
+ panel.querySelector('.qb-mobile-panel__close').click();Object.defineProperty(window,'innerWidth',{configurable:true,value:originalWidth});document.body.style.width='';dispatchEvent(new Event('resize'));
+ }catch(error){results.push({error:String(error)})}
+ document.querySelector('#results').textContent=JSON.stringify(results,null,2);document.body.dataset.passed=String(results.every(r=>r.pass));
+});
+</script></html>
