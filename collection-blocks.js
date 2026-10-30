@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.19';
+  var VERSION = '0.20';
   var STORE_KEY_PREFIX = 'collection-blocks::v0.7::';
 
   var memoryCache = new Map();
@@ -2421,6 +2421,181 @@
     stats: stats
   };
 
+  // Optional modules stay in their own files. This bridge owns only lifecycle
+  // and naming; it never loads scripts, fetches items or builds another card set.
+  var extensionModules = {
+    masonry: 'CollectionBlocksMasonry', slider: 'CollectionBlocksSlider',
+    scroller: 'CollectionBlocksScroller', fancybox: 'CollectionBlocksFancybox',
+    collapse: 'CollectionBlocksCollapse'
+  };
+  var extensionInstances = new Map(), extensionLayouts = new WeakMap();
+  var extensionObserver = null, extensionFrame = 0, extensionWarnings = new Set();
+  function extensionWarning(message) {
+    if (extensionWarnings.has(message)) return;
+    extensionWarnings.add(message);
+    if (window.console) window.console.warn('[Collection Blocks extensions] ' + message);
+  }
+  function extensionPrefix(scope, explicit) {
+    if (/^(qb|rb|lb)$/.test(explicit || '')) return explicit;
+    var selector = '[data-qb-key], [data-rb-key], [data-lb-key], .qb-block, ' +
+      '.rb-block, .lb-block, .qb-grid, .rb-grid, .lb-grid';
+    var owner = scope && scope.closest && scope.closest(selector);
+    // Squarespace code-block targets may wrap a single generated block.
+    // Do not infer an owner for a container gathering independent blocks.
+    if (!owner && scope && scope.querySelectorAll) {
+      var nested = Array.from(scope.querySelectorAll(selector));
+      var first = nested[0];
+      if (first && nested.every(function (node) { return first.contains(node); })) {
+        owner = first;
+      }
+    }
+    if (!owner) return '';
+    return ['qb', 'rb', 'lb'].find(function (prefix) {
+      return owner.hasAttribute('data-' + prefix + '-key') ||
+        owner.classList.contains(prefix + '-block') || owner.classList.contains(prefix + '-grid');
+    }) || '';
+  }
+  function extensionClasses(scope, common, extra, explicit) {
+    var prefix = extensionPrefix(scope, explicit);
+    var names = String(common || '').split(/\s+/).filter(Boolean);
+    return Array.from(new Set(names.concat(prefix ? names.map(function (name) {
+      return name.replace(/^cb-/, prefix + '-');
+    }) : [], String(extra || '').split(/\s+/).filter(Boolean)))).join(' ');
+  }
+  function claimExtensionLayout(grid, name) {
+    var current = extensionLayouts.get(grid);
+    if (current && current !== name) {
+      extensionWarning('Cannot combine ' + current + ' and ' + name + ' on one grid.');
+      return false;
+    }
+    extensionLayouts.set(grid, name);
+    return true;
+  }
+  function releaseExtensionLayout(grid, name) {
+    if (extensionLayouts.get(grid) === name) extensionLayouts.delete(grid);
+  }
+  function extensionSnapshot(value) {
+    if (Array.isArray(value)) return value.map(extensionSnapshot);
+    if (value && Object.getPrototypeOf(value) === Object.prototype) {
+      var copy = {};
+      Object.keys(value).forEach(function (key) { copy[key] = extensionSnapshot(value[key]); });
+      return copy;
+    }
+    return value;
+  }
+  function sameExtensionOptions(a, b) {
+    if (a === b) return true;
+    if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+    if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false;
+    if (!Array.isArray(a) && Object.getPrototypeOf(a) !== Object.prototype) return false;
+    var keys = Object.keys(a);
+    return keys.length === Object.keys(b).length && keys.every(function (key) {
+      return Object.prototype.hasOwnProperty.call(b, key) && sameExtensionOptions(a[key], b[key]);
+    });
+  }
+  function destroyExtensions(grid) {
+    var state = extensionInstances.get(grid);
+    if (!state) return;
+    Array.from(state.modules.values()).reverse().forEach(function (entry) {
+      entry.controller.destroy();
+    });
+    extensionInstances.delete(grid);
+    if (!extensionInstances.size && extensionObserver) {
+      extensionObserver.disconnect(); extensionObserver = null;
+      cancelAnimationFrame(extensionFrame); extensionFrame = 0;
+    }
+  }
+  function observeExtensionRemoval() {
+    if (extensionObserver || typeof MutationObserver === 'undefined') return;
+    extensionObserver = new MutationObserver(function () {
+      if (extensionFrame) return;
+      extensionFrame = requestAnimationFrame(function () {
+        extensionFrame = 0;
+        extensionInstances.forEach(function (_state, grid) {
+          if (!grid.isConnected) destroyExtensions(grid);
+        });
+      });
+    });
+    extensionObserver.observe(document.documentElement, { childList: true, subtree: true });
+  }
+  function syncExtensions(grid, settings, context) {
+    if (!grid) return null;
+    context = context || {};
+    settings = settings && typeof settings === 'object' ? settings : {};
+    var names = Object.keys(settings).filter(function (name) { return !!settings[name]; });
+    if (!names.length) { destroyExtensions(grid); return null; }
+    var layouts = names.filter(function (name) {
+      return ['masonry', 'slider', 'scroller'].indexOf(name) >= 0;
+    });
+    var wanted = new Map();
+    names.forEach(function (name) {
+      if (!extensionModules[name]) { extensionWarning('Unknown extension: ' + name); return; }
+      if (layouts.indexOf(name) >= 0 && (layouts.length > 1 || context.grouped)) {
+        extensionWarning('Choose one layout on a flat card grid; skipped ' + name + '.'); return;
+      }
+      if (name === 'collapse' && (context.paginated || context.grouped ||
+          names.indexOf('slider') >= 0 || names.indexOf('scroller') >= 0)) {
+        extensionWarning('Collapse requires a complete flat list without Slider/Scroller.'); return;
+      }
+      if (name === 'fancybox' && context.lightbox) {
+        extensionWarning('Disable the built-in lightbox before enabling Fancybox.'); return;
+      }
+      var options = Object.assign({}, settings[name] === true ? {} : settings[name]);
+      options.blockPrefix = extensionPrefix(grid, context.blockPrefix);
+      if (name === 'collapse') {
+        options = Object.assign({ listSelector: ':scope', itemSelector: '.cb-card' }, options);
+      }
+      if (name === 'fancybox') {
+        options = Object.assign({ itemSelector: '.cb-card',
+          selectors: { image: 'img', title: '.cb-card__title',
+            category: '.cb-card__categories', excerpt: '.cb-card__excerpt' } }, options);
+      }
+      wanted.set(name, options);
+    });
+    var state = extensionInstances.get(grid);
+    if (!state) {
+      state = { modules: new Map() };
+      state.controller = {
+        refresh: function () {
+          state.modules.forEach(function (entry) {
+            entry.controller.refresh({ preservePosition: true });
+          });
+        },
+        update: function (next, nextContext) {
+          return syncExtensions(grid, next, nextContext || state.context);
+        },
+        destroy: function () { destroyExtensions(grid); }
+      };
+      extensionInstances.set(grid, state);
+    }
+    state.context = context;
+    state.modules.forEach(function (entry, name) {
+      if (!wanted.has(name) || !sameExtensionOptions(entry.options, wanted.get(name))) {
+        entry.controller.destroy(); state.modules.delete(name);
+      }
+    });
+    wanted.forEach(function (options, name) {
+      var existing = state.modules.get(name);
+      if (existing) { existing.controller.refresh({ preservePosition: true }); return; }
+      var engine = window[extensionModules[name]];
+      if (!engine || typeof engine.mount !== 'function') {
+        extensionWarning('Load extension-' + name + '.js before the block runtime.'); return;
+      }
+      var controller = engine.mount(grid, options);
+      if (controller) state.modules.set(name, {
+        controller: controller, options: extensionSnapshot(options)
+      });
+    });
+    if (!state.modules.size) { destroyExtensions(grid); return null; }
+    observeExtensionRemoval();
+    return state.controller;
+  }
+  var extensionsApi = {
+    mount: syncExtensions, sync: syncExtensions, destroy: destroyExtensions,
+    classes: extensionClasses, prefix: extensionPrefix,
+    claimLayout: claimExtensionLayout, releaseLayout: releaseExtensionLayout
+  };
+
   var utilsApi = {
     isItemExcluded: isItemExcluded,
     norm: norm,
@@ -2459,6 +2634,7 @@
   };
 
   window.CollectionBlocks = {
+    extensions: extensionsApi,
     isItemExcluded: isItemExcluded,
     version: VERSION,
     data: dataApi,

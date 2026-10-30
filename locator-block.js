@@ -727,6 +727,14 @@ function buildControls(zones,total,activeZone,searchValue){
   var utils = getCollectionUtils();
   var index = 0;
 
+  var extensions = getCollectionBlocks() && getCollectionBlocks().extensions;
+  if (extensions) extensions.destroy(list);
+  function complete() {
+    if (extensions) extensions.sync(list, cfg.extensions, {
+      blockPrefix: 'lb', paginated: cfg.display.pageSize > 0
+    });
+    if (typeof done === 'function') done(n);
+  }
   list.innerHTML = '';
   LOCATOR_RENDER_IMAGE_INDEX = 0;
 
@@ -737,7 +745,7 @@ function buildControls(zones,total,activeZone,searchValue){
       return wrap.firstElementChild;
     },{
       batchSize:batchSize,
-      done:function(){if(typeof done==='function')done(n);}
+      done:complete
     });
   }
 
@@ -753,8 +761,8 @@ function buildControls(zones,total,activeZone,searchValue){
 
     if (index < n) {
       requestAnimationFrame(appendBatch);
-    } else if (typeof done === 'function') {
-      done(n);
+    } else {
+      complete();
     }
   }
 

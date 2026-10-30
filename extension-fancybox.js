@@ -3,6 +3,21 @@
   'use strict';
   if (window.CollectionBlocksFancybox) return;
   var controllers = new Map();
+  function classes(cfg, suffix, legacy) {
+    var api = window.CollectionBlocks && window.CollectionBlocks.extensions;
+    var common = 'cb-fancybox' + suffix;
+    return api ? api.classes(null, common, legacy, cfg.blockPrefix) :
+      [common, legacy].filter(Boolean).join(' ');
+  }
+  function stateClass(node, element, state, legacy, active) {
+    var names = ['cb-fancybox__' + element + '--' + state, legacy];
+    ['qb', 'rb', 'lb'].forEach(function (prefix) {
+      if (node.classList.contains(prefix + '-fancybox__' + element)) {
+        names.push(prefix + '-fancybox__' + element + '--' + state);
+      }
+    });
+    names.forEach(function (name) { node.classList.toggle(name, active); });
+  }
 
   var DEFAULT_FANCYBOX = {
     theme: 'light',
@@ -165,22 +180,22 @@
     var lines = excerptLines(card, selectors.excerpt);
 
     if (category) {
-      parts.push('<div class="cap-category ' + generic + '-artist ' + specific + '-artist">' + escapeHTML(category) + '</div>');
+      parts.push('<div class="' + classes(cfg, '__category', 'cap-category ' + generic + '-artist ' + specific + '-artist') + '">' + escapeHTML(category) + '</div>');
     }
     if (title) {
-      parts.push('<div class="cap-title ' + generic + '-title ' + specific + '-title">' + escapeHTML(title) + '</div>');
+      parts.push('<div class="' + classes(cfg, '__title', 'cap-title ' + generic + '-title ' + specific + '-title') + '">' + escapeHTML(title) + '</div>');
     }
     if (lines.length) {
-      parts.push('<div class="cap-excerpt ' + generic + '-details ' + specific + '-details">' + lines.map(function (line) {
+      parts.push('<div class="' + classes(cfg, '__details', 'cap-excerpt ' + generic + '-details ' + specific + '-details') + '">' + lines.map(function (line) {
         var type = /^(19\d{2}|20\d{2}|2100)$/.test(line) ? 'year' : 'line';
-        return '<div class="' + generic + '-' + type + ' ' + specific + '-' + type + '">' + escapeHTML(line) + '</div>';
+        return '<div class="' + classes(cfg, '__' + type, generic + '-' + type + ' ' + specific + '-' + type) + '">' + escapeHTML(line) + '</div>';
       }).join('') + '</div>');
     }
 
     if (cfg.button && cfg.button.enabled && cfg.button.href && cfg.button.label) {
       parts.push(
-        '<div class="' + generic + '-enquire ' + specific + '-enquire">' +
-          '<a class="' + generic + '-enquire-link ' + specific + '-enquire-link" href="' + escapeHTML(cfg.button.href) + '">' +
+        '<div class="' + classes(cfg, '__enquire', generic + '-enquire ' + specific + '-enquire') + '">' +
+          '<a class="' + classes(cfg, '__enquire-link', generic + '-enquire-link ' + specific + '-enquire-link') + '" href="' + escapeHTML(cfg.button.href) + '">' +
             escapeHTML(cfg.button.label) +
           '</a>' +
         '</div>'
@@ -188,7 +203,7 @@
     }
 
     return parts.length
-      ? '<div class="cap-wrap ' + generic + '-caption ' + specific + '-caption">' + parts.join('') + '</div>'
+      ? '<div class="' + classes(cfg, '__caption', 'cap-wrap ' + generic + '-caption ' + specific + '-caption') + '">' + parts.join('') + '</div>'
       : '';
   }
 
@@ -244,19 +259,19 @@
     if (!nav) return;
     Array.from(nav.querySelectorAll('[data-cb-artwork-view]')).forEach(function (button) {
       var selected = Number(button.dataset.cbArtworkView) === activeIndex;
-      button.classList.toggle('is-active', selected);
+      stateClass(button, 'view', 'active', 'is-active', selected);
       button.setAttribute('aria-current', selected ? 'true' : 'false');
     });
   }
 
   function setArtworkViewLoading(slide, nav, loading) {
     if (slide && slide.el) {
-      slide.el.classList.toggle('is-changing-artwork-view', loading);
+      stateClass(slide.el, 'slide', 'loading', 'is-changing-artwork-view', loading);
       if (loading) slide.el.setAttribute('aria-busy', 'true');
       else slide.el.removeAttribute('aria-busy');
     }
     if (nav) {
-      nav.classList.toggle('is-loading', loading);
+      stateClass(nav, 'views', 'loading', 'is-loading', loading);
       nav.setAttribute('aria-busy', loading ? 'true' : 'false');
     }
   }
@@ -360,7 +375,8 @@
     var labels = artworkViewOptions(cfg);
     var button = document.createElement('button');
     button.type = 'button';
-    button.className = specific + '-view ' + specific + '-view--' + type;
+    button.className = classes(cfg, '__view', specific + '-view ' + specific + '-view--' + type) +
+      ' ' + classes(cfg, '__view--' + type);
     button.dataset.cbArtworkView = String(mediaIndex);
     button.setAttribute(
       'aria-label',
@@ -372,6 +388,7 @@
       : labels.alternateLabel + ' ' + mediaIndex;
 
     var image = document.createElement('img');
+    image.className = classes(cfg, '__view-image');
     image.src = entry.thumb || entry.src;
     image.alt = '';
     image.loading = 'lazy';
@@ -406,17 +423,19 @@
     }
 
     var nav = document.createElement('nav');
-    nav.className = generic + '-views ' + specific + '-views';
+    nav.className = classes(cfg, '__views', generic + '-views ' + specific + '-views');
     nav.dataset.cbArtworkViews = 'true';
     nav.setAttribute('aria-label', options.groupLabel);
 
     var primaryGroup = document.createElement('div');
-    primaryGroup.className = specific + '-views__group ' + specific + '-views__group--primary';
+    primaryGroup.className = classes(cfg, '__views-group', specific + '-views__group ' +
+      specific + '-views__group--primary') + ' ' + classes(cfg, '__views-group--primary');
     primaryGroup.appendChild(artworkViewButton(fancybox, slide, media[0], 0, cfg, 'primary'));
     nav.appendChild(primaryGroup);
 
     var alternateGroup = document.createElement('div');
-    alternateGroup.className = specific + '-views__group ' + specific + '-views__group--alternates';
+    alternateGroup.className = classes(cfg, '__views-group', specific + '-views__group ' +
+      specific + '-views__group--alternates') + ' ' + classes(cfg, '__views-group--alternates');
     media.slice(1).forEach(function (entry, index) {
       alternateGroup.appendChild(
         artworkViewButton(fancybox, slide, entry, index + 1, cfg, 'alternate')
@@ -441,7 +460,7 @@
 
     return {
       theme: options.theme,
-      mainClass: generic + '-container ' + specific + '-container',
+      mainClass: classes(cfg, '', generic + '-container ' + specific + '-container'),
       Hash: !!options.hash,
       compact: false,
       dragToClose: !!options.dragToClose,
@@ -466,17 +485,20 @@
             : fancybox && fancybox.container;
           if (!container) return;
           var carousel = container.querySelector('.fancybox__carousel');
-          if (carousel) carousel.classList.add(generic + '-carousel', specific + '-carousel');
+          if (carousel) classes(cfg, '__carousel', generic + '-carousel ' + specific + '-carousel')
+            .split(/\s+/).forEach(function (name) { carousel.classList.add(name); });
           scheduleArtworkViews(fancybox, cfg);
         },
         'Carousel.createSlide': function (_fancybox, _carousel, slide) {
           if (!slide || !slide.el) return;
-          slide.el.classList.add(generic + '-slide', specific + '-slide');
+          classes(cfg, '__slide', generic + '-slide ' + specific + '-slide')
+            .split(/\s+/).forEach(function (name) { slide.el.classList.add(name); });
         },
         'Carousel.contentReady': function (fancybox, _carousel, slide) {
           if (!slide || !slide.el) return;
           var image = slide.el.querySelector('img');
-          if (image) image.classList.add(generic + '-image', specific + '-image');
+          if (image) classes(cfg, '__image', generic + '-image ' + specific + '-image')
+            .split(/\s+/).forEach(function (name) { image.classList.add(name); });
           if (!fancybox.isCurrentSlide || fancybox.isCurrentSlide(slide)) {
             scheduleArtworkViews(fancybox, cfg);
           }
@@ -494,6 +516,8 @@
       controllers.get(scope).refresh();
       return controllers.get(scope);
     }
+    var extensions = window.CollectionBlocks && window.CollectionBlocks.extensions;
+    cfg = Object.assign({}, cfg);
     var originalLinks = new Map();
     function prepareLinks() {
       if (!cfg.linkMedia) return;
@@ -515,17 +539,19 @@
     }
     function open(card) {
       if (!window.Fancybox) return null;
-      var collection = collectFancyboxSlides(scope, cfg);
+      var openConfig = Object.assign({}, cfg, { blockPrefix: extensions
+        ? extensions.prefix(card, cfg.blockPrefix) : cfg.blockPrefix });
+      var collection = collectFancyboxSlides(scope, openConfig);
       var index = collection.starts.get(card);
       if (!collection.slides.length || index === undefined) return null;
-      var options = fancyboxOptions(index, cfg);
+      var options = fancyboxOptions(index, openConfig);
       options.triggerEl = card.querySelector(cfg.triggerSelector || 'a') || card;
       var instance = window.Fancybox.show(collection.slides, options);
       if (typeof cfg.onOpen === 'function') cfg.onOpen(instance, card);
       return instance;
     }
     function click(event) {
-      if (!window.Fancybox || event.metaKey || event.ctrlKey || event.shiftKey ||
+      if (!window.Fancybox || event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey ||
           event.altKey || event.button > 0) return;
       var target = event.target.closest && event.target.closest(cfg.triggerSelector || cfg.itemSelector);
       if (!target || !scope.contains(target)) return;
@@ -564,7 +590,7 @@
       scopesFor(cfg.targets).forEach(function (scope) { mount(scope, cfg); });
     });
   }
-  window.CollectionBlocksFancybox = { version: '1.1.0', mount: mount, refresh: refresh };
+  window.CollectionBlocksFancybox = { version: '1.2.0', mount: mount, refresh: refresh };
   var scheduled = false;
   function schedule() {
     if (scheduled) return;

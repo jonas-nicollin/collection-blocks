@@ -4128,8 +4128,6 @@ requestAnimationFrame(function() {
         ioInfinite = null;
       }
 
-      grid.className = buildGridClassName(currentLayout);
-
       target.classList.toggle('cb-block--list', currentLayout === 'list');
       target.classList.toggle('qb-block--list', currentLayout === 'list');
 
@@ -4158,7 +4156,10 @@ requestAnimationFrame(function() {
         !currentGroupBy &&
         currentLayout !== 'list';
 
+      var extensions = getCollectionBlocks() && getCollectionBlocks().extensions;
       if (!canAppendIncrementally) {
+        if (extensions) extensions.destroy(grid);
+        grid.className = buildGridClassName(currentLayout);
         grid.innerHTML = '';
       }
 
@@ -4238,6 +4239,10 @@ if (canAppendIncrementally) {
         });
       }
 
+      if (extensions) extensions.sync(grid, cfg.extensions, {
+        blockPrefix: 'qb', grouped: !!currentGroupBy || currentLayout === 'list',
+        paginated: mode !== 'none', lightbox: !!getLightboxOptions(cfgForRender)
+      });
       setupLightbox(target, cfgForRender, shown);
 
       if (headingResult.ctaBelowEl) {

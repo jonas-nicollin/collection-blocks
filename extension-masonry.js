@@ -1,9 +1,15 @@
 /* Collection Blocks — optional masonry extension. */
 (function () {
   'use strict';
-  if (window.CollectionBlocksMasonry && window.CollectionBlocksMasonry.version === '1.0.0') return;
+  if (window.CollectionBlocksMasonry && window.CollectionBlocksMasonry.version === '1.1.0') return;
 
   var instances = new Map();
+  function classNames(scope, common, extra, prefix) {
+    var api = window.CollectionBlocks && window.CollectionBlocks.extensions;
+    return api ? api.classes(scope, common, extra, prefix) :
+      [common, extra].filter(Boolean).join(' ');
+  }
+
   var SNAP_RATIOS = [1, 2/3, 3/2, 3/4, 4/3, 4/5, 5/4, 16/9, 9/16];
   var DEFAULTS = {
     columns: { default: 3, tablet: 2, mobile: 1 },
@@ -128,7 +134,13 @@
       schedule(state);
       return state.controller;
     }
+    var extensions = window.CollectionBlocks && window.CollectionBlocks.extensions;
+    if (extensions && !extensions.claimLayout(grid, 'masonry')) return null;
     state = { grid: grid, localOptions: localOptions, options: optionsFor(localOptions), cards: [], sizes: new WeakMap(), originals: new Map(), raf: 0 };
+    state.classes = new Map();
+    if (grid.classList) classNames(grid, 'cb-masonry', '', state.options.blockPrefix).split(/\s+/).forEach(function (name) {
+      state.classes.set(name, grid.classList.contains(name)); grid.classList.add(name);
+    });
     remember(state, grid, ['position', 'height', 'display']);
     state.schedule = function () { schedule(state); };
     state.controller = { refresh: state.schedule, destroy: function () { destroy(grid); } };
@@ -163,6 +175,9 @@
     state.originals.forEach(function (saved, element) {
       Object.keys(saved).forEach(function (property) { element.style[property] = saved[property]; });
     });
+    state.classes.forEach(function (present, name) { grid.classList.toggle(name, present); });
+    var extensions = window.CollectionBlocks && window.CollectionBlocks.extensions;
+    if (extensions) extensions.releaseLayout(grid, 'masonry');
     instances.delete(grid);
   }
 
@@ -171,7 +186,7 @@
   masonry.mount = mount;
   masonry.refresh = function (grid) { var state = instances.get(grid); if (state) schedule(state); };
   masonry.destroy = destroy;
-  masonry.version = '1.0.0';
+  masonry.version = '1.1.0';
   window.CollectionBlocksMasonry = masonry;
 
   function refreshAll() {
