@@ -2,6 +2,7 @@
 <link rel="stylesheet" href="../extension-scroller.css">
 <style>body{font:16px system-ui;margin:2rem}section{max-width:600px}.card{width:260px;height:150px;background:#eee}.cb-scroller-track{--scroller-card-width:260px}pre{white-space:pre-wrap}</style>
 <h1>Selection scroller checks</h1><pre id="result">Running…</pre><section><div id="track"></div></section>
+<script src="../collection-blocks.js"></script>
 <script src="../extension-scroller.js"></script>
 <script>
 (async function(){
@@ -36,6 +37,14 @@
  dates.push('2026-09-20T10:00');track.insertAdjacentHTML('beforeend','<a class="card" data-cb-index="3" href="#3">New</a>');await frames();ok('Progressive insertion joins chronological order',track.querySelector('.card').dataset.cbIndex==='3');
  c.destroy();ok('Destroy removes controls and day dividers',!track.parentElement.querySelector('.cb-scroller-controls')&&!track.querySelector('.cb-scroller-day')&&!track.hasAttribute('tabindex'));
  const staticRail=api.mount(track,{itemSelector:':scope > .card'});await frames();ok('Unscheduled exhibition rail retains order without day dividers',!track.querySelector('.cb-scroller-day')&&[...track.querySelectorAll('.card')].map(x=>x.dataset.cbIndex).join(',')==='0,1,2,3');staticRail.destroy();
+ const grouped=api.mount(track,{itemSelector:':scope > .card',blockPrefix:'rb',
+ groupBy:['category',{tagPrefix:'Theme'}],groupOrder:['Work · Clay','Talk · Photo'],
+ getItem:c=>({categories:[+c.dataset.cbIndex%2?'Talk':'Work'],tags:['Theme: '+(+c.dataset.cbIndex%2?'Photo':'Clay')]})});await frames();
+ ok('Shared combined grouping creates one heading per group',track.querySelectorAll('.cb-group-heading--scroller.rb-group-heading').length===2&&!track.querySelector('.cb-scroller-day'));
+ ok('Group ordering moves the original cards once',[...track.querySelectorAll('.card')].map(c=>c.dataset.cbIndex).join(',')==='0,2,1,3');
+ ok('Generic separator has a heading role and no bottom border',track.querySelector('[role="heading"]').getAttribute('aria-level')==='3'&&getComputedStyle(track.querySelector('.cb-group-heading')).borderBottomWidth==='0px');
+ grouped.destroy();ok('Generic grouping cleanup removes all generated headings',!track.querySelector('.cb-group-heading'));
+
  }catch(e){results.push({error:String(e)})}
  document.querySelector('#result').textContent=JSON.stringify(results,null,2);document.body.dataset.passed=String(results.every(x=>x.pass));
 })();

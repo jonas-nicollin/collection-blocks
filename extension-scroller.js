@@ -57,6 +57,10 @@
       controllers.get(track).update(config);
       return controllers.get(track);
     }
+    var grouping = window.CollectionBlocks && window.CollectionBlocks.grouping;
+    if (config && config.groupBy && (!grouping || typeof config.getItem !== 'function')) {
+      throw new Error('Scroller groupBy requires shared grouping and getItem(card)');
+    }
     var extensions = window.CollectionBlocks && window.CollectionBlocks.extensions;
     if (extensions && !extensions.claimLayout(track, 'scroller')) return null;
     var blockPrefix = config && config.blockPrefix;
@@ -109,15 +113,18 @@
       refreshButton.hidden = !pending;
     }
     function divider(group, date, status, today, archive) {
-      var h = document.createElement('h3');
-      h.className = classes('cb-scroller-day'); dividers.add(h); h.dataset.scrollerGroup = group;
+      var h = grouping ? grouping.heading({ key: group, layout: 'scroller',
+        level: cfg.headingLevel, blockPrefix: extensions.prefix(track, blockPrefix) || 'qb'
+      }) : document.createElement('h3');
+      h.className = classes('cb-group-heading cb-group-heading--scroller cb-scroller-day');
+      dividers.add(h); h.dataset.scrollerGroup = group;
       var eyebrow = document.createElement('span');
-      eyebrow.className = classes('cb-scroller-day__context');
+      eyebrow.className = classes('cb-group-heading__context cb-scroller-day__context');
       eyebrow.textContent = status === 'undated' ? labels.undated :
         (archive ? labels.archive : status === 'past' ? labels.past :
           date === today ? labels.today : '');
       var title = document.createElement('span');
-      title.className = classes('cb-scroller-day__title');
+      title.className = classes('cb-group-heading__title cb-scroller-day__title');
       title.textContent = date ? (typeof cfg.formatDay === 'function' ? cfg.formatDay(date) :
         new Intl.DateTimeFormat(cfg.locale || 'en', {
         weekday: 'short', day: 'numeric', month: 'long', timeZone: 'UTC'
@@ -131,17 +138,26 @@
       var clock = now(), today = clock.slice(0, 10);
       var entries = cards.map(function (card, index) {
         return { card: card, index: Number(card.dataset.cbIndex || index),
+          group: cfg.groupBy ? grouping.keys(cfg.getItem(card) || {}, cfg.groupBy)[0] : null,
           date: cfg.getSchedule ? selectOccurrence(cfg.getSchedule(card), clock, zone) : null };
       });
       var archive = !!cfg.getSchedule && entries.length > 0 &&
         entries.every(function (entry) { return entry.date.status === 'past'; });
-      if (cfg.getSchedule) entries.sort(function (a, b) {
+      if (cfg.getSchedule && !cfg.groupBy) entries.sort(function (a, b) {
         var ranks = { current: 0, upcoming: 1, past: 2, undated: 3 };
         return ranks[a.date.status] - ranks[b.date.status] ||
           a.date.start.localeCompare(b.date.start) || a.index - b.index;
       });
+      if (cfg.groupBy) {
+        var keys = grouping.order(Array.from(new Set(entries.map(function(e) {
+          return e.group;
+        }))), cfg.groupOrder);
+        entries.sort(function(a, b) {
+          return keys.indexOf(a.group) - keys.indexOf(b.group) || a.index - b.index;
+        });
+      }
       var newSignature = entries.map(function (e) {
-        return e.index + ':' + (e.date ? e.date.status + e.date.start : '');
+        return e.index + ':' + (e.date ? e.date.status + e.date.start : '') + ':' + e.group;
       }).join('|') + today;
       var sameNodes = entries.length === track.querySelectorAll('[data-scroller-card]').length &&
         entries.every(function (e) { return e.card.hasAttribute('data-scroller-card'); });
@@ -154,7 +170,17 @@
       var lastGroup = '', fragment = document.createDocumentFragment();
       entries.forEach(function (e) {
         e.card.setAttribute('data-scroller-card', '');
-        if (e.date) {
+        if (cfg.groupBy) {
+          if (e.group !== lastGroup) {
+            var h = grouping.heading({ key: e.group, layout: 'scroller',
+              level: cfg.headingLevel,
+              blockPrefix: extensions.prefix(track, blockPrefix) || 'qb',
+              text: typeof cfg.formatGroup === 'function' ? cfg.formatGroup(e.group) : e.group
+            });
+            h.dataset.scrollerGroup = e.group;
+            dividers.add(h); fragment.appendChild(h); lastGroup = e.group;
+          }
+        } else if (e.date) {
           var day = e.date.start.slice(0, 10);
           var phase = e.date.status === 'past' ? 'past' : 'active';
           var group = phase + day;
@@ -223,6 +249,9 @@
     track.addEventListener('click', onClick, true); track.addEventListener('dragstart', onDrag);
     var resize = new ResizeObserver(syncButtons); resize.observe(track);
     function update(options) {
+      if (options && options.groupBy && (!grouping || typeof options.getItem !== 'function')) {
+        throw new Error('Scroller groupBy requires shared grouping and getItem(card)');
+      }
       cfg = options || {}; zone = cfg.timeZone || 'UTC';
       labels = Object.assign({ previous: 'Previous items', next: 'Next items',
         update: 'Update order', today: 'Today', past: 'Earlier starts',
@@ -267,6 +296,6 @@
     controllers.set(track, controller); observe(); update(config); return controller;
   }
   window.CollectionBlocksScroller = {
-    version: '0.2.0', mount: mount, selectOccurrence: selectOccurrence, wallTime: wallTime
+    version: '0.3.0', mount: mount, selectOccurrence: selectOccurrence, wallTime: wallTime
   };
 })();

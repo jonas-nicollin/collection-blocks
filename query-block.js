@@ -2221,6 +2221,8 @@ var isPriority = options.priority === true || imgIndex < 3;
 
   function getGroupKey(item, groupBy) {
     if (!groupBy) return null;
+    var grouping = getCollectionBlocks() && getCollectionBlocks().grouping;
+    if (grouping) return grouping.keys(item, groupBy)[0];
     if (groupBy === 'category') return item.categories[0] || '\u2014';
 
     if (typeof groupBy === 'object' && groupBy.tagPrefix) {
@@ -2243,6 +2245,8 @@ var isPriority = options.priority === true || imgIndex < 3;
   }
 
   function sortGroupKeys(keys, groupOrder) {
+    var grouping = getCollectionBlocks() && getCollectionBlocks().grouping;
+    if (grouping) return grouping.order(keys, groupOrder);
     if (Array.isArray(groupOrder)) {
       var om = new Map(groupOrder.map(function(v, i) {
         return [norm(v), i];
@@ -2373,9 +2377,10 @@ var isPriority = options.priority === true || imgIndex < 3;
     var groups = new Map();
 
     items.forEach(function(item) {
-      var keys = [];
+      var grouping = getCollectionBlocks() && getCollectionBlocks().grouping;
+      var keys = grouping ? grouping.keys(item, groupBy) : [];
 
-      if (groupBy.groupByDay && groupBy.tagPrefix) {
+      if (!grouping && groupBy.groupByDay && groupBy.tagPrefix) {
         var allVals = getTagValuesByPrefix(item, groupBy.tagPrefix);
 
         allVals.forEach(function(v) {
@@ -2455,7 +2460,9 @@ var isPriority = options.priority === true || imgIndex < 3;
           filterPrefix: gbCfg.tagPrefix }, { tags: { [gbCfg.tagPrefix]: key } });
       }
 
-      var h = el('div', {
+      var grouping = getCollectionBlocks() && getCollectionBlocks().grouping;
+      var h = grouping ? grouping.heading({ key: key, blockPrefix: 'qb',
+        level: gbCfg && gbCfg.headingLevel }) : el('div', {
         class: 'cb-group-heading qb-group-heading',
         'data-group': key,
         role: 'heading',
@@ -2463,6 +2470,7 @@ var isPriority = options.priority === true || imgIndex < 3;
         style: 'grid-column:1 / -1',
       });
 
+      h.style.gridColumn = '1 / -1';
       var headingLabel;
 
       if (isDateKey(key)) {

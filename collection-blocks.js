@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.22';
+  var VERSION = '0.23';
   var STORE_KEY_PREFIX = 'collection-blocks::v0.7::';
 
   var memoryCache = new Map();
@@ -2650,6 +2650,8 @@
     if (!filter) return true;
 
     if (isItemExcluded(item, filter)) return false;
+    if (Array.isArray(filter.includeIds) &&
+        !filter.includeIds.some(function(id) { return String(id) === String(item.id); })) return false;
 
     if (!matchesCats(item, filter.categories)) return false;
     if (filter.excludeCategories && filter.excludeCategories.length && matchesCats(item, filter.excludeCategories)) return false;
@@ -2741,6 +2743,52 @@
     return true;
   }
 
+  // Shared grouping keys. A combined group describes one tuple, never an OR filter.
+  function groupKeys(item, definition) {
+    if (!definition) return [null];
+    if (Array.isArray(definition)) {
+      return [definition.map(function(part) {
+        return groupKeys(item, part)[0] || '\u2014';
+      }).join(' · ')];
+    }
+    if (definition === 'category') return [(item.categories || [])[0] || '\u2014'];
+    if (!definition.tagPrefix) return [null];
+    var values = getTagValuesByPrefix(item, definition.tagPrefix);
+    if (!values.length) return ['\u2014'];
+    if (definition.groupByDay) return Array.from(new Set(values.map(function(value) {
+      return getISODatePart(value) || value;
+    })));
+    if (definition.groupByYear) return [(getISODatePart(values[0]) || '').slice(0, 4) || values[0]];
+    return [values[0]];
+  }
+  function orderGroupKeys(keys, order) {
+    var explicit = Array.isArray(order) ? order.map(norm) : null;
+    if (!explicit && order !== 'alpha') return keys.slice();
+    return keys.slice().sort(function(a, b) {
+      if (explicit) {
+        var ai = explicit.indexOf(norm(a)), bi = explicit.indexOf(norm(b));
+        ai = ai < 0 ? explicit.length : ai; bi = bi < 0 ? explicit.length : bi;
+        if (ai !== bi) return ai - bi;
+      }
+      return norm(a).localeCompare(norm(b));
+    });
+  }
+  function groupHeading(options) {
+    options = options || {};
+    var prefix = options.blockPrefix || 'qb';
+    var heading = document.createElement('div');
+    heading.className = 'cb-group-heading ' + prefix + '-group-heading';
+    heading.setAttribute('role', 'heading');
+    heading.setAttribute('aria-level', String(Math.min(6, Math.max(1,
+      Number(options.level) || 3))));
+    if (options.key != null) heading.dataset.group = String(options.key);
+    if (options.layout) heading.classList.add('cb-group-heading--' + options.layout,
+      prefix + '-group-heading--' + options.layout);
+    if (options.text != null) heading.textContent = options.text;
+    return heading;
+  }
+  var groupingApi = { keys: groupKeys, order: orderGroupKeys, heading: groupHeading };
+
   // Pure selection: no DOM, network access, pagination or presentation.
   var selectionApi = {
     project: projectFilterItem,
@@ -2794,6 +2842,7 @@
   window.CollectionBlocks = {
     extensions: extensionsApi,
     selection: selectionApi,
+    grouping: groupingApi,
     isItemExcluded: isItemExcluded,
     version: VERSION,
     data: dataApi,
