@@ -12,13 +12,16 @@
 .cb-scroller-track > [data-scroller-card] {
   flex: 0 0 var(--scroller-card-width, 280px); min-width: 0; scroll-snap-align: start;
 }
+.cb-scroller .cb-group-heading--scroller,
 .cb-scroller-day {
-  flex: 0 0 var(--scroller-day-width, 140px); align-self: stretch;
+  flex: 0 0 var(--scroller-group-width, var(--scroller-day-width, 140px)); align-self: stretch;
   display: flex; flex-direction: column;
-  justify-content: var(--scroller-day-justify, center);
+  justify-content: var(--scroller-group-justify, var(--scroller-day-justify, center));
   gap: 10px; margin: 0; padding: 16px; border-inline: 1px solid currentColor;
   font-size: 1rem; scroll-snap-align: start;
+  border-block: 0; opacity: 1;
 }
+.cb-group-heading--scroller > .cb-group-heading__context,
 .cb-scroller-day__context { font-size: .7em; text-transform: uppercase; letter-spacing: .04em; }
 .cb-scroller-controls { display: flex; gap: 8px; justify-content: flex-end; margin-block: 0 12px; }
 .cb-scroller-controls button {

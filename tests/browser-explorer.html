@@ -48,6 +48,12 @@ const mobile=CBExplorer.mount(q,{query:config,destination:'/result',mobilePanel:
 Object.defineProperty(window,'innerWidth',{configurable:true,value:428});document.body.style.width='428px';dispatchEvent(new Event('resize'));await delay(100);q.querySelector('.cb-mobile-toggle').click();
 ok('Optional panel uses the same controls',!!document.querySelector('.cb-mobile-panel--open select')&&document.querySelectorAll('select[id]').length===new Set([...document.querySelectorAll('select[id]')].map(x=>x.id)).size);
 mobile.destroy();ok('Destroy while open removes portals and scroll lock',!document.querySelector('.cb-mobile-panel--open')&&!document.body.classList.contains('cb-panel-open'));
+const groupTarget=document.createElement('div');document.body.append(groupTarget);
+const groups=CBExplorer.mount(groupTarget,{query:config,destination:'/result',layout:'links',heading:'Explore',intro:'Choose an entrance',groups:[{heading:{text:'Years',level:3},label:'Years',links:{prefix:'Year',order:'numeric',direction:'desc'}},{heading:'Themes',links:{prefix:'Theme'}}]});await groups.ready;
+ok('One target supports a heading, intro and independently labelled link groups',groupTarget.querySelector('h2').textContent==='Explore'&&groupTarget.querySelector('.cb-explorer__intro').textContent==='Choose an entrance'&&groupTarget.querySelectorAll('nav').length===2&&groupTarget.querySelectorAll('.cb-explorer__link').length===4);
+ok('Generated group elements retain cb/qb aliases',groupTarget.querySelectorAll('.cb-explorer__group.qb-explorer__group').length===2);
+groups.setState({category:'Talk'});ok('All group links carry updated criteria',Array.from(groupTarget.querySelectorAll('.cb-explorer__link')).every(a=>new URL(a.href).searchParams.get('kind')==='Talk'));
+groups.destroy();
 let unsafe=false;try{CBExplorer.mount(q,{query:config,destination:'javascript:alert(1)'})}catch(e){unsafe=true}ok('Unsafe destinations are rejected before mount',unsafe&&!q.children.length);
 const pending=CBExplorer.mount(q,{query:config,destination:'/result',data:new Promise(r=>setTimeout(()=>r({items:rows,complete:true}),50))});pending.destroy();await pending.ready;ok('Async completion cannot revive a destroyed component',!q.children.length);
 }catch(error){results.push({error:String(error)})}

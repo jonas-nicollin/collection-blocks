@@ -1,4 +1,4 @@
-/* Collection Blocks — Explorer 1.0.0
+/* Collection Blocks — Explorer 1.1.0
  * Remote Query forms and links, using Query's own metadata/filter services.
  * Requires collection-blocks.js and query-block.js. Does not render result cards.
  */
@@ -73,10 +73,12 @@
     // Validate the URL contract before inserting UI or requesting any source.
     api.validate(query);
     api.href(destination, query, {}, false, []);
-    if (options.links && options.links.prefix) {
-      var probe = { tags: {} }; probe.tags[options.links.prefix] = 'probe';
+    var linkGroups = options.groups || [{ links: options.links || {} }];
+    linkGroups.forEach(function(group) {
+      if (!group.links || !group.links.prefix) return;
+      var probe = { tags: {} }; probe.tags[group.links.prefix] = 'probe';
       api.href(destination, query, probe, false, []);
-    }
+    });
     var labels = Object.assign({ loading: 'Chargement des critères…',
       results: 'Voir les résultats', empty: 'Aucun résultat',
       unavailable: 'Les compteurs sont indisponibles.', fallback: 'Consulter le programme',
@@ -89,9 +91,18 @@
     status.setAttribute('aria-atomic', 'true');
     var action = node('a', '__submit', labels.fallback);
     action.href = destination; action.hidden = true;
+    function addHeading(parent, heading, intro, part) {
+      if (heading) {
+        var settings = typeof heading === 'string' ? { text: heading } : heading;
+        var level = Math.min(6, Math.max(1, Number(settings.level) || 2));
+        parent.append(node('h' + level, part || '__heading', settings.text || ''));
+      }
+      if (intro) parent.append(node('p', '__intro', intro));
+    }
+    addHeading(shell, options.heading, options.intro);
     shell.append(status, action); target.append(shell);
     var state = api.cloneState(options.state), data, controls, destroyed = false;
-    var nav, form, listeners = new Set();
+    var nav, form, navs = [], listeners = new Set();
     function href(next) {
       return api.href(destination, query, next || state, data && data.complete,
         data ? data.items : []);
@@ -106,8 +117,7 @@
       listeners.forEach(function(fn) { fn(value); });
       if (typeof options.onChange === 'function') options.onChange(value);
     }
-    function entries() {
-      var def = options.links || {};
+    function entries(def) {
       if (Array.isArray(def.items)) return def.items;
       return valuesFor(data.items, query, state, def).map(function(value) {
         var selection = api.cloneState(state);
@@ -118,8 +128,10 @@
       });
     }
     function renderLinks() {
+      navs.forEach(function(group) {
+      var nav = group.nav;
       nav.replaceChildren();
-      entries().forEach(function(entry) {
+      entries(group.links).forEach(function(entry) {
         var next = api.cloneState(entry.state), count = api.summary(data.items, query, next, data.complete);
         if (options.hideEmpty === true && count.complete && !count.total) return;
         var link = node('a', '__link'); link.href = href(next);
@@ -128,6 +140,7 @@
         if (options.counts !== false) link.append(node('span', '__count',
           String(count.total) + (count.complete ? '' : '+')));
         nav.append(link);
+      });
       });
     }
     function render() {
@@ -183,11 +196,22 @@
       if (destroyed) return controller;
       data = { items: result.items || [], complete: result.complete === true };
       if (options.layout === 'links') {
-        nav = node('nav', '__links'); nav.setAttribute('aria-label', labels.links);
-        shell.prepend(nav);
+        linkGroups.forEach(function(group) {
+          var container = options.groups ? node('section', '__group') : shell;
+          if (options.groups) {
+            addHeading(container, group.heading, group.intro, '__group-heading');
+            shell.insertBefore(container, status);
+          }
+          nav = node('nav', '__links');
+          nav.setAttribute('aria-label', group.label ||
+            (typeof group.heading === 'string' ? group.heading : '') || labels.links);
+          if (container === shell) shell.insertBefore(nav, status);
+          else container.append(nav);
+          navs.push({ nav: nav, links: group.links || {} });
+        });
       } else {
         form = node('form', '__form'); form.setAttribute('aria-label', labels.form);
-        form.action = destination; shell.prepend(form);
+        form.action = destination; shell.insertBefore(form, status);
         controls = api.mount(form, { config: query, items: data.items, complete: data.complete,
           state: state, mobilePanel: options.mobilePanel === true,
           onChange: function(next) {
@@ -216,7 +240,7 @@
       if (target) mount(target, config);
     });
   }
-  window.CBExplorer = { version: '1.0.0', mount: mount, init: init };
+  window.CBExplorer = { version: '1.1.0', mount: mount, init: init };
   document.addEventListener('DOMContentLoaded', init);
   document.addEventListener('mercury:load', init);
   if (document.readyState !== 'loading') init();

@@ -792,14 +792,14 @@ The third-party library's own internal elements keep its own class contract.
 | --- | --- |
 | Masonry | `cb-masonry` on the existing grid; cards retain their block classes. |
 | Slider | `cb-slider`, `cb-slider__track`, `__slide`, `__controls`, `__button`, `__previous`, `__next`, `__dot`, `__icon`; root `--ready`, `--intro-ready`, `--intro-complete`, `--dragging`; slide `--active`, `--previous`, `--before`, `--after`, `--adjacent`, `--distant`; dot `--active`. |
-| Scroller | Existing `cb-scroller`, `cb-scroller-track`, `cb-scroller-controls`, `cb-scroller-prev`, `cb-scroller-next`, `cb-scroller-refresh`, `cb-scroller-dragging`, `cb-scroller-day`, `cb-scroller-day__context`; new `cb-scroller-day__title`. |
+| Scroller | Existing `cb-scroller`, `cb-scroller-track`, `cb-scroller-controls`, `cb-scroller-prev`, `cb-scroller-next`, `cb-scroller-refresh`, `cb-scroller-dragging`, `cb-scroller-day`, `cb-scroller-day__context`, `cb-scroller-day__title`. All separators also use `cb-group-heading cb-group-heading--scroller`, with `__context` / `__title` children for dates. |
 | Collapse | `cb-collapse`, `cb-collapse--collapsed`, `--expanded`, `cb-collapse__controls`, `__more`, `__less`, `__item--hidden`; buttons also retain `cb-load-more` and its block alias. |
-| Explorer | `cb-explorer`, root `--form` / `--links`, `__form`, `__status` / `__status--quiet`, `__submit`, `__links`, `__link`, `__label`, `__count`, `__description`; Query-backed elements also have `qb-*` aliases. |
+| Explorer | `cb-explorer`, root `--form` / `--links`, `__form`, `__status` / `__status--quiet`, `__submit`, `__links`, `__link`, `__label`, `__count`, `__description`, `__heading`, `__intro`, `__group`, `__group-heading`; Query-backed elements also have `qb-*` aliases. |
 | Fancybox | `cb-fancybox`, `cb-fancybox__carousel`, `__slide`, `__image`, `__caption`, `__category`, `__title`, `__details`, `__year`, `__line`, `__enquire`, `__enquire-link`, `__views`, `__views-group`, `__view`, `__view-image`; view `--primary`, `--alternate`, `--active`; views-group `--primary`, `--alternates`; slide/views `--loading`. |
 
 The Scroller's existing hyphenated names remain supported without a disruptive
-rename. This pass adds their block aliases; generalizing date dividers into
-arbitrary group headings is a separate change. Legacy Slider `is-*` states,
+rename. Date dividers retain their legacy classes alongside the common group-heading
+classes. Generic separators use only the common group-heading classes. Legacy Slider `is-*` states,
 Fancybox `cap-*`/configured prefixes, Collapse prefixes and custom Slider class
 names remain **alongside** the common classes. A custom prefix no longer removes
 the generic styling hooks. Destroy restores original classes and semantics.
@@ -1310,3 +1310,63 @@ supplying raw CMS records, particularly for text search and date handling.
 `tests/browser-explorer.html` verifies metadata-only rendering, source/destination
 count parity, combined URLs, hidden chips, incomplete counts, automatic links,
 remounts and panel cleanup. Browser and site checks still accompany deployment.
+
+
+### Self-contained Explorer targets (v0.9.0)
+
+`heading` accepts text or `{ text, level }` (default level 2). `intro` is plain
+text. Both are optional. They are rendered before the controls/links; a physical
+heading outside the target remains untouched when these options are omitted.
+For a movable Squarespace unit, use one Code Block containing one target:
+
+```html
+<div id="programme-discovery" class="cb-target qb-target"
+  data-qb-label="Explore the programme"></div>
+```
+
+Use `layout: 'links'` with `groups` to place several labelled rows inside that
+one target. The groups reuse one metadata snapshot and the same URL service:
+
+```js
+{
+  target: '#programme-discovery', destination: '/programme', query: 'programme',
+  layout: 'links', heading: 'Explore the programme', intro: 'Choose an entrance.',
+  groups: [
+    { heading: { text: 'Years', level: 3 },
+      links: { prefix: 'Year', order: 'numeric', direction: 'desc' } },
+    { heading: { text: 'Themes', level: 3 }, links: { prefix: 'Theme' } }
+  ]
+}
+```
+
+Each group supports `heading`, `intro`, `label` (navigation accessible name) and
+`links` with the existing automatic/explicit link options. Top-level `groups`
+replaces the single `links` definition. Explicit items keep their own full
+state; derived links inherit the controller's state. Styling remains site-owned.
+
+### Shared grouping keys and scroller separators (v0.9.0)
+
+Core `CollectionBlocks.grouping` supplies `keys(item, groupBy)`, `order(keys,
+order)` and `heading(options)`. Query uses those helpers when the matching core
+is installed; existing date-status behavior is preserved.
+
+Scroller can opt into `groupBy: 'category'` or `{ tagPrefix: 'Theme' }`, with
+`getItem(card)` returning the original metadata for that card. `groupOrder`
+accepts an explicit list, `'alpha'` or the original order. An array such as
+`['category', { tagPrefix: 'Theme' }]` creates a combined label from the first
+value of each field. It does not duplicate a card into multiple groups.
+`formatGroup(key)` changes its label; `headingLevel` defaults to 3. Date-aware
+occurrence choice continues to use `getSchedule`; explicit `groupBy` takes
+precedence for layout when both are present. Do not combine Query's visual
+`display.groupBy` with a scroller on the same grid: group inside the extension.
+
+`--scroller-group-width` and `--scroller-group-justify` configure all separators,
+falling back to the existing `--scroller-day-*` values. The common classes carry
+the owning `qb-`, `rb-` or `lb-` alias. Legacy date selectors remain supported.
+
+### Explicit editorial selections (v0.9.0)
+
+`preFilter.includeIds: ['stable-id', ...]` restricts Query to exact item IDs,
+combined with its other prefilters. Omitted means no restriction; an empty
+array selects nothing. Requires core v0.9.0. This avoids changing public tags
+for a tightly controlled hero selection and survives title/slug changes.
