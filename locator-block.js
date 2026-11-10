@@ -503,6 +503,13 @@ function getCollectionOptions(maxPages){
 function renderChild(child,item){
   var d=cfg.display;
   if(child&&typeof child==='object'){
+    if(child.type==='cta'){
+      var ctaUtils=getCollectionUtils();
+      var cta=ctaUtils&&typeof ctaUtils.buildCardCTA==='function'
+        ?ctaUtils.buildCardCTA(child,{prefix:'lb-card',href:item.url,
+          cardLinked:d.cardClickable===true,newTab:d.openInNewTab===true}):null;
+      return cta?cta.outerHTML:'';
+    }
     if(child.type==='tagPrefix'){
       var prefix=child.prefix||'';
       if(!prefix)return'';
@@ -583,7 +590,8 @@ function buildCardHTML(item){
     }
     /* cardLink : si true et cardClickable=false, ajouter la flèche
        même si 'cardLink' n'est pas dans les children des groups */
-    if(cfg.display.cardLink!==false&&item.url&&!cfg.display.cardClickable){
+    if(cfg.display.cardLink!==false&&item.url&&!cfg.display.cardClickable&&
+      html.indexOf('cb-card__cta')===-1){
       var lt2=cfg.display.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
       html+='<a class="'+escHtml(CLS_LINK)+'" href="'+escHtml(item.url)+'"'+lt2+' aria-label="Voir '+escHtml(item.title)+'"><span class="ui-icon" aria-hidden="true">arrow_forward</span></a>';
     }

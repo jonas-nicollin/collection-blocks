@@ -1431,6 +1431,15 @@
             type: definition
         } : definition || {};
         const type = descriptor.type;
+        if (type === "cta") {
+            const utils = getCollectionUtils();
+            const el = utils?.buildCardCTA?.(descriptor, {
+                prefix: "rb-card", href: getConfiguredItemLink(item, CFG),
+                cardLinked: CFG.display?.cardLink !== false,
+                newTab: CFG.display?.openInNewTab === true || CFG.openInNewTab === true
+            });
+            return el ? [ el ] : [];
+        }
         if (type === "image") {
             const el = buildImageElement(item, CFG, context?.insideMedia === true);
             return el ? [ el ] : [];

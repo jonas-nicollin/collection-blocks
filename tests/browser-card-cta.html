@@ -1,0 +1,68 @@
+<!doctype html><html lang="en"><meta charset="utf-8">
+<title>Shared card CTA checks</title>
+<link rel="stylesheet" href="../collection-blocks.css">
+<style>body{font:16px system-ui;margin:24px}#result{white-space:pre-wrap}.fixture{margin-block:2rem}</style>
+<h1>Shared card CTA checks</h1><pre id="result">Running…</pre>
+<div id="query" class="fixture"></div><div id="unlinked" class="fixture"></div>
+<div id="legacy" class="fixture"></div><div id="related" class="fixture"></div>
+<div id="locator" class="fixture"></div><div id="locator-linked" class="fixture"></div>
+<script src="../collection-blocks.js"></script><script>
+const rows=[{id:'a',title:'Example',fullUrl:'/item',sourceUrl:'/programme?category=Talk',
+ tags:[],categories:[],location:{mapLat:46.2,mapLng:6.1},workflowState:1}];
+CollectionBlocks.data.getState=async(path)=>({items:path==='/current'?
+ [{...rows[0],id:'current',fullUrl:location.pathname}]:rows,complete:true,pagesLoaded:1});
+CollectionBlocks.data.get=async()=>rows;
+const cta={type:'cta',text:'Discover <&>',icon:'arrow_forward'};
+const groups=[{role:'body',children:['title',cta]}];
+const q={sourceCollection:{path:'/fixture'},filters:false,display:{groups},
+ pagination:{mode:'none'},performance:{lazyInit:false,maxPages:'all'}};
+window.QUERY_BLOCK_CONFIGS=[{...q,key:'query',target:'#query'},
+ {...q,key:'unlinked',target:'#unlinked',display:{groups,cardLink:false,
+ openInNewTab:true,link:{field:'fullUrl'}}},
+ {...q,key:'legacy',target:'#legacy',display:{groups:[{role:'body',children:['title']}]}}];
+window.RELATED_BLOCK_CONFIGS=[{key:'related',target:'#related',sourceCollection:{path:'/fixture'},
+ currentItem:{matchBy:'pathname',sourceCollection:{path:'/current'}},
+ selection:{constraints:{requireImage:false,requirePublished:false},limit:'all'},
+ display:{groups},performance:{lazyInit:false}}];
+function MapStub(){this.addListener=()=>({remove(){}});this.fitBounds=()=>{};this.panTo=()=>{};this.getZoom=()=>12;this.setZoom=()=>{};this.setIcon=()=>{};this.setVisible=()=>{};this.setZIndex=()=>{};this.setPosition=()=>{};this.setMap=()=>{}}
+window.google={maps:{Map:MapStub,Marker:MapStub,Size:MapStub,Point:MapStub,OverlayView:MapStub,
+ LatLng:MapStub,LatLngBounds:function(){this.extend=()=>{}},ControlPosition:{TOP_RIGHT:1}}};
+const l={sourceCollection:{path:'/fixture'},apiKey:'fixture-only',layout:'grid',
+ showSearch:false,map:{clustering:false,popup:false},
+ display:{pageSize:0,showImage:false,groups},performance:{lazyInit:false}};
+window.LOCATOR_BLOCK_CONFIGS=[{...l,key:'locator',target:'#locator'},
+ {...l,key:'locator-linked',target:'#locator-linked',display:{...l.display,cardClickable:true}}];
+</script><script src="../query-block.js"></script><script src="../related-block.js"></script>
+<script src="../locator-block.js"></script><script>
+window.addEventListener('load',async()=>{
+ const results=[],ok=(test,pass)=>{results.push({test,pass:!!pass});if(!pass)throw Error(test)};
+ const wait=async f=>{for(let i=0;i<150&&!f();i++)await new Promise(r=>setTimeout(r,20));if(!f())throw Error('Timeout: '+f)};
+ try{
+ await wait(()=>document.querySelectorAll('.cb-card__cta').length===5);
+ for(const [id,prefix] of [['query','qb'],['related','rb'],['locator','lb']]){
+ const root=document.getElementById(id),c=root.querySelector('.cb-card__cta');
+ ok(id+' uses shared CTA with owner aliases',c.classList.contains(prefix+'-card__cta')&&
+ c.querySelector('.cb-card__cta-text.'+prefix+'-card__cta-text')&&
+ c.querySelector('.cb-card__cta-icon.'+prefix+'-card__cta-icon'));
+ ok(id+' label is literal text and icon is decorative',c.textContent==='arrow_forwardDiscover <&>'&&c.firstChild.getAttribute('aria-hidden')==='true'&&!c.querySelector('script'));
+ }
+ ok('Query and Related linked cards contain captions, not nested links',
+ ['query','related'].every(id=>{const root=document.getElementById(id);return root.querySelector('a.cb-card span.cb-card__cta')&&!root.querySelector('a a')}));
+ const a=document.querySelector('#unlinked .cb-card__cta');
+ ok('Unlinked card CTA uses configured destination and secure new-tab attributes',a.tagName==='A'&&a.getAttribute('href')==='/item'&&a.target==='_blank'&&a.rel==='noopener noreferrer');
+ ok('Locator CTA replaces automatic arrow link',document.querySelectorAll('#locator a').length===1);
+ ok('Locator clickable card has one link and caption',document.querySelector('#locator-linked a.cb-card span.cb-card__cta')&&document.querySelectorAll('#locator-linked a').length===1);
+ ok('Default cards have no CTA',!document.querySelector('#legacy .cb-card__cta'));
+ ok('CTA remains fully opaque',getComputedStyle(document.querySelector('#query .cb-card__cta')).opacity==='1');
+ const build=CollectionBlocks.utils.buildCardCTA;
+ ok('Missing text or destination produces no control',build({}, {href:'/x'})===null&&build({text:'Read'}, {})===null);
+ ok('Script URLs are refused',build({text:'Read'}, {href:'java\nscript:alert(1)'})===null);
+ const after=build({text:'Read',icon:'arrow_forward',iconPosition:'after'},{href:'/x',prefix:'qb-card'});
+ ok('Icon can follow label',after.lastChild.classList.contains('cb-card__cta-icon'));
+ const core=CollectionBlocks.utils.buildCard(rows[0],{children:[cta],prefix:'rb-card'});
+ ok('Core card builder follows same safe composition',core.tagName==='A'&&core.querySelector('span.rb-card__cta')&&!core.querySelector('a'));
+ }catch(error){results.push({error:String(error)})}
+ document.querySelector('#result').textContent=JSON.stringify(results,null,2);
+ document.body.dataset.passed=String(results.every(r=>r.pass));
+});
+</script></html>
