@@ -1092,6 +1092,16 @@ var isPriority = options.priority === true || imgIndex < 3;
   function buildChild(def, item, cardIndex, cfg) {
     var type = typeof def === 'string' ? def : (def && def.type);
 
+    if (type === 'cta') {
+      var ctaUtils = getCollectionUtils();
+      return ctaUtils && typeof ctaUtils.buildCardCTA === 'function'
+        ? ctaUtils.buildCardCTA(def, {
+          prefix: 'qb-card', href: getConfiguredItemLink(item, cfg),
+          cardLinked: cfg.display?.cardLink !== false,
+          newTab: cfg.display?.openInNewTab === true || cfg.openInNewTab === true
+        }) : null;
+    }
+
     if (type === 'media') {
       return buildMedia(item, cardIndex, cfg, def && typeof def === 'object' ? def : {});
     }

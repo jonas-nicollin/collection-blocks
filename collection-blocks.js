@@ -2296,6 +2296,39 @@
     };
   }
 
+  // The CTA follows the card destination. A linked card contains a caption,
+  // while an unlinked card contains one real link, never a nested anchor.
+  function buildCardCTA(descriptor, options) {
+    descriptor = descriptor || {};
+    options = options || {};
+    var text = String(descriptor.text || '').trim();
+    var href = String(options.href || '').trim();
+    if (!text || !href || /^(?:javascript|data|vbscript):/i.test(href.replace(/[\u0000-\u0020]/g, ''))) return null;
+    var prefix = options.prefix || 'cb-card';
+    var linked = options.cardLinked === true;
+    var cta = createEl(linked ? 'span' : 'a', {
+      class: cardClass('cta', prefix, descriptor.className)
+    });
+    if (!linked) {
+      cta.setAttribute('href', href);
+      if (options.newTab) {
+        cta.setAttribute('target', '_blank');
+        cta.setAttribute('rel', 'noopener noreferrer');
+      }
+      if (descriptor.ariaLabel) cta.setAttribute('aria-label', descriptor.ariaLabel);
+    }
+    var label = createEl('span', { class: cardClass('cta-text', prefix) });
+    label.textContent = text;
+    var icon = descriptor.icon ? createEl('span', {
+      class: cardClass('cta-icon', prefix), 'aria-hidden': 'true'
+    }) : null;
+    if (icon) icon.textContent = String(descriptor.icon);
+    if (icon && descriptor.iconPosition !== 'after') cta.appendChild(icon);
+    cta.appendChild(label);
+    if (icon && descriptor.iconPosition === 'after') cta.appendChild(icon);
+    return cta;
+  }
+
   function buildChild(definition, item, options) {
     options = options || {};
 
@@ -2305,6 +2338,14 @@
 
     var type = descriptor.type;
     var prefix = options.prefix || 'cb-card';
+
+    if (type === 'cta') {
+      var href = item && (item.sourceUrl || item.fullUrl || item.url);
+      return buildCardCTA(descriptor, {
+        prefix: prefix, href: href, cardLinked: options.link !== false,
+        newTab: options.newTab
+      });
+    }
 
     if (type === 'image') {
       return buildImg(getImageBase(item), item.mediaFocalPoint, item.title, {
@@ -2833,6 +2874,7 @@
     buildImg: buildImg,
     buildImgHTML: buildImgHTML,
     buildCategoriesHTML: buildCategoriesHTML,
+    buildCardCTA: buildCardCTA,
     buildChild: buildChild,
     buildCard: buildCard,
     createLightbox: createLightbox,

@@ -1370,3 +1370,38 @@ the owning `qb-`, `rb-` or `lb-` alias. Legacy date selectors remain supported.
 combined with its other prefilters. Omitted means no restriction; an empty
 array selects nothing. Requires core v0.9.0. This avoids changing public tags
 for a tightly controlled hero selection and survives title/slug changes.
+
+### Per-card call to action (v0.10.0)
+
+Query, Related and Locator support an optional `cta` child in `display.groups`.
+The caption uses the card's existing destination (including `display.link` for
+Query/Related). It does not introduce a second destination or a new extension.
+
+```js
+display: {
+  groups: [
+    { role: 'media', children: ['image'] },
+    { role: 'body', children: [
+      'title', 'excerpt',
+      { type: 'cta', text: 'Discover', icon: 'arrow_forward' }
+    ] }
+  ]
+}
+```
+
+`text` is required. `icon` is optional, decorative and rendered as text using
+`--ui-font-font-family`; the site loads its own icon font. `iconPosition` defaults
+to `'before'`, with `'after'` also supported. `className` adds a site class.
+`ariaLabel` optionally names a standalone link.
+
+When the entire card is a link, the CTA is a non-interactive `span` inside that
+link. Otherwise it is an `a` pointing to the same item, inheriting the new-tab
+setting. Missing text or destination produces no CTA. With Locator, an explicit
+CTA replaces the automatically appended arrow link; existing `cardLink` children
+remain explicit and should not be combined with a CTA. Existing configurations
+without a CTA retain their markup. Install the matching core and block scripts.
+
+The CSS Class Model includes `cb-card__cta`, `cb-card__cta-text` and
+`cb-card__cta-icon`, paired with `qb-card__*`, `rb-card__*` or `lb-card__*`.
+The gap is configurable with `--cb-card-cta-gap` (default `.5em`); typography,
+colors and presentation inherit from the card. No button shape is imposed.
