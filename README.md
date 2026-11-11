@@ -1405,3 +1405,32 @@ The CSS Class Model includes `cb-card__cta`, `cb-card__cta-text` and
 `cb-card__cta-icon`, paired with `qb-card__*`, `rb-card__*` or `lb-card__*`.
 The gap is configurable with `--cb-card-cta-gap` (default `.5em`); typography,
 colors and presentation inherit from the card. No button shape is imposed.
+
+
+## Location Block: optional dated hours
+
+Location Block accepts optional structured data from Collection Data:
+```js
+openingHours: {
+  weekly: { lundi: 'Fermé', mardi: '11h–18h' },
+  dates: { '2026-09-20': '11h–17h' }
+}
+```
+The weekly map is authoritative when present. Missing values are unknown,
+not closed. Legacy flat weekday fields retain their existing behavior.
+An optional `hoursPeriod` configuration switches the displayed hours to dated
+entries between `displayFrom` and `endsOn` (site time zone):
+```js
+hoursPeriod: {
+  startsOn: '2026-09-16', endsOn: '2026-09-20',
+  displayFrom: '2026-09-01', title: 'Event opening hours'
+},
+missingHoursLabel: 'Not provided'
+```
+All dates of the period are shown, including unknown dates. Outside that display
+window, weekly hours return automatically. This option changes display only;
+it does not filter programme items or override their event dates.
+The dated rows use `cb-card__hours-panel`, `cb-card__hours-row`,
+`cb-card__hours-day` and `cb-card__hours-value`, together with their existing
+`locb-*` aliases. Location (`locb`) remains distinct from Locator (`lb`).
+

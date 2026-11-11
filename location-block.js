@@ -1,5 +1,5 @@
 /*!
- * Location Block v4.0.0-dev.9
+ * Location Block v4.0.0-dev.10
  * github.com/jonas-nicollin/squarespace-blocks
  *
  * Affiche les informations d'un lieu sur une page Squarespace.
@@ -28,7 +28,7 @@
 'use strict';
 
 var FOUR_HOURS = 4 * 60 * 60 * 1000;
-var VERSION = '4.0.0-dev.9';
+var VERSION = '4.0.0-dev.10';
 var DEFAULT_MOUNT = '.location-block';
 var DEFAULT_COUNTRY = 'Suisse';
 var DATA_CACHE_PREFIX = 'location_block_v4_data_';
@@ -138,6 +138,8 @@ var DEFAULT_CONFIG = {
   sections: null,
   fieldLabelMode: 'none',
   showStatus: true,
+  hoursPeriod: null,
+  missingHoursLabel: 'Non renseigné',
   showSocialLinks: false,
   collapseHours: true,
   useFetchForSlug: true,
@@ -287,10 +289,11 @@ function buildImgTag(lieu){
 
 function getNow(cfg){
   var tz = detectTZ(cfg);
-  var fmt = new Intl.DateTimeFormat('en-GB',{timeZone: tz, weekday: 'long', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
+  var fmt = new Intl.DateTimeFormat('en-GB',{timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'long', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
   var parts = {};
   fmt.formatToParts(new Date()).forEach(function(p){if(p.type !== 'literal') parts[p.type] = p.value;});
   return {
+    date: parts.year + '-' + parts.month + '-' + parts.day,
     dayKey: EN_FR[(parts.weekday || '').toLowerCase()] || 'lundi',
     nowMinutes: parseInt(parts.hour || '0',10) * 60 + parseInt(parts.minute || '0',10)
   };
@@ -436,6 +439,9 @@ function normLieu(row, cfg){
   canonical.slug = normalizeMatchValue(slugValue, cfg.match.normalize);
   canonical.matchKey = normalizeMatchValue(matchValue, cfg.match.normalize);
   canonical.raw = row;
+  if(row.openingHours && typeof row.openingHours === 'object'){
+    canonical.openingHours = row.openingHours;
+  }
   return canonical;
 }
 
@@ -880,17 +886,59 @@ function buildAddress(lieu){
     : '<div class="locb-card__address">' + addr + '</div>';
 }
 
+function activeHoursPeriod(now, cfg){
+  var period = cfg.hoursPeriod;
+  function validDate(value){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;
+    var date = new Date(value + 'T12:00:00Z');
+    return !isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  }
+  if(!period || !validDate(period.startsOn) || !validDate(period.endsOn) ||
+      (period.displayFrom && !validDate(period.displayFrom)) ||
+      period.endsOn < period.startsOn) return null;
+  return now.date >= (period.displayFrom || period.startsOn) &&
+    now.date <= period.endsOn ? period : null;
+}
+
+function buildDatedHours(lieu, period, cfg){
+  var dates = (lieu.openingHours || {}).dates || {};
+  var rows = [], cursor = new Date(period.startsOn + 'T12:00:00Z');
+  // Bound rendering even if an invalid configuration spans several years.
+  for(var i = 0; i < 366; i++){
+    var date = cursor.toISOString().slice(0, 10);
+    if(date > period.endsOn) break;
+    var raw = String(dates[date] || '').trim();
+    var label = raw ? parseSched(raw).label : cfg.missingHoursLabel;
+    var day = new Intl.DateTimeFormat('fr-CH', {
+      weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC'
+    }).format(cursor);
+    rows.push('<div class="cb-card__hours-row locb-card__hours-row">' +
+      '<span class="cb-card__hours-day locb-card__hours-day">' + escHtml(day) +
+      '</span><span class="cb-card__hours-value locb-card__hours-value">' +
+      escHtml(label) + '</span></div>');
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return '<div class="cb-card__hours-panel locb-card__hours-panel">' +
+    rows.join('') + '</div>';
+}
+
 function buildHours(lieu, now, cfg, section){
+  var period = activeHoursPeriod(now, cfg);
+  if(period) return buildDatedHours(lieu, period, cfg);
   var dk = now.dayKey;
   var nm = now.nowMinutes;
   var ti = DAY_KEYS.indexOf(dk);
   var ordered = [DAY_KEYS[ti]].concat(DAY_KEYS.slice(0,ti)).concat(DAY_KEYS.slice(ti + 1));
   var rows = ordered.map(function(day){
     var isToday = day === dk;
-    var sched = parseSched(lieu[day] || '-');
+    var weekly = lieu.openingHours && lieu.openingHours.weekly;
+    var value = weekly ? String(weekly[day] || '').trim() : (lieu[day] || '-');
+    var sched = weekly && !value
+      ? {type: 'unknown', label: cfg.missingHoursLabel} : parseSched(value);
     var displayValue = sched.type === 'closed' ? 'Fermé' : sched.label;
     var open = isToday && cfg.showStatus ? isOpen(sched, nm) : null;
-    var status = (isToday && cfg.showStatus && sched.type !== 'special')
+    var status = (isToday && cfg.showStatus &&
+        (sched.type === 'ranges' || sched.type === 'closed'))
       ? '<span class="locb-card__status ' + (open ? 'is-open' : 'is-closed') + '">' + (open ? 'Ouvert' : 'Fermé') + '</span>'
       : '';
     var hiddenClass = (!isToday && cfg.collapseHours) ? ' is-hidden' : '';
@@ -971,6 +1019,8 @@ function buildConfiguredSection(lieu, cfg, section, now){
     return buildSection(section, addressHtml, addressHtml ? 1 : 0, cfg);
   }
   if(type === 'hours'){
+    var period = activeHoursPeriod(now, cfg);
+    if(period && period.title) section = mergeObjects(section, {title: period.title});
     return buildSection(section, buildHours(lieu, now, cfg, section), DAY_KEYS.length, cfg);
   }
   if(type === 'fields' || type === 'contact' || type === 'social'){
@@ -1139,3 +1189,4 @@ if(document.readyState === 'loading'){
 }
 
 })();
+
