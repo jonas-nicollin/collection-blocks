@@ -793,7 +793,7 @@ The third-party library's own internal elements keep its own class contract.
 | Masonry | `cb-masonry` on the existing grid; cards retain their block classes. |
 | Slider | `cb-slider`, `cb-slider__track`, `__slide`, `__controls`, `__button`, `__previous`, `__next`, `__dot`, `__icon`; root `--ready`, `--intro-ready`, `--intro-complete`, `--dragging`; slide `--active`, `--previous`, `--before`, `--after`, `--adjacent`, `--distant`; dot `--active`. |
 | Scroller | Existing `cb-scroller`, `cb-scroller-track`, `cb-scroller-controls`, `cb-scroller-prev`, `cb-scroller-next`, `cb-scroller-refresh`, `cb-scroller-dragging`, `cb-scroller-day`, `cb-scroller-day__context`, `cb-scroller-day__title`. All separators also use `cb-group-heading cb-group-heading--scroller`, with `__context` / `__title` children for dates. |
-| Collapse | `cb-collapse`, `cb-collapse--collapsed`, `--expanded`, `cb-collapse__controls`, `__more`, `__less`, `__item--hidden`; buttons also retain `cb-load-more` and its block alias. |
+| Collapse | `cb-collapse`, `cb-collapse--collapsed`, `--expanded`, `cb-collapse__controls`, `__more`, `__less`, `__toggle`, `__item--hidden`; buttons also retain `cb-load-more` and its block alias. |
 | Explorer | `cb-explorer`, root `--form` / `--links`, `__form`, `__status` / `__status--quiet`, `__submit`, `__links`, `__link`, `__label`, `__count`, `__description`, `__heading`, `__intro`, `__group`, `__group-heading`; Query-backed elements also have `qb-*` aliases. |
 | Fancybox | `cb-fancybox`, `cb-fancybox__carousel`, `__slide`, `__image`, `__caption`, `__category`, `__title`, `__details`, `__year`, `__line`, `__enquire`, `__enquire-link`, `__views`, `__views-group`, `__view`, `__view-image`; view `--primary`, `--alternate`, `--active`; views-group `--primary`, `--alternates`; slide/views `--loading`. |
 
@@ -930,6 +930,21 @@ controls. Destroy restores original item visibility. Both modules are guarded
 against duplicate loading, batch mutation discovery per frame, and support
 DOMContentLoaded, mercury:load, page:loaded and site:refresh. View-all cards and
 text disclosure remain separate integrations.
+
+A separate opt-in `mode: 'panel'` reveals one existing content element, without
+pagination or card counting. Set `contentSelector`, optional `mediaQuery`
+(e.g. `(max-width: 767px)`), `expanded` (default false), `blockPrefix`, and
+`labels: { showMore, showLess }`. The generated `cb-collapse__toggle` also has
+its block alias (e.g. `locb-collapse__toggle`). Outside the media query the
+content is visible and the control is hidden. The native button exposes
+`aria-controls` and `aria-expanded`; destroy restores the original visibility.
+
+Location Block can enable this with `detailsCollapse: { mediaQuery, labels }`
+when `extension-collapse.js` is loaded first. `showImage: false` suppresses the
+optional illustration. Lazy maps stay unloaded while their panel is hidden.
+`LocationBlock.mount(config)` mounts an explicit configuration after its target
+has been inserted. These options are disabled by default and do not change
+existing Location Block installations.
 
 Browser regression checks: serve `tests/browser-fancybox-collapse.html` with
 these two files from an isolated local folder. The fixture tests lifecycle,
@@ -1433,4 +1448,3 @@ it does not filter programme items or override their event dates.
 The dated rows use `cb-card__hours-panel`, `cb-card__hours-row`,
 `cb-card__hours-day` and `cb-card__hours-value`, together with their existing
 `locb-*` aliases. Location (`locb`) remains distinct from Locator (`lb`).
-

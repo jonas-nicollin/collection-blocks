@@ -9,7 +9,65 @@
     var number = Number(value);
     return Number.isFinite(number) && number > 0 ? Math.floor(number) || 1 : fallback;
   }
+  function mountPanel(scope, cfg) {
+    if (controllers.has(scope)) return controllers.get(scope);
+    var content = scope.querySelector(cfg.contentSelector || ':scope > article');
+    if (!content) return null;
+    var extensions = window.CollectionBlocks && window.CollectionBlocks.extensions;
+    function classes(name) {
+      var alias = cfg.blockPrefix ? name.replace(/^cb-/, cfg.blockPrefix + '-') : '';
+      return extensions ? extensions.classes(scope, name, alias, cfg.blockPrefix) :
+        [name, alias].filter(Boolean).join(' ');
+    }
+    var original = { hidden: content.hidden, id: content.id };
+    var expanded = cfg.expanded === true, destroyed = false;
+    var media = cfg.mediaQuery ? window.matchMedia(cfg.mediaQuery) : null;
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = classes('cb-collapse__toggle');
+    if (!content.id) content.id = 'cb-collapse-panel-' + (++nextId);
+    button.setAttribute('aria-controls', content.id);
+    content.insertAdjacentElement('beforebegin', button);
+    function apply() {
+      if (destroyed) return;
+      var enabled = !media || media.matches;
+      var open = !enabled || expanded;
+      button.hidden = !enabled;
+      content.hidden = !open;
+      button.setAttribute('aria-expanded', String(open));
+      var labels = cfg.labels || {};
+      var label = open ? labels.showLess || 'Hide details' : labels.showMore || 'Show details';
+      if (button.textContent !== label) button.textContent = label;
+      if (typeof cfg.onChange === 'function') cfg.onChange({
+        scope: scope, expanded: open, enabled: enabled, visibleCount: open ? 1 : 0, total: 1
+      });
+    }
+    function toggle() { expanded = !expanded; apply(); }
+    button.addEventListener('click', toggle);
+    if (media) media.addEventListener('change', apply);
+    var controller = {
+      refresh: function () {
+        if (!scope.contains(content)) controller.destroy();
+      },
+      showMore: function () { expanded = true; apply(); },
+      collapse: function () { expanded = false; apply(); },
+      destroy: function () {
+        if (destroyed) return;
+        destroyed = true;
+        button.removeEventListener('click', toggle);
+        if (media) media.removeEventListener('change', apply);
+        button.remove();
+        content.hidden = original.hidden;
+        if (!original.id) content.removeAttribute('id');
+        controllers.delete(scope);
+      }
+    };
+    controllers.set(scope, controller);
+    apply();
+    return controller;
+  }
   function mount(scope, cfg) {
+    if (scope && cfg && cfg.mode === 'panel') return mountPanel(scope, cfg);
     if (!scope || !cfg || !cfg.listSelector || !cfg.itemSelector) return null;
     if (controllers.has(scope)) return controllers.get(scope);
     var prefix = cfg.classPrefix || 'cb-collapse';
@@ -148,7 +206,7 @@
       });
     });
   }
-  window.CollectionBlocksCollapse = { version: '1.1.0', mount: mount, refresh: refresh };
+  window.CollectionBlocksCollapse = { version: '1.2.0', mount: mount, refresh: refresh };
   var scheduled = false;
   function schedule() {
     if (scheduled) return;

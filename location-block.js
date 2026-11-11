@@ -1,5 +1,5 @@
 /*!
- * Location Block v4.0.0-dev.10
+ * Location Block v4.0.0-dev.11
  * github.com/jonas-nicollin/squarespace-blocks
  *
  * Affiche les informations d'un lieu sur une page Squarespace.
@@ -28,7 +28,7 @@
 'use strict';
 
 var FOUR_HOURS = 4 * 60 * 60 * 1000;
-var VERSION = '4.0.0-dev.10';
+var VERSION = '4.0.0-dev.11';
 var DEFAULT_MOUNT = '.location-block';
 var DEFAULT_COUNTRY = 'Suisse';
 var DATA_CACHE_PREFIX = 'location_block_v4_data_';
@@ -1035,7 +1035,7 @@ function buildConfiguredSection(lieu, cfg, section, now){
 
 function buildCard(lieu, cfg){
   var now = getNow(cfg);
-  var imgTag = buildImgTag(lieu);
+  var imgTag = cfg.showImage === false ? '' : buildImgTag(lieu);
   var titleHtml = lieu.title ? '<div class="cb-card__title locb-card__title">' + escHtml(lieu.title) + '</div>' : '';
   var mediaHtml = imgTag ? '<div class="cb-card__media locb-card__media">' + imgTag + titleHtml + '</div>' : '';
   var hasMapLinkSection = false;
@@ -1080,6 +1080,7 @@ function bindLazyMaps(card, cfg){
       observer.unobserve(entry.target);
     });
   }, {rootMargin: cfg.lazyMapRootMargin || '400px'});
+  card._locbMapObserver = observer;
   maps.forEach(function(map){observer.observe(map);});
 }
 
@@ -1139,12 +1140,19 @@ async function renderCard(card, index, cfg, getFreshIndex){
     card.innerHTML = '<p class="locb-card__error">Lieu introuvable.</p>';
     return;
   }
-  if(!lieu.image){
+  if(cfg.showImage !== false && !lieu.image){
     var ib = findImgBlock(card);
     if(ib) lieu.image = getImgSrc(ib);
   }
+  if(card._locbCollapse) card._locbCollapse.destroy();
+  if(card._locbMapObserver) card._locbMapObserver.disconnect();
   card.innerHTML = buildCard(lieu, cfg);
   bindToggle(card);
+  if(cfg.detailsCollapse && window.CollectionBlocksCollapse){
+    card._locbCollapse = window.CollectionBlocksCollapse.mount(card, Object.assign({
+      mode: 'panel', contentSelector: ':scope > .locb-card', blockPrefix: 'locb'
+    }, cfg.detailsCollapse));
+  }
   bindLazyMaps(card, cfg);
 }
 
@@ -1181,6 +1189,10 @@ async function init(){
   if(!configs.length) return;
   await Promise.all(configs.map(initConfig));
 }
+
+window.LocationBlock = {version: VERSION, init: init, mount: function(config){
+  return initConfig(normalizeConfig(config, 0));
+}};
 
 if(document.readyState === 'loading'){
   document.addEventListener('DOMContentLoaded', init);
