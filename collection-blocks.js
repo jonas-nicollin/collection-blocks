@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.23';
+  var VERSION = '0.24';
   var STORE_KEY_PREFIX = 'collection-blocks::v0.7::';
 
   var memoryCache = new Map();
@@ -28,6 +28,7 @@
     'tags',
     'excerpt',
     'location',
+    'venue',
     'displayIndex',
     'workflowState',
     'starred',

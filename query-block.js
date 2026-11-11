@@ -451,7 +451,7 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
       };
     }).filter(Boolean);
 
-    return {
+    var item = {
       id:           raw.id,
       title:        cleanHTML(raw.title || ''),
       fullUrl:      raw.fullUrl || (sourcePath + '/' + (raw.urlId || '')),
@@ -474,6 +474,10 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
       publishOn:    Number(raw.publishOn || 0),
       timestamp:    Number(raw.startDate || raw.publishOn || raw.addedOn || raw.updatedOn || 0),
     };
+    // Optional Collection Data venue metadata is consumed by site projections.
+    // Keep it separate from the card's display-only location string.
+    if (raw.venue && typeof raw.venue === 'object') item.venue = raw.venue;
+    return item;
   }
 
   function getItemLink(item) {

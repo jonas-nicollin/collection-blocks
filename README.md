@@ -244,6 +244,11 @@ These options are passed internally to `CollectionBlocks.data.get()` / `getState
 
 Default kept fields:
 
+Optional `venue` metadata supplied by Collection Data is preserved by the core
+and Query normalization. A site's filter projection may read its opening hours;
+the shared runtime does not infer availability or change card presentation.
+Custom `keepFields` lists must include `venue` when that metadata is needed.
+
 ```js
 [
   'id',
@@ -256,6 +261,7 @@ Default kept fields:
   'tags',
   'excerpt',
   'location',
+  'venue',
   'displayIndex',
   'workflowState',
   'startDate',
