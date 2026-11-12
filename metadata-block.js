@@ -512,6 +512,7 @@ async function fetchPageJson(settings) {
         'tags',
         'excerpt',
         'location',
+        'venue',
         'displayIndex',
         'workflowState',
         'publishOn',
@@ -556,6 +557,7 @@ async function fetchPageJson(settings) {
           'tags',
           'excerpt',
           'location',
+          'venue',
           'displayIndex',
           'workflowState',
           'publishOn',
@@ -704,8 +706,13 @@ async function fetchPageJson(settings) {
     return orderMap;
   }
 
-  function getGoogleMapsUrl(itemData) {
-    const location = itemData?.location || {};
+  function getResolvedLocation(itemData, block) {
+    const resolve = window.CollectionBlocks?.utils?.resolveLocation;
+    return resolve ? resolve(itemData, block) : (itemData?.location || {});
+  }
+
+  function getGoogleMapsUrl(itemData, block) {
+    const location = getResolvedLocation(itemData, block);
     const lat = typeof location.markerLat === 'number'
       ? location.markerLat
       : typeof location.mapLat === 'number' ? location.mapLat : null;
@@ -717,7 +724,7 @@ async function fetchPageJson(settings) {
   }
 
   function getLocationValues(itemData, block) {
-    const source = itemData?.location || {};
+    const source = getResolvedLocation(itemData, block);
     const tagValues = block.tagPrefix
       ? normalizeBlockValues(
           Array.isArray(itemData?.tags) ? itemData.tags : [],
@@ -754,7 +761,7 @@ async function fetchPageJson(settings) {
 
     const combinedValues = uniq([...tagValues, ...values]);
     if (combinedValues.length) return combinedValues;
-    if (block.useGoogleMapsLink && getGoogleMapsUrl(itemData)) {
+    if (block.useGoogleMapsLink && getGoogleMapsUrl(itemData, block)) {
       return [block.googleMapsLabel || 'Voir sur la carte'];
     }
     return [];
@@ -881,7 +888,7 @@ async function fetchPageJson(settings) {
 
   function appendValuesToContent(content, values, block, itemData) {
     const mapsUrl = block.isLocation && block.useGoogleMapsLink
-      ? getGoogleMapsUrl(itemData) : '';
+      ? getGoogleMapsUrl(itemData, block) : '';
     const href = block.href || mapsUrl || '';
     const target = block.target || block.googleMapsTarget || '';
     values.forEach((value, index) => {
@@ -1041,7 +1048,7 @@ async function fetchPageJson(settings) {
         removeExistingGroupDuplicates(targetContent, values);
       }
 
-      const mapsUrl       = block.useGoogleMapsLink ? getGoogleMapsUrl(itemData) : '';
+      const mapsUrl       = block.useGoogleMapsLink ? getGoogleMapsUrl(itemData, block) : '';
       const href          = block.href || mapsUrl || '';
       const target        = block.target || block.googleMapsTarget || '';
       const groupSep      = block.groupSeparator ?? ',\u00A0';

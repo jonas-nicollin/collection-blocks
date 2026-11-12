@@ -1,5 +1,5 @@
 /*!
- * Location Block v4.0.0-dev.11
+ * Location Block v4.0.0-dev.12
  * github.com/jonas-nicollin/squarespace-blocks
  *
  * Affiche les informations d'un lieu sur une page Squarespace.
@@ -28,7 +28,7 @@
 'use strict';
 
 var FOUR_HOURS = 4 * 60 * 60 * 1000;
-var VERSION = '4.0.0-dev.11';
+var VERSION = '4.0.0-dev.12';
 var DEFAULT_MOUNT = '.location-block';
 var DEFAULT_COUNTRY = 'Suisse';
 var DATA_CACHE_PREFIX = 'location_block_v4_data_';
@@ -142,6 +142,7 @@ var DEFAULT_CONFIG = {
   missingHoursLabel: 'Non renseigné',
   showSocialLinks: false,
   collapseHours: true,
+  hoursOrder: 'today-first',
   useFetchForSlug: true,
   fallbackCountry: DEFAULT_COUNTRY
 };
@@ -743,13 +744,13 @@ function buildSectionTitle(section, count, cfg){
   var text = getTitleText(title, count);
   if(!text) return '';
   var tag = safeTag((title && typeof title === 'object' && title.tag) || section.titleTag, cfg.sectionTitleTag || 'h4');
-  return '<' + tag + ' class="locb-card__section-title">' + escHtml(text) + '</' + tag + '>';
+  return '<' + tag + ' class="cb-card__section-title locb-card__section-title">' + escHtml(text) + '</' + tag + '>';
 }
 
 function buildSectionIcon(section){
   if(section.icon === false || section.icon === '') return '';
   var icon = section.icon || 'info';
-  return '<span class="ui-icon locb-card__section-icon locb-card__icon" aria-hidden="true">' + escHtml(icon) + '</span>';
+  return '<span class="ui-icon cb-card__section-icon locb-card__section-icon cb-card__icon locb-card__icon" aria-hidden="true">' + escHtml(icon) + '</span>';
 }
 
 function buildSection(section, bodyHtml, count, cfg){
@@ -760,15 +761,15 @@ function buildSection(section, bodyHtml, count, cfg){
   var iconHtml = buildSectionIcon(section);
   var classes = [
     'cb-card__group',
-    'locb-card__section',
-    'locb-card__section--' + id,
-    'locb-card__section-type--' + type
+    'cb-card__section', 'locb-card__section',
+    'cb-card__section--' + id, 'locb-card__section--' + id,
+    'cb-card__section-type--' + type, 'locb-card__section-type--' + type
   ];
   if(titleHtml) classes.push('has-title');
   if(!iconHtml) classes.push('has-no-icon');
   return '<section class="' + classes.join(' ') + '">' +
-    '<div class="locb-card__section-head">' + iconHtml + titleHtml + '</div>' +
-    '<div class="locb-card__section-body locb-card__content">' + bodyHtml + '</div>' +
+    '<div class="cb-card__section-head locb-card__section-head">' + iconHtml + titleHtml + '</div>' +
+    '<div class="cb-card__section-body locb-card__section-body cb-card__content locb-card__content">' + bodyHtml + '</div>' +
   '</section>';
 }
 
@@ -847,20 +848,22 @@ function buildFieldRow(def, valueHtml, labelMode){
   if(!valueHtml) return '';
   labelMode = def.labelMode || labelMode || 'none';
   var labelHtml = '';
-  var classes = ['locb-card__field', 'locb-card__field--' + toSlug(def.key), 'locb-card__contact-line'];
+  var classes = ['cb-card__field', 'locb-card__field',
+    'cb-card__field--' + toSlug(def.key), 'locb-card__field--' + toSlug(def.key),
+    'cb-card__contact-line', 'locb-card__contact-line'];
 
   if((labelMode === 'icon' || labelMode === 'both') && def.icon){
     classes.push('has-icon');
-    labelHtml += '<span class="ui-icon locb-card__field-icon locb-card__icon" aria-hidden="true">' + escHtml(def.icon) + '</span>';
+    labelHtml += '<span class="ui-icon cb-card__field-icon locb-card__field-icon cb-card__icon locb-card__icon" aria-hidden="true">' + escHtml(def.icon) + '</span>';
   }
   if((labelMode === 'text' || labelMode === 'both') && def.label){
     classes.push('has-label');
-    labelHtml += '<span class="locb-card__field-label">' + escHtml(def.label) + '</span>';
+    labelHtml += '<span class="cb-card__field-label locb-card__field-label">' + escHtml(def.label) + '</span>';
   }
 
   return '<div class="' + classes.join(' ') + '">' +
     labelHtml +
-    '<span class="locb-card__field-value">' + valueHtml + '</span>' +
+    '<span class="cb-card__field-value locb-card__field-value">' + valueHtml + '</span>' +
   '</div>';
 }
 
@@ -882,8 +885,8 @@ function buildAddress(lieu){
   var addr = [lieu.address1, lieu.address2, lieu.address3].filter(Boolean).map(escHtml).join('<br>');
   if(!addr) return '';
   return lieu.mapUrl
-    ? '<a class="cb-card__link locb-card__address-link" href="' + escHtml(lieu.mapUrl) + '" target="_blank" rel="noopener noreferrer">' + addr + '</a>'
-    : '<div class="locb-card__address">' + addr + '</div>';
+    ? '<a class="cb-card__link cb-card__address-link locb-card__address-link" href="' + escHtml(lieu.mapUrl) + '" target="_blank" rel="noopener noreferrer">' + addr + '</a>'
+    : '<div class="cb-card__address locb-card__address">' + addr + '</div>';
 }
 
 function activeHoursPeriod(now, cfg){
@@ -928,7 +931,8 @@ function buildHours(lieu, now, cfg, section){
   var dk = now.dayKey;
   var nm = now.nowMinutes;
   var ti = DAY_KEYS.indexOf(dk);
-  var ordered = [DAY_KEYS[ti]].concat(DAY_KEYS.slice(0,ti)).concat(DAY_KEYS.slice(ti + 1));
+  var ordered = cfg.hoursOrder === 'week' ? DAY_KEYS.slice()
+    : [DAY_KEYS[ti]].concat(DAY_KEYS.slice(0,ti)).concat(DAY_KEYS.slice(ti + 1));
   var rows = ordered.map(function(day){
     var isToday = day === dk;
     var weekly = lieu.openingHours && lieu.openingHours.weekly;
@@ -939,16 +943,16 @@ function buildHours(lieu, now, cfg, section){
     var open = isToday && cfg.showStatus ? isOpen(sched, nm) : null;
     var status = (isToday && cfg.showStatus &&
         (sched.type === 'ranges' || sched.type === 'closed'))
-      ? '<span class="locb-card__status ' + (open ? 'is-open' : 'is-closed') + '">' + (open ? 'Ouvert' : 'Fermé') + '</span>'
+      ? '<span class="cb-card__status locb-card__status ' + (open ? 'is-open' : 'is-closed') + '">' + (open ? 'Ouvert' : 'Fermé') + '</span>'
       : '';
     var hiddenClass = (!isToday && cfg.collapseHours) ? ' is-hidden' : '';
-    return '<div class="locb-card__hours-row' + (isToday ? ' is-today' : '') + hiddenClass + '"><span class="locb-card__hours-day">' + escHtml(DAY_FULL[day]) + '</span><span class="locb-card__hours-value">' + escHtml(displayValue) + status + '</span></div>';
+    return '<div class="cb-card__hours-row locb-card__hours-row' + (isToday ? ' is-today' : '') + hiddenClass + '"><span class="cb-card__hours-day locb-card__hours-day">' + escHtml(DAY_FULL[day]) + '</span><span class="cb-card__hours-value locb-card__hours-value">' + escHtml(displayValue) + status + '</span></div>';
   });
   var toggleLabel = (section && section.toggleLabel) || cfg.hoursToggleLabel || cfg.labels.hoursToggle || 'Tous les horaires';
   var toggle = cfg.collapseHours
-    ? '<button class="locb-card__hours-toggle" type="button" aria-expanded="false"><span class="locb-card__hours-toggle-label">' + escHtml(toggleLabel) + '</span><span class="ui-icon locb-card__icon" aria-hidden="true">expand_more</span></button>'
+    ? '<button class="cb-card__hours-toggle locb-card__hours-toggle" type="button" aria-expanded="false"><span class="cb-card__hours-toggle-label locb-card__hours-toggle-label">' + escHtml(toggleLabel) + '</span><span class="ui-icon cb-card__icon locb-card__icon" aria-hidden="true">expand_more</span></button>'
     : '';
-  return '<div class="locb-card__hours-panel">' + rows.join('') + toggle + '</div>';
+  return '<div class="cb-card__hours-panel locb-card__hours-panel">' + rows.join('') + toggle + '</div>';
 }
 
 function validCoordinate(value, min, max){
@@ -983,16 +987,16 @@ function getMapSrc(lieu, cfg){
 }
 
 function buildMapIframe(src, title){
-  return '<iframe class="locb-card__map-iframe" src="' + escHtml(src) + '" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="' + escHtml(title) + '"></iframe>';
+  return '<iframe class="cb-card__map-iframe locb-card__map-iframe" src="' + escHtml(src) + '" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="' + escHtml(title) + '"></iframe>';
 }
 
 function buildMap(lieu, cfg){
   var src = getMapSrc(lieu, cfg);
   var title = 'Carte - ' + lieu.title;
   if(cfg.lazyMap){
-    return '<div class="locb-card__map locb-card__map--lazy" data-map-src="' + escHtml(src) + '" data-map-title="' + escHtml(title) + '" aria-label="' + escHtml(title) + '"><div class="locb-card__map-placeholder">' + escHtml(cfg.lazyMapPlaceholder || 'Carte') + '</div></div>';
+    return '<div class="cb-card__map locb-card__map cb-card__map--lazy locb-card__map--lazy" data-map-src="' + escHtml(src) + '" data-map-title="' + escHtml(title) + '" aria-label="' + escHtml(title) + '"><div class="cb-card__map-placeholder locb-card__map-placeholder">' + escHtml(cfg.lazyMapPlaceholder || 'Carte') + '</div></div>';
   }
-  return '<div class="locb-card__map">' + buildMapIframe(src, title) + '</div>';
+  return '<div class="cb-card__map locb-card__map">' + buildMapIframe(src, title) + '</div>';
 }
 
 function buildMapLink(lieu, cfg){
@@ -1008,7 +1012,7 @@ function buildMapLink(lieu, cfg){
   }
   if(!cfg.showMapLink || !mapLinkHref) return '';
   var label = cfg.mapLinkLabel || cfg.labels.mapLink || 'Voir sur la carte';
-  return '<div class="locb-card__maplink-wrap"><a class="cb-card__link locb-card__maplink" href="' + mapLinkHref + '"' + mapLinkTarget + '><span>' + escHtml(label) + '</span><span class="ui-icon locb-card__icon" aria-hidden="true">chevron_right</span></a></div>';
+  return '<div class="cb-card__maplink-wrap locb-card__maplink-wrap"><a class="cb-card__link cb-card__maplink locb-card__maplink" href="' + mapLinkHref + '"' + mapLinkTarget + '><span>' + escHtml(label) + '</span><span class="ui-icon cb-card__icon locb-card__icon" aria-hidden="true">chevron_right</span></a></div>';
 }
 
 function buildConfiguredSection(lieu, cfg, section, now){
@@ -1124,7 +1128,7 @@ function getImgSrc(block){
 }
 
 async function renderCard(card, index, cfg, getFreshIndex){
-  card.classList.add('location-block', 'locb-block');
+  card.classList.add('cb-block', 'location-block', 'locb-block');
   var key = await getPageMatch(card, cfg);
   var lieu = key ? index[key] || null : null;
   if(!lieu && key && typeof getFreshIndex === 'function'){
@@ -1137,7 +1141,7 @@ async function renderCard(card, index, cfg, getFreshIndex){
   }
   if(!lieu){
     console.warn('Location Block v' + VERSION + ': lieu introuvable', {key: key, config: cfg.id});
-    card.innerHTML = '<p class="locb-card__error">Lieu introuvable.</p>';
+    card.innerHTML = '<p class="cb-card__error locb-card__error">Lieu introuvable.</p>';
     return;
   }
   if(cfg.showImage !== false && !lieu.image){
@@ -1168,8 +1172,8 @@ async function initConfig(cfg){
   }catch(err){
     console.error('Location Block v' + VERSION + ':', err);
     cards.forEach(function(c){
-      c.classList.add('location-block', 'locb-block');
-      c.innerHTML = '<p class="locb-card__error">Impossible de charger les informations du lieu.</p>';
+      c.classList.add('cb-block', 'location-block', 'locb-block');
+      c.innerHTML = '<p class="cb-card__error locb-card__error">Impossible de charger les informations du lieu.</p>';
     });
     return;
   }

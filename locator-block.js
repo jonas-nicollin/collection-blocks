@@ -356,6 +356,7 @@ function getCollectionOptions(maxPages){
       'tags',
       'excerpt',
       'location',
+      'venue',
       'displayIndex',
       'workflowState',
       'startDate',
@@ -430,8 +431,13 @@ function getCollectionOptions(maxPages){
     return true;
   }
 
+  function resolvedLocation(item){
+    var resolve = getCollectionUtils().resolveLocation;
+    return resolve ? resolve(item, cfg.location) : item.location;
+  }
+
   var filtered = all.filter(function(item){
-    var c = getCoords(item.location);
+    var c = getCoords(resolvedLocation(item));
 
     if(isNaN(c.lat) || isNaN(c.lng)){
       log('Sans coords:', item.title);
@@ -456,7 +462,7 @@ function getCollectionOptions(maxPages){
   });
 
   var items = filtered.map(function(item){
-    var c = getCoords(item.location);
+    var c = getCoords(resolvedLocation(item));
     var focalPos = getFocalPos(item.mediaFocalPoint);
 
     return {

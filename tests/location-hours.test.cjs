@@ -37,3 +37,12 @@ test('Invalid and reversed periods safely retain weekly hours', () => {
     {startsOn:'2026-09-16',endsOn:'2026-09-20',displayFrom:'bad'}
   ]) assert.equal(api.activeHoursPeriod(now,{...cfg,hoursPeriod:period}),null);
 });
+test('Week order is opt-in and today keeps its own state', () => {
+  const place = {openingHours:{weekly:{}}};
+  const week = api.buildHours(place, now, {...cfg,hoursOrder:'week'}, {});
+  assert(week.indexOf('Lundi') < week.indexOf('Jeudi'));
+  assert(week.indexOf('Jeudi') < week.indexOf('Dimanche'));
+  assert.match(week, /cb-card__hours-row locb-card__hours-row is-today[^>]*><span[^>]*>Jeudi/);
+  const legacy = api.buildHours(place, now, cfg, {});
+  assert(legacy.indexOf('Jeudi') < legacy.indexOf('Lundi'));
+});

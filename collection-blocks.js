@@ -2844,8 +2844,24 @@
     }
   };
 
+  // Opt-in central venue selection. Never mix coordinates from different sources.
+  function resolveLocation(item, options) {
+    options = options || {};
+    var nativeLocation = item && item.location;
+    if (options.source !== 'venue') return nativeLocation || {};
+    var central = item && item.venue && item.venue.location;
+    var hasAddress = central && ['addressLine1', 'addressLine2'].some(function (key) {
+      return String(central[key] || '').trim();
+    });
+    var hasCoordinates = central &&
+      Number.isFinite(central.mapLat) && Number.isFinite(central.mapLng);
+    if (hasAddress || hasCoordinates) return central;
+    return options.fallback === false ? {} : (nativeLocation || {});
+  }
+
   var utilsApi = {
     isItemExcluded: isItemExcluded,
+    resolveLocation: resolveLocation,
     norm: norm,
     slugify: slugify,
     cleanHTML: cleanHTML,

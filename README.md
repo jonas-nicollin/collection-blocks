@@ -754,6 +754,7 @@ editorial taxonomies must remain outside the shared naming contract.
 | Query | `cb-card qb-card` | `qb-*` |
 | Related | `cb-card rb-card` | `rb-*` |
 | Locator | `cb-card lb-card` | `lb-*` |
+| Location | `cb-card locb-card` | `locb-*` |
 
 Generated block attributes:
 
@@ -1454,3 +1455,27 @@ it does not filter programme items or override their event dates.
 The dated rows use `cb-card__hours-panel`, `cb-card__hours-row`,
 `cb-card__hours-day` and `cb-card__hours-value`, together with their existing
 `locb-*` aliases. Location (`locb`) remains distinct from Locator (`lb`).
+
+
+Location generated elements now always pair `cb-*` with `locb-*`, including
+card media/body/title, sections, fields, address, hours, status, map and map link.
+Existing `locb-*` aliases are retained. The wrapper is `cb-block locb-block`.
+Use `hoursOrder: 'week'` to keep Monday through Sunday in order; the default
+`'today-first'` preserves existing installations. `is-today` remains on today's
+row in either presentation.
+
+### Central location selection (opt-in)
+
+`CollectionBlocks.utils.resolveLocation(item, options)` returns a whole location
+object from one source; it never combines a central address with native
+coordinates. The default remains `item.location`. With
+`{ source: 'venue', fallback: true }`, it uses `item.venue.location` when usable,
+otherwise the native post location. `fallback: false` returns an empty object
+when no central location is usable. Missing coordinates in a resolved central
+address are not filled with potentially unrelated native coordinates.
+
+Metadata accepts these options on its location block; Locator accepts them in
+its top-level `location` configuration. Metadata's existing `href` can direct
+the address to a Locator page. Collection Data is responsible for the explicit
+venue join; runtimes do not infer an organizer's address. The native location
+must remain available in the payload when fallback is enabled.

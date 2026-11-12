@@ -37,3 +37,20 @@ test('optional venue survives collection fetching and Query filter projection', 
   assert.deepEqual(Array.from(filtered, item => item.id), ['unknown']);
   assert.equal(JSON.stringify(rows), original);
 });
+test('Location resolution is opt-in, preserves native fallback and never mixes fields', () => {
+  const window = {};
+  vm.runInNewContext(read('collection-blocks.js'), {window, console,
+    document:{readyState:'loading',addEventListener(){}},setTimeout,clearTimeout});
+  const resolve = window.CollectionBlocks.utils.resolveLocation;
+  const native = {addressLine1:'Native venue',markerLat:46,markerLng:6};
+  const central = {addressLine1:'Central venue'};
+  const item = {location:native,venue:{location:central}};
+  assert.equal(resolve(item),native);
+  assert.equal(resolve(item,{source:'venue'}),central);
+  assert.equal(resolve(item,{source:'venue'}).markerLat,undefined);
+  assert.equal(resolve({location:native,venueMatch:{status:'unresolved'}},
+    {source:'venue'}),native);
+  assert.equal(Object.keys(resolve({location:native},{source:'venue',fallback:false})).length,0);
+  assert.equal(resolve({location:native,venue:{location:{addressTitle:'Unknown'}}},
+    {source:'venue'}),native);
+});
