@@ -1756,3 +1756,13 @@ body.sqs-edit-mode-active :where(.cb-block).lb-block {
   font: inherit;
   cursor: pointer;
 }
+
+/* Optional Gallery Block: native layout remains untouched. */
+:where(.cb-gallery--grid).glb-gallery--grid {
+  display: grid;
+  grid-template-columns: repeat(var(--gallery-columns, 3), minmax(0, 1fr));
+  gap: var(--gallery-gap, 1rem);
+}
+:where(.cb-gallery--grid).glb-gallery--grid > :where(.cb-gallery__item) {
+  min-width: 0;
+}

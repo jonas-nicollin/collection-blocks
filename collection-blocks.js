@@ -2479,7 +2479,7 @@
     if (window.console) window.console.warn('[Collection Blocks extensions] ' + message);
   }
   function extensionPrefix(scope, explicit) {
-    if (/^(qb|rb|lb)$/.test(explicit || '')) return explicit;
+    if (/^(qb|rb|lb|locb|bnb|glb)$/.test(explicit || '')) return explicit;
     var selector = '[data-qb-key], [data-rb-key], [data-lb-key], .qb-block, ' +
       '.rb-block, .lb-block, .qb-grid, .rb-grid, .lb-grid';
     var owner = scope && scope.closest && scope.closest(selector);
@@ -2859,9 +2859,43 @@
     return options.fallback === false ? {} : (nativeLocation || {});
   }
 
+  // A shared address link: central venue identity, or the native coordinates.
+  function buildLocatorUrl(path, item, options) {
+    if (!path) return '';
+    options = options || {};
+    var url;
+    try { url = new URL(path, window.location.href); } catch (_) { return path; }
+    var location = resolveLocation(item, options);
+    var central = item && item.venue;
+    ['venue', 'item', 'lat', 'lng', 'place'].forEach(function (key) {
+      url.searchParams.delete(key);
+    });
+    if (central && central.key && location === central.location) {
+      url.searchParams.set('venue', central.key);
+    } else {
+      var lat = Number(location.markerLat ?? location.mapLat);
+      var lng = Number(location.markerLng ?? location.mapLng);
+      if (Number.isFinite(lat) && Number.isFinite(lng) &&
+          Math.abs(lat) <= 90 && Math.abs(lng) <= 180 &&
+          String(location.markerLat ?? location.mapLat ?? '').trim() !== '' &&
+          String(location.markerLng ?? location.mapLng ?? '').trim() !== '') {
+        url.searchParams.set('lat', String(lat));
+        url.searchParams.set('lng', String(lng));
+        url.searchParams.set('place', [location.addressTitle,
+          location.addressLine1, location.addressLine2].filter(Boolean).join(' · ')
+          || (item && item.title) || '');
+      } else if (item && item.id) {
+        url.searchParams.set('item', item.id);
+      }
+    }
+    return url.origin === window.location.origin
+      ? url.pathname + url.search + url.hash : url.href;
+  }
+
   var utilsApi = {
     isItemExcluded: isItemExcluded,
     resolveLocation: resolveLocation,
+    buildLocatorUrl: buildLocatorUrl,
     norm: norm,
     slugify: slugify,
     cleanHTML: cleanHTML,

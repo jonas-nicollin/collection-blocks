@@ -803,6 +803,8 @@ function socialHandle(value, service){
   try{
     var url = new URL(/^https?:\/\//i.test(v) ? v : 'https://' + v);
     var parts = url.pathname.split('/').filter(Boolean);
+    if(service==='youtube' && parts[0]==='channel') return cleanUrlDisplay(v);
+    if(parts[0]==='profile.php') return cleanUrlDisplay(v);
     if(parts.length) return '@' + parts[parts.length - 1].replace(/^@/, '');
   }catch(_){}
   if(service === 'instagram' || service === 'x') return '@' + v.replace(/^@/, '');
@@ -827,11 +829,21 @@ function fieldValueHtml(def, rawValue){
 
   if(type === 'phone'){
     href = telHref(value);
+    if(def.display === 'compact'){
+      var digits=value.replace(/[() .-]/g,'').replace(/^00/,'+');
+      display=/^\+41\d{9}$/.test(digits)
+        ? digits.replace(/^(\+41)(\d{2})(\d{3})(\d{2})(\d{2})$/,'$1 $2 $3 $4 $5')
+        : value.replace(/\s+/g,' ');
+    }
   }else if(type === 'email'){
     href = 'mailto:' + value;
   }else if(type === 'url'){
     href = normUrl(value);
-    display = def.display === 'clean-url' ? cleanUrlDisplay(value) : value;
+    display = def.display === 'clean-url' || def.display === 'compact'
+      ? cleanUrlDisplay(value) : value;
+    if(def.display === 'compact' && ['facebook','youtube','linkedin','vimeo','artsy'].indexOf(def.key)!==-1){
+      display=socialHandle(value,def.key);
+    }
   }else if(type === 'instagram' || type === 'x'){
     href = socialHref(value, type);
     display = def.display === 'raw' ? value : socialHandle(value, type);
@@ -874,6 +886,7 @@ function buildFields(lieu, cfg, section){
   fields.forEach(function(field){
     var def = normalizeFieldDef(field);
     var rawValue = getRawField(lieu, cfg, def.key);
+    if(cfg.contactDisplay === 'compact' && !def.display) def.display = 'compact';
     var valueHtml = fieldValueHtml(def, rawValue);
     var row = buildFieldRow(def, valueHtml, labelMode);
     if(row) rows.push(row);
@@ -993,6 +1006,17 @@ function buildMapIframe(src, title){
 function buildMap(lieu, cfg){
   var src = getMapSrc(lieu, cfg);
   var title = 'Carte - ' + lieu.title;
+  if(cfg.map && cfg.map.provider==='google' && window.CollectionBlocksMap &&
+      String(lieu.latitude ?? '').trim() && String(lieu.longitude ?? '').trim() &&
+      Number.isFinite(Number(lieu.latitude)) && Number.isFinite(Number(lieu.longitude)) &&
+      Math.abs(Number(lieu.latitude))<=90 && Math.abs(Number(lieu.longitude))<=180){
+    return '<div class="cb-card__map locb-card__map cb-card__map--lazy locb-card__map--lazy"'
+      + ' data-map-provider="google" data-map-lat="' + escHtml(lieu.latitude)
+      + '" data-map-lng="' + escHtml(lieu.longitude) + '" data-map-src="' + escHtml(src)
+      + '" data-map-title="' + escHtml(title) + '" aria-label="' + escHtml(title)
+      + '"><div class="cb-card__map-placeholder locb-card__map-placeholder">'
+      + escHtml(cfg.lazyMapPlaceholder || 'Carte') + '</div></div>';
+  }
   if(cfg.lazyMap){
     return '<div class="cb-card__map locb-card__map cb-card__map--lazy locb-card__map--lazy" data-map-src="' + escHtml(src) + '" data-map-title="' + escHtml(title) + '" aria-label="' + escHtml(title) + '"><div class="cb-card__map-placeholder locb-card__map-placeholder">' + escHtml(cfg.lazyMapPlaceholder || 'Carte') + '</div></div>';
   }
@@ -1004,7 +1028,15 @@ function buildMapLink(lieu, cfg){
   var mapLinkHref = '';
   if(cfg.showMapLink){
     if(cfg.mapLinkUrl && cfg.mapLinkUrl !== 'auto'){
-      mapLinkHref = escHtml(cfg.mapLinkUrl);
+      var utils=window.CollectionBlocks && window.CollectionBlocks.utils;
+      var href=cfg.mapLinkUrl;
+      if(cfg.mapLinkFocus && utils && utils.buildLocatorUrl){
+        var location={addressLine1:lieu.address1,addressLine2:lieu.address2,
+          mapLat:Number(lieu.latitude),mapLng:Number(lieu.longitude)};
+        href=utils.buildLocatorUrl(href,{venue:{key:lieu.slug,location:location}},
+          {source:'venue'});
+      }
+      mapLinkHref = escHtml(href);
     }else if(lieu.mapUrl){
       mapLinkHref = escHtml(lieu.mapUrl);
       mapLinkTarget = ' target="_blank" rel="noopener noreferrer"';
@@ -1065,15 +1097,30 @@ function loadLazyMap(map){
   var src = map.getAttribute('data-map-src');
   if(!src) return;
   var title = map.getAttribute('data-map-title') || 'Carte';
-  map.innerHTML = buildMapIframe(src, title);
   map.dataset.mapLoaded = 'true';
+  if(map.dataset.mapProvider==='google' && window.CollectionBlocksMap){
+    var settings=map._locbMapConfig || {};
+    window.CollectionBlocksMap.load(settings).then(function(){
+      if(!map.isConnected)return;
+      map.replaceChildren();
+      var canvas=document.createElement('div');
+      canvas.className='cb-card__map-canvas locb-card__map-canvas';
+      map.appendChild(canvas);
+      var center={lat:Number(map.dataset.mapLat),lng:Number(map.dataset.mapLng)};
+      var instance=new google.maps.Map(canvas,window.CollectionBlocksMap.options(settings,
+        {center:center,zoom:settings.zoom||15,fullscreenControl:true}));
+      new google.maps.Marker({map:instance,position:center,title:title});
+    }).catch(function(){
+      if(map.isConnected)map.innerHTML=buildMapIframe(src,title);
+    });
+  }else map.innerHTML = buildMapIframe(src, title);
 }
 
 function bindLazyMaps(card, cfg){
-  if(!cfg.lazyMap) return;
   var maps = Array.from(card.querySelectorAll('.locb-card__map--lazy'));
   if(!maps.length) return;
-  if(!('IntersectionObserver' in window)){
+  maps.forEach(function(map){map._locbMapConfig=cfg.map||{};});
+  if(!cfg.lazyMap || !('IntersectionObserver' in window)){
     maps.forEach(loadLazyMap);
     return;
   }

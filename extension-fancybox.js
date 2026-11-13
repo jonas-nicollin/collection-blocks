@@ -1,4 +1,4 @@
-/* Collection Blocks — Fancybox adapter. Requires Fancybox 6.x; no bundled library. */
+/* Collection Blocks — Fancybox adapter. Fancybox 6.x; optional simple-gallery 5.x compatibility. No bundled library. */
 (function () {
   'use strict';
   if (window.CollectionBlocksFancybox) return;
@@ -11,7 +11,7 @@
   }
   function stateClass(node, element, state, legacy, active) {
     var names = ['cb-fancybox__' + element + '--' + state, legacy];
-    ['qb', 'rb', 'lb'].forEach(function (prefix) {
+    ['qb', 'rb', 'lb', 'glb'].forEach(function (prefix) {
       if (node.classList.contains(prefix + '-fancybox__' + element)) {
         names.push(prefix + '-fancybox__' + element + '--' + state);
       }
@@ -454,6 +454,11 @@
   }
 
   function fancyboxOptions(startIndex, cfg) {
+    // Native collection galleries may retain an installed Fancybox 5 viewer.
+    // Advanced adapter features continue to use version 6 by default.
+    if(cfg.libraryVersion === 5){
+      return Object.assign({},cfg.libraryOptions || {},{startIndex:startIndex});
+    }
     var options = Object.assign({}, DEFAULT_FANCYBOX, cfg.fancybox || {});
     var generic = (cfg.classPrefixes && cfg.classPrefixes.generic) || 'custom-fancybox';
     var specific = (cfg.classPrefixes && cfg.classPrefixes.specific) || 'collection-items';

@@ -15,6 +15,9 @@ Load the files in this order when several blocks are used on the same page.
 | `locator-block.js` | Locator Block | Google Maps, markers, map/list interaction, zone filters. |
 | `location-block.js` | Location Block | Current-item location card rendering. |
 | `metadata-block.js` | Metadata Block | Independent page/item metadata from the current Squarespace JSON. |
+| `banner-block.js` | Banner Block (optional) | Collection post banner media, focal points and captions. |
+| `gallery-block.js` | Gallery Block (optional) | Native collection gallery layout and optional Fancybox adapter. |
+| `extension-map.js` | Shared maps (optional) | One Google Maps loader and shared presentation for opted-in Location and Locator. |
 
 The repository contains only shared stable runtimes. Site-specific
 configuration, targets, styles, and helper scripts belong in Squarespace Code
@@ -755,6 +758,8 @@ editorial taxonomies must remain outside the shared naming contract.
 | Related | `cb-card rb-card` | `rb-*` |
 | Locator | `cb-card lb-card` | `lb-*` |
 | Location | `cb-card locb-card` | `locb-*` |
+| Banner | `cb-banner bnb-banner` | `bnb-*` |
+| Gallery | `cb-gallery glb-gallery` | `glb-*` |
 
 Generated block attributes:
 
@@ -791,7 +796,8 @@ or `lb-*` UI is generated for this feature.
 With matching core/extension versions, every extension-owned element and state
 receives its `cb-*` class and the owner's `qb-*`, `rb-*` or `lb-*` companion.
 For example, a Query slider next button has `cb-slider__next qb-slider__next`.
-A native gallery outside a block has the common classes only. Fancybox retains
+A native gallery mounted through Gallery Block has `glb-*` companions.
+An independently mounted viewer without an owner has common classes only. Fancybox retains
 its origin's prefix even though the dialog is rendered outside that block.
 The third-party library's own internal elements keep its own class contract.
 
@@ -1479,3 +1485,75 @@ its top-level `location` configuration. Metadata's existing `href` can direct
 the address to a Locator page. Collection Data is responsible for the explicit
 venue join; runtimes do not infer an organizer's address. The native location
 must remain available in the payload when fallback is enabled.
+
+### Address links and shared maps (opt-in)
+
+Metadata location settings accept `locatorUrl: '/map'`. Together with
+`location: { source: 'venue', fallback: true }`, the shared URL helper transports
+`venue=<key>` for a central venue, or native `lat`, `lng`, `place` coordinates.
+Locator enables these links with `deepLink: { clearLabel: 'Show all places' }`
+(or `true`). It opens the matching popup and focuses both map and list. Its
+reset control uses `cb-locator-reset lb-locator-reset`. Unknown keys do not
+silently select an unrelated venue. Existing `href` and native-only usage work
+unchanged. Location enables focused links with `mapLinkFocus: true` alongside
+`mapLinkUrl`.
+
+Load `extension-map.js` before the consumers to opt into shared Google maps:
+```js
+window.COLLECTION_BLOCKS_MAP_CONFIG = {
+  apiKey: 'BROWSER_RESTRICTED_KEY', language: 'en', style: 'clean',
+  options: { mapTypeControl: false, streetViewControl: false }
+};
+// Locator: map: { shared: true }
+// Location: map: { provider: 'google', zoom: 15 }
+```
+The existing iframe is Location's default and error fallback. Shared maps load
+lazily when requested and reuse the same API script. A cloud `mapId` can replace
+`style`; local options can override common options. Location's canvas uses
+`cb-card__map-canvas locb-card__map-canvas` and needs CSS dimensions just like
+its iframe. Google map internals retain Google's class names.
+
+`contactDisplay: 'compact'` shortens Location's website and social labels while
+preserving their destinations. Swiss phone numbers receive spaced display.
+Unrecognized YouTube channel identifiers are not guessed into handles. The
+source must provide a verified handle URL when one is desired. The default
+contact rendering remains compatible with existing installations.
+
+### Banner Block
+
+Load `banner-block.js` once, with `window.BANNER_BLOCK_CONFIGS = []` before it.
+Each configuration supports the existing `bodyClassConditions`,
+`destinationSelector`, `bannerSelectors`, `bannerPosition`, `imageBannerClass`,
+`videoBannerClass`, media sizing and caption settings. `blogBannerConfig`,
+`BlogBanner` and legacy classes remain compatibility aliases. The new public
+API is `BannerBlock.refresh()` and `getBannerFor(viewItem)`.
+
+Generated elements pair `cb-banner*` with `bnb-banner*`: root, `__image`,
+`__source`, `__caption-panel`, `__caption-title`, `__caption-subtitle`,
+`__caption-link`, `__caption-toggle`, `__caption-close`, `__icon` and the
+`--loading` / `--loaded` states. Site-specific image/video classes remain
+configuration choices. The original editable media are restored on entry into
+Squarespace editing mode; no page-wide subtree observer is used.
+
+### Gallery Block
+
+Load `gallery-block.js` with `window.GALLERY_BLOCK_CONFIGS = []`. For example:
+```js
+window.GALLERY_BLOCK_CONFIGS = [{
+  target: '.view-item .sqs-gallery-container', itemSelector: '.slide',
+  layout: 'native', fancybox: true
+}];
+```
+`layout` accepts `native`, `grid` or `rows` (native Squarespace image-only rows).
+Native mode preserves the gallery's image fitting and focal points. Grid uses
+`--gallery-columns` and `--gallery-gap`; rows exposes `--gallery-count` and
+retains the legacy `images-row` / count aliases. The root uses `cb-block
+ glb-block cb-gallery glb-gallery`; layout modifiers and `__item` / `__item--last`
+are paired likewise. `legacyLastSlide` is optional and defaults off.
+
+Fancybox remains a separate optional extension and external library. Load them
+before Gallery Block. `fancybox: false` leaves the viewer untouched;
+`fancybox: { libraryVersion: 5, libraryOptions: {...} }` supports existing v5
+installations, while the extension's default remains v6. Layout code does not
+implement another lightbox. `GalleryBlock.refresh()` is idempotent; editing
+mode removes the adapter and restores the native editing surface.

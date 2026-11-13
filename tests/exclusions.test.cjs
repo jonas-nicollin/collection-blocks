@@ -55,7 +55,7 @@ test('Related prefilter and fallback both reject featured content', () => {
 });
 test('Locator applies the common exclusions alongside its existing categories', () => {
   // Execute the actual local prefilter without starting Maps or the DOM renderer.
-  const code = read('locator-block.js').split('  function passesPreFilter(item){')[1].split('\n  var filtered =')[0];
+  const code = read('locator-block.js').split('  function passesPreFilter(item){')[1].split('\n  var filtered =')[0].split('\n  function resolvedLocation')[0];
   for (const preFilter of filters) {
     const locatorContext = vm.createContext({ cfg: { preFilter }, getCollectionUtils: () => window.CollectionBlocks.utils,
       asArray: value => Array.isArray(value) ? value : value ? [value] : [],

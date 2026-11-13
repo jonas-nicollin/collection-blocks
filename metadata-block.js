@@ -723,6 +723,15 @@ async function fetchPageJson(settings) {
     return `https://www.google.com/maps?q=${lat},${lng}`;
   }
 
+  function getLocationHref(itemData, block) {
+    const locator = window.CollectionBlocks?.utils?.buildLocatorUrl;
+    if (block.locatorUrl && locator) {
+      return locator(block.locatorUrl, itemData, block);
+    }
+    return block.href || (block.useGoogleMapsLink
+      ? getGoogleMapsUrl(itemData, block) : '') || '';
+  }
+
   function getLocationValues(itemData, block) {
     const source = getResolvedLocation(itemData, block);
     const tagValues = block.tagPrefix
@@ -889,7 +898,8 @@ async function fetchPageJson(settings) {
   function appendValuesToContent(content, values, block, itemData) {
     const mapsUrl = block.isLocation && block.useGoogleMapsLink
       ? getGoogleMapsUrl(itemData, block) : '';
-    const href = block.href || mapsUrl || '';
+    const href = block.isLocation ? getLocationHref(itemData, block)
+      : (block.href || mapsUrl || '');
     const target = block.target || block.googleMapsTarget || '';
     values.forEach((value, index) => {
       const element = createMetadataValueElement(
@@ -1049,7 +1059,8 @@ async function fetchPageJson(settings) {
       }
 
       const mapsUrl       = block.useGoogleMapsLink ? getGoogleMapsUrl(itemData, block) : '';
-      const href          = block.href || mapsUrl || '';
+      const href          = block.isLocation ? getLocationHref(itemData, block)
+        : (block.href || mapsUrl || '');
       const target        = block.target || block.googleMapsTarget || '';
       const groupSep      = block.groupSeparator ?? ',\u00A0';
       const isInline      = block.displayInline;
