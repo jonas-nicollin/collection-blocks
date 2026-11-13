@@ -741,10 +741,14 @@ function buildControls(zones,total,activeZone,searchValue){
   var batchSize = Math.max(1, Number(cfg.performance.domBatchSize || 8));
   var utils = getCollectionUtils();
   var index = 0;
+  var renderToken = {};
+  list.__lbRenderToken = renderToken;
+  function isCurrent() { return list.__lbRenderToken === renderToken; }
 
   var extensions = getCollectionBlocks() && getCollectionBlocks().extensions;
   if (extensions) extensions.destroy(list);
   function complete() {
+    if (!isCurrent()) return;
     if (extensions) extensions.sync(list, cfg.extensions, {
       blockPrefix: 'lb', paginated: cfg.display.pageSize > 0
     });
@@ -760,11 +764,13 @@ function buildControls(zones,total,activeZone,searchValue){
       return wrap.firstElementChild;
     },{
       batchSize:batchSize,
+      isCurrent:isCurrent,
       done:complete
     });
   }
 
   function appendBatch(){
+    if (!isCurrent()) return;
     var html = '';
     var end = Math.min(index + batchSize, n);
 

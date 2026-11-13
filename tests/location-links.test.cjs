@@ -34,7 +34,7 @@ test('Missing or invalid coordinates never generate a zero-coordinate place',()=
 });
 const window={};
 vm.runInNewContext(read('location-block.js').replace("if(document.readyState === 'loading'){",
- 'window.test={fieldValueHtml};\n'+"if(document.readyState === 'loading'){"),{
+ 'window.test={fieldValueHtml,buildMap};\n'+"if(document.readyState === 'loading'){"),{
  window,URL,document:{readyState:'loading',addEventListener(){}},Intl,Date});
 const field=window.test.fieldValueHtml;
 test('Compact contacts preserve destinations and never fabricate channel handles',()=>{
@@ -51,4 +51,13 @@ test('Compact contacts preserve destinations and never fabricate channel handles
 });
 test('Legacy website rendering remains unchanged without compact option',()=>{
  assert(field({type:'url'},'https://example.com/').includes('>https://example.com/</a>'));
+});
+
+test('Shared map accepts decimal-comma coordinates from Sheets',()=>{
+ window.CollectionBlocksMap={};
+ const html=window.test.buildMap({title:'Venue',latitude:'46,1989',longitude:'6,1451'},
+  {map:{provider:'google'}});
+ assert(html.includes('data-map-provider="google"'));
+ assert(html.includes('data-map-lat="46.1989"'));
+ assert(html.includes('data-map-lng="6.1451"'));
 });

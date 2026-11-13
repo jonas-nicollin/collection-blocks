@@ -1006,13 +1006,13 @@ function buildMapIframe(src, title){
 function buildMap(lieu, cfg){
   var src = getMapSrc(lieu, cfg);
   var title = 'Carte - ' + lieu.title;
+  var lat = validCoordinate(lieu.latitude, -90, 90);
+  var lng = validCoordinate(lieu.longitude, -180, 180);
   if(cfg.map && cfg.map.provider==='google' && window.CollectionBlocksMap &&
-      String(lieu.latitude ?? '').trim() && String(lieu.longitude ?? '').trim() &&
-      Number.isFinite(Number(lieu.latitude)) && Number.isFinite(Number(lieu.longitude)) &&
-      Math.abs(Number(lieu.latitude))<=90 && Math.abs(Number(lieu.longitude))<=180){
+      lat !== null && lng !== null){
     return '<div class="cb-card__map locb-card__map cb-card__map--lazy locb-card__map--lazy"'
-      + ' data-map-provider="google" data-map-lat="' + escHtml(lieu.latitude)
-      + '" data-map-lng="' + escHtml(lieu.longitude) + '" data-map-src="' + escHtml(src)
+      + ' data-map-provider="google" data-map-lat="' + escHtml(lat)
+      + '" data-map-lng="' + escHtml(lng) + '" data-map-src="' + escHtml(src)
       + '" data-map-title="' + escHtml(title) + '" aria-label="' + escHtml(title)
       + '"><div class="cb-card__map-placeholder locb-card__map-placeholder">'
       + escHtml(cfg.lazyMapPlaceholder || 'Carte') + '</div></div>';
@@ -1032,7 +1032,8 @@ function buildMapLink(lieu, cfg){
       var href=cfg.mapLinkUrl;
       if(cfg.mapLinkFocus && utils && utils.buildLocatorUrl){
         var location={addressLine1:lieu.address1,addressLine2:lieu.address2,
-          mapLat:Number(lieu.latitude),mapLng:Number(lieu.longitude)};
+          mapLat:validCoordinate(lieu.latitude,-90,90),
+          mapLng:validCoordinate(lieu.longitude,-180,180)};
         href=utils.buildLocatorUrl(href,{venue:{key:lieu.slug,location:location}},
           {source:'venue'});
       }
