@@ -627,10 +627,16 @@ async function fetchPageJson(settings) {
     const anchorBefore = settings.insertBefore
       ? document.querySelector(settings.insertBefore)
       : null;
-    const finalTarget = anchorAfter?.parentElement || anchorBefore?.parentElement || explicitTarget || fallbackTarget;
+    const bannerTarget = window.BannerBlock?.getMetadataTarget?.(settings.key);
+    const finalTarget = bannerTarget || anchorAfter?.parentElement || anchorBefore?.parentElement || explicitTarget || fallbackTarget;
     if (!finalTarget) return null;
 
     let wrapper = findMetadataWrapper(finalTarget, mountKey);
+    if (!wrapper && bannerTarget) {
+      wrapper = Array.from(document.querySelectorAll('.mb-wrapper[data-metadata-key]'))
+        .find(node => node.dataset.metadataKey === mountKey);
+      if (wrapper) bannerTarget.appendChild(wrapper);
+    }
     if (!wrapper && buildAutomatically) {
       wrapper = document.createElement('div');
       wrapper.className = 'mb-wrapper';
@@ -641,7 +647,9 @@ async function fetchPageJson(settings) {
       container.dataset.metadataKey = mountKey;
       if (settings.customClass) addCustomClasses(container, settings.customClass);
       wrapper.appendChild(container);
-      if (anchorAfter?.parentElement) {
+      if (bannerTarget) {
+        bannerTarget.appendChild(wrapper);
+      } else if (anchorAfter?.parentElement) {
         anchorAfter.parentElement.insertBefore(wrapper, anchorAfter.nextSibling);
       } else if (anchorBefore?.parentElement) {
         anchorBefore.parentElement.insertBefore(wrapper, anchorBefore);
@@ -664,6 +672,8 @@ async function fetchPageJson(settings) {
   }
 
   function getExpectedMetadataTarget(settings) {
+    const bannerTarget = window.BannerBlock?.getMetadataTarget?.(settings.key);
+    if (bannerTarget) return bannerTarget;
     const fallbackTarget = document.querySelector('.blog-item-top-wrapper');
     const targetSelector = settings.target || settings.moveToDestination;
     const explicitTarget = targetSelector
@@ -1194,4 +1204,5 @@ async function fetchPageJson(settings) {
   }
 
   document.addEventListener('turbolinks:load', startAll);
+  document.addEventListener('blogBannerReady', startAll);
 })();

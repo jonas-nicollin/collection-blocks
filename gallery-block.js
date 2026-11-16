@@ -45,8 +45,12 @@
         selectors: {image: 'img'}, blockPrefix: 'glb'
       }, cfg.fancybox === true ? {} : cfg.fancybox));
     }
+    var compact = null;
+    if (cfg.layout === 'compact') compact = mountCompact(root, items, cfg,
+      !!viewer && !!window.Fancybox && typeof window.Fancybox.show === 'function');
     var controller = {
       destroy: function () {
+        if (compact) compact();
         if (viewer) viewer.destroy();
         root.classList.remove.apply(root.classList, classes);
         root.style.removeProperty('--gallery-count');
@@ -60,6 +64,50 @@
     };
     controllers.set(root, controller);
     return controller;
+  }
+  function mountCompact(root, items, cfg, canExpand) {
+    const grid = items[0].parentElement;
+    // Adapt only one flat native gallery; leave other structures untouched.
+    if (!items.every(item => item.parentElement === grid)) return null;
+    const limit = Math.max(1, Math.floor(Number(cfg.visibleItems) || 8));
+    grid.classList.add('cb-gallery__grid', 'glb-gallery__grid');
+    const managed = [];
+    function mark(node, name) {
+      if (!node) return;
+      node.classList.add('cb-gallery__' + name, 'glb-gallery__' + name);
+      managed.push([node, name]);
+    }
+    items.forEach(function (item, index) {
+      mark(item.querySelector('.margin-wrapper'), 'frame');
+      mark(item.querySelector('a.image-slide-anchor'), 'link');
+      // Never conceal media when there is no working viewer to reveal it.
+      if (canExpand && index >= limit) mark(item, 'item--overflow');
+    });
+    var more = null, lastLink = null, oldLabel = null;
+    if (canExpand && items.length > limit) {
+      lastLink = items[limit - 1].querySelector('a.image-slide-anchor');
+      if (lastLink) {
+        more = document.createElement('span');
+        more.className = 'cb-gallery__more glb-gallery__more';
+        more.setAttribute('aria-hidden', 'true');
+        more.textContent = cfg.moreIcon || 'open_in_full';
+        oldLabel = lastLink.getAttribute('aria-label');
+        lastLink.setAttribute('aria-label', (cfg.moreLabel || 'View all images') +
+          ' (' + items.length + ')');
+        lastLink.append(more);
+      }
+    }
+    return function () {
+      grid.classList.remove('cb-gallery__grid', 'glb-gallery__grid');
+      managed.forEach(function (entry) {
+        entry[0].classList.remove('cb-gallery__' + entry[1], 'glb-gallery__' + entry[1]);
+      });
+      if (more) more.remove();
+      if (lastLink) {
+        if (oldLabel === null) lastLink.removeAttribute('aria-label');
+        else lastLink.setAttribute('aria-label', oldLabel);
+      }
+    };
   }
   function refresh() {
     controllers.forEach(function (controller, root) {

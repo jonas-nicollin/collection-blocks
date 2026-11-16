@@ -19,6 +19,14 @@
   let didPreloadFirstBanner = false;
 
   window.BannerBlock = window.BlogBanner = {
+    getMetadataTarget(key) {
+      for (const banner of insertedBanners.values()) {
+        if (banner.isConnected && banner._bnbHeading?.metadataKey === key) {
+          return banner.querySelector('.bnb-banner__metadata');
+        }
+      }
+      return null;
+    },
     getBannerFor(viewItem) {
       return insertedBanners.get(viewItem) || null;
     },
@@ -50,7 +58,8 @@
 
       dbg("config[" + i + "] match:", matches, config.bodyClassConditions);
 
-      if (matches) applyBannerConfig(config);
+      const path = location.pathname.replace(/\/$/, '') || '/';
+      if (matches && (!config.paths || config.paths.includes(path))) applyBannerConfig(config);
     });
   }
 
@@ -97,6 +106,7 @@
         if (banner) {
           insertedBanners.set(viewItem, banner);
           markSourceBlock(bannerBlock);
+          mountHeading(viewItem, banner, config);
           insertedImageCount++;
         }
       } else if (videoBlock) {
@@ -104,6 +114,7 @@
 
         if (banner) {
           insertedBanners.set(viewItem, banner);
+          mountHeading(viewItem, banner, config);
           insertedVideoCount++;
         }
       }
@@ -127,6 +138,34 @@
         bubbles: false,
       })
     );
+  }
+
+  // Move the real title: one H1 and an exact restoration point for the editor.
+  // Heading integration is opt-in; the existing media-only contract is unchanged.
+  function mountHeading(viewItem, banner, config) {
+    if (!config.heading) return;
+    const options = config.heading === true ? {} : config.heading;
+    const title = viewItem.querySelector(options.selector || '.blog-item-title h1');
+    if (!title || banner.contains(title)) return;
+    const placeholder = document.createComment('Banner Block original title position');
+    title.before(placeholder);
+    const body = document.createElement('div');
+    body.className = 'cb-banner__body bnb-banner__body';
+    title.classList.add('cb-banner__title', 'bnb-banner__title');
+    body.append(title);
+    const metadata = document.createElement('div');
+    metadata.className = 'cb-banner__metadata bnb-banner__metadata';
+    if (options.metadataKey) body.append(metadata);
+    banner.append(body);
+    const source = options.hideSourceSelector
+      ? viewItem.querySelector(options.hideSourceSelector) : placeholder.parentElement;
+    const sourceHidden = source?.hidden;
+    if (source && !source.contains(banner)) {
+      source.hidden = true;
+      source.classList.add('cb-banner__heading-source', 'bnb-banner__heading-source');
+    }
+    banner._bnbHeading = { title, placeholder, source, sourceHidden,
+      metadataKey: options.metadataKey };
   }
 
   function selectBannerBlock(contentWrapper, config) {
@@ -447,6 +486,18 @@
 
   function releaseForEditor(){
     insertedBanners.forEach(function(banner){
+      const heading = banner._bnbHeading;
+      if (heading) {
+        if (heading.placeholder.isConnected) heading.placeholder.replaceWith(heading.title);
+        heading.title.classList.remove('cb-banner__title', 'bnb-banner__title');
+        if (heading.source) {
+          heading.source.hidden = heading.sourceHidden;
+          heading.source.classList.remove('cb-banner__heading-source', 'bnb-banner__heading-source');
+        }
+        // Metadata owns its content; restore it next to the original title.
+        const metadata = banner.querySelector('.bnb-banner__metadata .mb-wrapper');
+        if (metadata && heading.source?.isConnected) heading.source.after(metadata);
+      }
       if(banner._bnbVideo){
         const video=banner._bnbVideo;
         if(video.placeholder.isConnected)video.placeholder.replaceWith(video.block);

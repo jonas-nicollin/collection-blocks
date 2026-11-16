@@ -1528,6 +1528,22 @@ Each configuration supports the existing `bodyClassConditions`,
 `BlogBanner` and legacy classes remain compatibility aliases. The new public
 API is `BannerBlock.refresh()` and `getBannerFor(viewItem)`.
 
+`paths` optionally restricts a configuration to exact pathnames (without a
+trailing slash). Put specific configurations before a broader fallback.
+`heading: { selector: '.blog-item-title h1',
+hideSourceSelector: '.blog-item-top-wrapper', metadataKey: 'member-category' }`
+moves the existing title into `cb-banner__body bnb-banner__body`, preserving one
+H1 and its original position for editor restoration. No native title is hidden
+when the banner cannot mount. The optional `metadataKey` identifies a Metadata
+configuration; Metadata mounts its own content in the banner's metadata slot.
+`BannerBlock.getMetadataTarget(key)` exposes that slot. The `blogBannerReady`
+event also handles Metadata loading before Banner. Avoid placing unrelated
+content in a wrapper selected by `hideSourceSelector`.
+
+Heading classes pair `cb-banner__title`, `__metadata`, `__heading-source` with
+the `bnb-*` aliases. Editor entry restores the title and metadata; no polling or
+document-wide mutation observer is involved. Site CSS chooses the composition.
+
 Generated elements pair `cb-banner*` with `bnb-banner*`: root, `__image`,
 `__source`, `__caption-panel`, `__caption-title`, `__caption-subtitle`,
 `__caption-link`, `__caption-toggle`, `__caption-close`, `__icon` and the
@@ -1544,12 +1560,24 @@ window.GALLERY_BLOCK_CONFIGS = [{
   layout: 'native', fancybox: true
 }];
 ```
-`layout` accepts `native`, `grid` or `rows` (native Squarespace image-only rows).
+`layout` accepts `native`, `grid`, `compact` or `rows` (native image-only rows).
 Native mode preserves the gallery's image fitting and focal points. Grid uses
 `--gallery-columns` and `--gallery-gap`; rows exposes `--gallery-count` and
 retains the legacy `images-row` / count aliases. The root uses `cb-block
  glb-block cb-gallery glb-gallery`; layout modifiers and `__item` / `__item--last`
 are paired likewise. `legacyLastSlide` is optional and defaults off.
+
+`compact` adapts a flat native Squarespace grid with four desktop, three tablet
+and two mobile columns. `visibleItems: 8` limits the preview only when Fancybox
+has mounted successfully. All media remain in the viewer; without a viewer all
+items remain visible. `moreLabel` supplies the accessible label and `moreIcon`
+defaults to `open_in_full` (load that Material Symbols glyph on the site).
+The shared styles expose `--gallery-columns`, `--gallery-columns-tablet`,
+`--gallery-columns-mobile`, `--gallery-gap`, `--gallery-gap-mobile`,
+`--gallery-image-padding`, `--gallery-radius` and `--gallery-more-background`.
+Compact classes pair `cb-gallery__grid`, `__frame`, `__link`, `__more` and
+`__item--overflow` with `glb-*`. The adapter restores native classes and link
+labels when destroyed or when entering editing mode.
 
 Fancybox remains a separate optional extension and external library. Load them
 before Gallery Block. `fancybox: false` leaves the viewer untouched;
