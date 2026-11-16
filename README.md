@@ -1633,7 +1633,7 @@ after a complete successful source load. Browser storage failure does not preven
 the current route from working. Selection is local, with no account or telemetry.
 
 Visitors add/remove and reorder up to four stops. Google Maps links preserve
-that order, use walking mode and omit an origin so Google can handle it. Up to
+that order and omit an origin so Google can handle it. Walking is the default. Up to
 three intermediate waypoints are supported on mobile browsers; there is also a
 single-stop navigation link. Google supplies directions, durations and guidance;
 this extension does not optimize stops or infer opening hours. Removing a visited
@@ -1653,10 +1653,10 @@ name/address or a Place ID, coordinate fallback remains available.
 
 The optional preview uses the existing Locator map (`instance.getMap()`) and
 Google's Routes library, requiring Routes API access on that Maps project. It
-calculates walking directions between selected stops, in their given order;
+calculates directions between selected stops, in their given order;
 the visitor's location is used only by Google Maps after opening navigation.
-Route duration excludes travel to the first stop. Requests follow changed stop
-sequences with a short debounce; unchanged renders do not recalculate. A bounded
+The preview does not request or display duration/distance. Requests follow changed stop
+sequences or travel mode with a short debounce; unchanged renders do not recalculate. A bounded
 in-memory cache avoids repeated requests within the mounted session. Stale
 responses are ignored, and teardown removes map overlays. Google route warnings
 remain visible even when the selection panel is collapsed. On service failure,
@@ -1667,7 +1667,34 @@ All planner elements pair `cb-route-planner*` with `lb-route-planner*`: root,
 `__summary`, `__list`, `__stop`, `__name`, `__controls`, `__button`, `__icon`,
 `__add`, `__add--icon`, `__media`, `__empty`, `__actions`, `__action-label`,
 `__maps`, `__next`, `__status`, `__preview`, `__warnings`, `__number`, `__title`,
-`__expand`, `__collapse`. Buttons use native
+`__expand`, `__collapse`, `__drag`, `__stop--dragging`, `__stop--drop-target`,
+`__add--list`, `__modes`, `__mode`, `__mode-label`, `__mode-note`. Buttons use native
 `disabled` and `aria-pressed` states. Load `arrow_downward`, `arrow_upward` and
 `close`, `add_location`, `check`, `expand_less`, `expand_more`, and `navigation`
 Material Symbols. Site-specific typography belongs in Custom CSS.
+
+
+Version 0.15 adds opt-in `travelModes: ['walking', 'bicycling', 'driving',
+ 'transit']`, `travelMode` (default: first configured mode) and
+`urlState.mode: 'transport'`. The selected mode is retained locally and in that
+URL parameter. Public transport opens only the next stop in Google Maps; it
+never requests an unsupported multi-stop transit route. The explicit mode label
+remains visible. Existing configurations without these options stay walking-only.
+
+Stops support pointer drag from `drag_indicator` and ArrowUp/ArrowDown on the
+same handle. Alternate move buttons remain visible on touch and on hover/focus.
+Numbered circles match map markers; selection announcements are screen-reader
+only. `listMediaQuery` moves icon controls to the right of a card at a site-defined
+list breakpoint; native `layout: 'list'` does this without a media query. Icon
+circles are 40px inside a 44px target. Optional glyphs are `directions_bike`,
+`directions_car`, `directions_transit`, `directions_walk` and `drag_indicator`.
+
+`--locator-sidebar-padding` (default 1rem) aligns Locator controls, grid and route
+planner. Grid cards rely on body padding, without an additional outer card gap.
+`--route-stop-name-max-width` limits stop labels; overflow uses ellipsis.
+
+With `mapRoute.enabled`, omitting `color` uses Google's default `createPolylines()`
+style. A fixed `color` or `colorVariable: '--my-route-color'` can override it;
+the variable must resolve to a complete CSS color. No color is forced by GAW.
+Banner return links support `--banner-back-max-width` (default 24rem), and the
+existing `__back-label` is truncated with ellipsis while retaining its full text.
