@@ -152,7 +152,7 @@
         if (!control) {
           control = node('button', '__add'); control.type = 'button';
           control.dataset.routeAction = 'toggle'; control.dataset.routeId = item.id;
-          var host = card.querySelector('.lb-card__body') || card;
+          var host = card.querySelector('.cb-card__body') || card;
           host.append(control);
         }
         var chosen = ids.includes(item.id);

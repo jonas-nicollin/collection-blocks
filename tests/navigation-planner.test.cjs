@@ -78,7 +78,8 @@ test('Google links preserve the chosen order with at most three waypoints and a 
 });
 test('planner stays unique through card rerenders and restores all controls on teardown', () => {
   const p = environment('<div class="lb-block"><div class="lb-sidebar"><div class="lb-grid">'+
-    galleries.slice(0,2).map(i=>'<div class="lb-card" data-item-id="'+i.id+'"><div class="lb-card__body"></div></div>').join('')+
+    galleries.slice(0,2).map(i=>'<div class="lb-card" data-item-id="'+i.id+'">'+
+      '<div class="cb-card__media lb-card__body"></div><div class="cb-card__body lb-card__body"></div></div>').join('')+
     '</div></div></div>');
   const root=p.document.querySelector('.lb-block');
   const instance={root,config:{key:'demo',display:{},routePlanner:{categories:['Galerie']}},
@@ -88,6 +89,7 @@ test('planner stays unique through card rerenders and restores all controls on t
   assert.equal(root.querySelector('summary').textContent,'Mon parcours (1/4)');
   c.refresh(); assert.equal(root.querySelectorAll('details').length,1);
   assert.equal(root.querySelectorAll('.cb-route-planner__add').length,2);
+  assert.equal(root.querySelectorAll('.cb-card__media button').length,0);
   assert.equal(root.querySelector('[aria-pressed="true"]').dataset.routeId,'g0');
   c.destroy(); assert.equal(root.querySelectorAll('button,details').length,0);
 });
