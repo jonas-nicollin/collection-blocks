@@ -204,7 +204,7 @@
       return routeParam && params.has(routeParam)
         ? params.get(routeParam).split('|').filter(Boolean).slice(0, model.max) : null;
     }
-    var pendingRoute = readRouteURL();
+    var pendingRoute = readRouteURL(), urlDirty = true;
     function writeRouteURL() {
       if (!routeParam || pendingRoute !== null || !instance.isComplete()) return;
       var url = new URL(window.location.href);
@@ -305,7 +305,7 @@
         control.title = label;
         control.disabled = chosen && iconCards || !chosen && ids.length >= model.max;
       });
-      writeRouteURL();
+      if (urlDirty && instance.isComplete()) { writeRouteURL(); urlDirty = false; }
       if (preview && instance.isComplete()) preview.update(selected);
     }
     function onClick(event) {
@@ -315,7 +315,7 @@
       if (control.disabled) return;
       var action = control.dataset.routeAction, id = control.dataset.routeId;
       if (action === 'add' && model.ids().includes(id)) return;
-      pendingRoute = null;
+      pendingRoute = null; urlDirty = true;
       var changed = action === 'up' || action === 'down'
         ? model.move(id, action === 'up' ? -1 : 1) : model.toggle(id);
       if (!changed) { status.textContent = labels.limit; return; }
@@ -329,7 +329,7 @@
     }
     function onHistory() {
       if (!root.isConnected) { controller.destroy(); return; }
-      pendingRoute = readRouteURL();
+      pendingRoute = readRouteURL(); urlDirty = true;
       if (pendingRoute === null) pendingRoute = [];
       refresh();
     }

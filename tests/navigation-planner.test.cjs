@@ -132,6 +132,9 @@ test('shared route URL overrides local selection, preserves filters, and icon ca
   assert.equal(p.window.location.searchParams.get('categorie'),'Galerie');
   assert.equal(p.window.location.searchParams.get('unrelated'),'1');
   p.window.location=new URL('https://example.com/map?parcours=');
+  // Locator can render its restored filters before the planner receives popstate.
+  c.refresh();
+  assert.equal(p.window.location.searchParams.get('parcours'),'');
   p.window.dispatchEvent(new p.window.Event('popstate'));
   assert.deepEqual(names(),[]);
   c.destroy();
