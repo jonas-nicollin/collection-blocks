@@ -80,7 +80,8 @@
       api.href(destination, query, probe, false, []);
     });
     var labels = Object.assign({ loading: 'Chargement des critères…',
-      results: 'Voir les résultats', empty: 'Aucun résultat',
+      results: 'Voir les résultats', empty: window.CollectionBlocks.utils.emptyMessage
+        ? window.CollectionBlocks.utils.emptyMessage(options.locale) : 'Aucun résultat.',
       unavailable: 'Les compteurs sont indisponibles.', fallback: 'Consulter le programme',
       form: 'Explorer le programme', links: 'Explorer le programme'
     }, options.i18n || {});

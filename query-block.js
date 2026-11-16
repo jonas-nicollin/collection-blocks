@@ -4045,10 +4045,23 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     var initialURLState = readFilterURL(fc, defaultTabIndex);
     if (initialURLState) defaultTabIndex = initialURLState.tabIndex;
 
+    if (fc.urlState) {
+      // Capture before opening a card, including a new tab or a keyboard click.
+      var rememberOverview = function(event) {
+        var link = event.target.closest && event.target.closest('a[href]');
+        var utils = window.CollectionBlocks && window.CollectionBlocks.utils;
+        if (link && target.contains(link) && link.closest('.qb-card') &&
+            utils && utils.rememberOverviewURL) utils.rememberOverviewURL(link.href);
+      };
+      target.addEventListener('pointerdown', rememberOverview);
+      target.addEventListener('click', rememberOverview);
+    }
+
     var i18n = Object.assign({
       loading: false,
       all: 'Tout',
-      noResults: 'Aucun r\u00e9sultat',
+      noResults: window.CollectionBlocks.utils.emptyMessage
+        ? window.CollectionBlocks.utils.emptyMessage(cfg.locale) : 'Aucun résultat.',
       loadMoreLabel: 'Voir plus',
       endLabel: '',
       filterToggle: 'Filtrer',

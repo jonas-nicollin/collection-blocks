@@ -107,6 +107,7 @@
           insertedBanners.set(viewItem, banner);
           markSourceBlock(bannerBlock);
           mountHeading(viewItem, banner, config);
+          mountBackLink(banner, config);
           insertedImageCount++;
         }
       } else if (videoBlock) {
@@ -115,6 +116,7 @@
         if (banner) {
           insertedBanners.set(viewItem, banner);
           mountHeading(viewItem, banner, config);
+          mountBackLink(banner, config);
           insertedVideoCount++;
         }
       }
@@ -166,6 +168,31 @@
     }
     banner._bnbHeading = { title, placeholder, source, sourceHidden,
       metadataKey: options.metadataKey };
+  }
+
+  function mountBackLink(banner, config) {
+    if (!config.backLink || !config.backLink.href) return;
+    const options = config.backLink;
+    const utils = window.CollectionBlocks && window.CollectionBlocks.utils;
+    let href;
+    try {
+      href = utils && utils.getOverviewURL
+        ? utils.getOverviewURL(options.href, options.preserveFilters !== false)
+        : new URL(options.href, location.href).href;
+      if (!href || !/^https?:$/.test(new URL(href).protocol)) return;
+    } catch (_) { return; }
+    const link = document.createElement('a');
+    link.className = 'cb-banner__back-link bnb-banner__back-link';
+    link.href = href;
+    const icon = document.createElement('span');
+    icon.className = 'cb-banner__back-icon bnb-banner__back-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = options.icon || 'arrow_back';
+    const label = document.createElement('span');
+    label.className = 'cb-banner__back-label bnb-banner__back-label';
+    label.textContent = options.label || 'Back';
+    link.append(icon, label);
+    banner.prepend(link);
   }
 
   function selectBannerBlock(contentWrapper, config) {

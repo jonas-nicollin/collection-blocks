@@ -1939,7 +1939,11 @@
         inner.innerHTML = "";
         const heading = buildHeadingElement([], CFG, true);
         if (heading) inner.appendChild(heading);
-        const message = cleanText(CFG.emptyState?.message || "");
+        const automatic = CFG.emptyState?.message === true;
+        const utils = getCollectionBlocks()?.utils;
+        const message = automatic ? (utils?.emptyMessage
+            ? utils.emptyMessage(CFG.locale) : 'Aucun résultat.')
+            : cleanText(CFG.emptyState?.message || "");
         if (message) {
             const empty = document.createElement("div");
             empty.className = "cb-empty rb-empty";

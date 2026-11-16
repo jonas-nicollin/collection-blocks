@@ -1,6 +1,13 @@
 (function(){
 'use strict';
 var nextFilterId=0;
+var locatorInstances=new Map();
+window.LocatorBlock=Object.assign(window.LocatorBlock||{}, {
+  getInstances:function(){
+    locatorInstances.forEach(function(_,root){if(!root.isConnected)locatorInstances.delete(root);});
+    return Array.from(locatorInstances.values());
+  }
+});
 var clean=[
   /* Tous les POI off — restaurants, commerces, loisirs, etc. */
   {featureType:'poi',stylers:[{visibility:'off'}]},
@@ -44,9 +51,11 @@ var I18N_DEFAULTS={
   en:{noResults:'No results in this area',allZones:'All areas',searchPlaceholder:'Search…',itemCount:function(n){return n+' exhibition'+(n>1?'s':'');},loading:'Loading…',error:'Unable to load data.'},
 };
 function getI18n(cfg){
-  var locale=detectLocale();
+  var utils=getCollectionUtils();
+  var locale=utils&&utils.resolveLocale?utils.resolveLocale(cfg.locale):detectLocale();
   var base=I18N_DEFAULTS[locale]||I18N_DEFAULTS.fr;
-  return Object.assign({},base,cfg.i18n||{});
+  return Object.assign({},base,{noResults:utils&&utils.emptyMessage
+    ?utils.emptyMessage(locale):(locale==='en'?'No results.':'Aucun résultat.')},cfg.i18n||{});
 }
 
 function normalizeCollectionRef(ref){
@@ -753,6 +762,9 @@ function buildControls(zones,total,activeZone,searchValue){
       blockPrefix: 'lb', paginated: cfg.display.pageSize > 0
     });
     if (typeof done === 'function') done(n);
+    document.dispatchEvent(new CustomEvent('cb:locator-render', {
+      detail:{root:list.closest('.lb-block')}
+    }));
   }
   list.innerHTML = '';
   LOCATOR_RENDER_IMAGE_INDEX = 0;
@@ -792,7 +804,7 @@ function buildControls(zones,total,activeZone,searchValue){
 function buildSkeleton(){var s='';for(var i=0;i<4;i++)s+='<div class="'+escHtml(CLS_CARD+' '+CLS_SKELETON_CARD)+'"><div class="'+escHtml(CLS_MEDIA)+'"></div><div class="'+escHtml(CLS_BODY)+'"><div class="lb-skeleton-line" style="width:20%"></div><div class="lb-skeleton-line" style="width:70%"></div><div class="lb-skeleton-line" style="width:45%"></div></div></div>';return s;}
 
 /* ── Instance ── */
-function createInstance(root,allItems,fetchMoreItems){
+function createInstance(root,allItems,fetchMoreItems,sourceComplete){
   var map,markers={},clusterer=null,activeId=null,activePopup=null,activeZone='',activeSearch='';
   var mapTouched=false;
   var requestedPlace=null, focusedPlace=null, deepLinkOpened=false;
@@ -1226,7 +1238,7 @@ function createInstance(root,allItems,fetchMoreItems){
     if(!cfg.display.cardClickable){
       /* Mode par défaut : clic → active carte + popup (navigation via card-link) */
       card.addEventListener('click',function(e){
-        if(e.target.closest('.lb-card__link'))return;
+        if(e.target.closest('a,button,input,select,textarea'))return;
         activate(id,true);showPopup(markers[id]&&markers[id].item);
       });
     } else {
@@ -1256,6 +1268,7 @@ function createInstance(root,allItems,fetchMoreItems){
   if(typeof fetchMoreItems === 'function' && visibleCount >= items.length){
     try{
       var result = await fetchMoreItems();
+      if(result&&result.dataComplete!==undefined)sourceComplete=result.dataComplete;
       var nextItems = Array.isArray(result) ? result : (result && result.items);
 
       if(Array.isArray(nextItems)&&nextItems.length>allItems.length){
@@ -1284,7 +1297,8 @@ function createInstance(root,allItems,fetchMoreItems){
       markers[id].marker.setVisible(!!visibleIds[id]);
     });
   }
-  function setItems(nextItems){
+  function setItems(nextItems,complete){
+    if(complete!==undefined)sourceComplete=complete;
     if(!Array.isArray(nextItems)||!nextItems.length)return;
     allItems=nextItems;
     addMissingMarkers(allItems);
@@ -1315,14 +1329,19 @@ function createInstance(root,allItems,fetchMoreItems){
   removeClasses(root, CLS_BLOCK_LOADING);
   root.removeAttribute('data-cb-classes');
   root.innerHTML='<div class="'+escHtml(CLS_INNER+lc)+'"><div class="'+escHtml(CLS_SIDEBAR)+'">'+buildControls(zones,allItems.length,activeZone,activeSearch)+'<div class="'+escHtml(listClass())+'"></div></div><div class="'+escHtml(CLS_MAP_WRAP)+'"><div class="'+escHtml(CLS_MAP)+'"></div></div></div>';
+  var instance={root:root,config:cfg,setItems:setItems,
+    getItems:function(){return allItems.slice();},
+    isComplete:function(){return !!sourceComplete;}};
+  locatorInstances.set(root,instance);
   setupMobileSheet();
   buildMap(root.querySelector('.lb-map'));addAllMarkers();
   fitItemsOnMap(allItems,true);
   renderList(allItems,visibleCount);
   bindControls();
   openRequestedPlace();
+  document.dispatchEvent(new CustomEvent('cb:locator-ready',{detail:{instance:instance}}));
   log('Instance:',allItems.length,'marqueurs');
-  return {setItems:setItems};
+  return instance;
 }
 
 /* ── Init ── */
@@ -1349,6 +1368,7 @@ async function init(){
     var loadedMaxPages = initialMaxPages;
     var progressiveMaxPages = cfg.performance.progressiveMaxPages || 'all';
     var sourceComplete = !!(itemState.complete || itemState.fetchError);
+    var dataComplete = !!itemState.complete && !itemState.fetchError;
     var isFetchingMore = false;
 
     if(cfg.performance.filterIndex !== false && !sourceComplete){
@@ -1358,6 +1378,7 @@ async function init(){
           items = completeState.items;
           loadedMaxPages = completeState.pagesLoaded || loadedMaxPages;
           sourceComplete = !!(completeState.complete || completeState.fetchError);
+          dataComplete = !!completeState.complete && !completeState.fetchError;
         }
       }catch(filterErr){
         log('Filter index failed:', filterErr);
@@ -1368,7 +1389,7 @@ async function init(){
 
 async function fetchMoreItems(){
   if(sourceComplete || isFetchingMore){
-    return {items:items, changed:false, complete:sourceComplete};
+    return {items:items, changed:false, complete:sourceComplete, dataComplete:dataComplete};
   }
 
   if(progressiveMaxPages !== 'all' && Number(loadedMaxPages) >= Number(progressiveMaxPages)){
@@ -1387,18 +1408,19 @@ async function fetchMoreItems(){
     var more = nextState.items || [];
     var changed = more.length > items.length;
     sourceComplete = !!(nextState.complete || nextState.fetchError);
+    dataComplete = !!nextState.complete && !nextState.fetchError;
 
     if(changed){
       items = more;
     }
 
-    return {items:items, changed:changed, complete:sourceComplete};
+    return {items:items, changed:changed, complete:sourceComplete, dataComplete:dataComplete};
   }finally{
     isFetchingMore = false;
   }
 }
 
-var instances=roots.map(function(r){return createInstance(r,items,fetchMoreItems);});
+var instances=roots.map(function(r){return createInstance(r,items,fetchMoreItems,dataComplete);});
 
 function completeInIdle(){
   if (typeof fetchMoreItems !== 'function') return;
@@ -1406,11 +1428,11 @@ function completeInIdle(){
   fetchMoreItems().then(function(result){
     if (!result) return;
 
-    if (result.changed) {
+    if (result.changed || result.dataComplete) {
       items = result.items || items;
 
       instances.forEach(function(instance){
-        if(instance&&typeof instance.setItems==='function')instance.setItems(items);
+        if(instance&&typeof instance.setItems==='function')instance.setItems(items,result.dataComplete);
       });
     }
 

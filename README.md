@@ -1521,7 +1521,10 @@ contact rendering remains compatible with existing installations.
 
 ### Banner Block
 
-Load `banner-block.js` once, with `window.BANNER_BLOCK_CONFIGS = []` before it.
+Load `banner-block.css` and `banner-block.js` once, with
+`window.BANNER_BLOCK_CONFIGS = []` before the script. Since v0.13.0 the optional
+Banner/Gallery styles are separate from `collection-blocks.css`; when upgrading
+that stylesheet, add both component stylesheets for any components in use.
 Each configuration supports the existing `bodyClassConditions`,
 `destinationSelector`, `bannerSelectors`, `bannerPosition`, `imageBannerClass`,
 `videoBannerClass`, media sizing and caption settings. `blogBannerConfig`,
@@ -1540,6 +1543,19 @@ configuration; Metadata mounts its own content in the banner's metadata slot.
 event also handles Metadata loading before Banner. Avoid placing unrelated
 content in a wrapper selected by `hideSourceSelector`.
 
+`backLink: { href: '/members', label: 'Members', preserveFilters: true }` adds a
+top-left overview link, independently of `heading`. It uses `arrow_back` from
+Material Symbols (or `backLink.icon`) with a visible accessible label. Classes
+pair `cb-banner__back-link`, `__back-icon`, `__back-label` with `bnb-*` aliases.
+`--banner-back-inset` controls its position; site CSS controls colors and type.
+With the shared core loaded, the link can restore a Query overview URL captured
+when that item was opened. It accepts only the configured same-origin overview
+path, expires after 24 hours and remains confined to the browser tab session.
+Blocked storage or a direct arrival falls back to `href`, never `history.back()`.
+Query participates automatically when `filters.urlState` is enabled. URL state
+remains opt-in: multiple filter blocks on one page need distinct parameter names
+to avoid overwriting each other's state. Use explicit mappings on overview pages.
+
 Heading classes pair `cb-banner__title`, `__metadata`, `__heading-source` with
 the `bnb-*` aliases. Editor entry restores the title and metadata; no polling or
 document-wide mutation observer is involved. Site CSS chooses the composition.
@@ -1553,7 +1569,8 @@ Squarespace editing mode; no page-wide subtree observer is used.
 
 ### Gallery Block
 
-Load `gallery-block.js` with `window.GALLERY_BLOCK_CONFIGS = []`. For example:
+Load `gallery-block.css` and `gallery-block.js` with
+`window.GALLERY_BLOCK_CONFIGS = []`. For example:
 ```js
 window.GALLERY_BLOCK_CONFIGS = [{
   target: '.view-item .sqs-gallery-container', itemSelector: '.slide',
@@ -1575,7 +1592,7 @@ defaults to `open_in_full` (load that Material Symbols glyph on the site).
 The shared styles expose `--gallery-columns`, `--gallery-columns-tablet`,
 `--gallery-columns-mobile`, `--gallery-gap`, `--gallery-gap-mobile`,
 `--gallery-image-padding`, `--gallery-radius` and `--gallery-more-background`.
-Compact classes pair `cb-gallery__grid`, `__frame`, `__link`, `__more` and
+Compact classes pair `cb-gallery__grid`, `__frame`, `__link`, `__media`, `__more` and
 `__item--overflow` with `glb-*`. The adapter restores native classes and link
 labels when destroyed or when entering editing mode.
 
@@ -1585,3 +1602,45 @@ before Gallery Block. `fancybox: false` leaves the viewer untouched;
 installations, while the extension's default remains v6. Layout code does not
 implement another lightbox. `GalleryBlock.refresh()` is idempotent; editing
 mode removes the adapter and restores the native editing surface.
+
+### Shared empty messages (v0.13.0)
+
+`CollectionBlocks.utils.emptyMessage(locale)` supplies the neutral empty message
+for Query, Locator and Explorer. Resolution order is explicit `locale`, page
+`html[lang]`, Squarespace website language, then French when no language exists.
+French, English, German and Italian are included; other languages fall back to
+English. Explicit `i18n.noResults` (Query/Locator) or `i18n.empty` (Explorer)
+overrides the default. This does not translate editorial text or all controls.
+Related opts in with `emptyState.message: true`; a string remains a custom
+message, and its existing hidden-on-empty behavior is unchanged.
+
+### Route Planner (optional, v0.13.0)
+
+Load `extension-route-planner.css` and `extension-route-planner.js`. Set a Locator
+configuration's `routePlanner` to `{ categories: ['Gallery'], maxStops: 4,
+storageKey: 'member-galleries' }`. Category names must match that site's source;
+omit `categories` to allow all resolved places. `enabled: false` disables it.
+Use `display.cardClickable: false` so cards can contain real buttons; normal
+member links can remain enabled. No other collection or API request is made.
+
+The extension uses `LocatorBlock.getInstances()` and the `cb:locator-ready` /
+`cb:locator-render` lifecycle events, so either script order works. It reads the
+same resolved items/coordinates as Locator, without geocoding or rendering a
+parallel collection. Buttons attach only to already-rendered eligible cards.
+Filtering, pagination and progressive rendering retain the selected route.
+Stored IDs are resolved against current items; removed places are discarded only
+after a complete successful source load. Browser storage failure does not prevent
+the current route from working. Selection is local, with no account or telemetry.
+
+Visitors add/remove and reorder up to four stops. Google Maps links preserve
+that order, use walking mode and omit an origin so Google can handle it. Up to
+three intermediate waypoints are supported on mobile browsers; there is also a
+single-stop navigation link. Google supplies directions, durations and guidance;
+this extension does not optimize stops or infer opening hours. Removing a visited
+stop advances the next-stop link. Labels support `locale` and `i18n` overrides.
+
+All planner elements pair `cb-route-planner*` with `lb-route-planner*`: root,
+`__summary`, `__list`, `__stop`, `__name`, `__controls`, `__button`, `__icon`,
+`__add`, `__empty`, `__actions`, `__maps`, `__next`, `__status`. Buttons use native
+`disabled` and `aria-pressed` states. Load `arrow_downward`, `arrow_upward` and
+`close` Material Symbols. Site-specific typography belongs in Custom CSS.

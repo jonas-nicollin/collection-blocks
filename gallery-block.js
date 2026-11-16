@@ -70,6 +70,8 @@
     // Adapt only one flat native gallery; leave other structures untouched.
     if (!items.every(item => item.parentElement === grid)) return null;
     const limit = Math.max(1, Math.floor(Number(cfg.visibleItems) || 8));
+    // The image viewer must cover every item before any previews are concealed.
+    canExpand = canExpand && items.every(item => item.querySelector('a.image-slide-anchor'));
     grid.classList.add('cb-gallery__grid', 'glb-gallery__grid');
     const managed = [];
     function mark(node, name) {
@@ -80,6 +82,8 @@
     items.forEach(function (item, index) {
       mark(item.querySelector('.margin-wrapper'), 'frame');
       mark(item.querySelector('a.image-slide-anchor'), 'link');
+      mark(item.querySelector('.content-wrapper'), 'media');
+      mark(item.querySelector('.content-wrapper.content-fill .sqs-video-wrapper'), 'media');
       // Never conceal media when there is no working viewer to reveal it.
       if (canExpand && index >= limit) mark(item, 'item--overflow');
     });

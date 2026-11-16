@@ -1,0 +1,29 @@
+/* Banner content is opt-in; composition and typography belong to the site. */
+:where(.cb-banner__body).bnb-banner__body { position: relative; z-index: 1; }
+:where(.cb-banner__metadata).bnb-banner__metadata:empty { display: none; }
+:where(.cb-banner__heading-source).bnb-banner__heading-source[hidden] {
+  display: none !important;
+}
+
+:where(.cb-banner).bnb-banner { position: relative; }
+:where(.cb-banner__back-link).bnb-banner__back-link {
+  position: absolute;
+  z-index: 2;
+  inset-block-start: var(--banner-back-inset, 1rem);
+  inset-inline-start: var(--banner-back-inset, 1rem);
+  display: inline-flex;
+  align-items: center;
+  gap: .5em;
+  padding: .5em;
+  color: inherit;
+  text-decoration: none;
+}
+:where(.cb-banner__back-link).bnb-banner__back-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+:where(.cb-banner__back-icon).bnb-banner__back-icon {
+  font-family: var(--ui-font-font-family);
+  font-size: 1.25em;
+  line-height: 1;
+}

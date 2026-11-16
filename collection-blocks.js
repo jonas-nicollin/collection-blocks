@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.24';
+  var VERSION = '0.25';
   var STORE_KEY_PREFIX = 'collection-blocks::v0.7::';
 
   var memoryCache = new Map();
@@ -2892,7 +2892,60 @@
       ? url.pathname + url.search + url.hash : url.href;
   }
 
+  // Shared interface messages follow the page language, never the visitor's browser.
+  function resolveLocale(locale) {
+    var context = window.Static && window.Static.SQUARESPACE_CONTEXT;
+    var language = locale || document.documentElement.lang ||
+      (context && context.website && context.website.language) || 'fr';
+    return String(language).toLowerCase().split(/[-_]/)[0];
+  }
+  function emptyMessage(locale) {
+    var messages = { fr: 'Aucun résultat.', en: 'No results.',
+      de: 'Keine Ergebnisse.', it: 'Nessun risultato.' };
+    return messages[resolveLocale(locale)] || messages.en;
+  }
+  function overviewPath(url) { return url.pathname.replace(/\/$/, '') || '/'; }
+  function rememberOverviewURL(itemAddress) {
+    try {
+      var overview = new URL(window.location.href);
+      var item = new URL(itemAddress, overview);
+      if (!/^https?:$/.test(item.protocol) || item.origin !== overview.origin ||
+          overviewPath(item) === overviewPath(overview)) return;
+      var key = 'cb-overview:' + overviewPath(overview) + ':' + overviewPath(item);
+      window.sessionStorage.setItem(key, JSON.stringify({
+        url: overview.href, time: Date.now()
+      }));
+    } catch (_) { /* Storage is optional; the configured overview remains usable. */ }
+  }
+  function getOverviewURL(address, preserve) {
+    try {
+      var expected = new URL(address, window.location.href);
+      if (!/^https?:$/.test(expected.protocol)) return null;
+      if (!preserve || expected.origin !== window.location.origin) return expected.href;
+      var key = 'cb-overview:' + overviewPath(expected) + ':' +
+        overviewPath(new URL(window.location.href));
+      var stored = JSON.parse(window.sessionStorage.getItem(key) || 'null');
+      if (stored && Date.now() - stored.time >= 0 &&
+          Date.now() - stored.time < 86400000) {
+        var url = new URL(stored.url);
+        if (url.origin === expected.origin && overviewPath(url) === overviewPath(expected)) {
+          return url.href;
+        }
+      }
+      return expected.href;
+    } catch (_) {
+      try {
+        var fallback = new URL(address, window.location.href);
+        return /^https?:$/.test(fallback.protocol) ? fallback.href : null;
+      } catch (_) { return null; }
+    }
+  }
+
   var utilsApi = {
+    resolveLocale: resolveLocale,
+    emptyMessage: emptyMessage,
+    rememberOverviewURL: rememberOverviewURL,
+    getOverviewURL: getOverviewURL,
     isItemExcluded: isItemExcluded,
     resolveLocation: resolveLocation,
     buildLocatorUrl: buildLocatorUrl,
