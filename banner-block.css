@@ -6,11 +6,16 @@
 }
 
 :where(.cb-banner).bnb-banner { position: relative; }
-:where(.cb-banner__back-link).bnb-banner__back-link {
+:where(.cb-banner__back).bnb-banner__back {
   position: absolute;
   z-index: 2;
   inset-block-start: var(--banner-back-inset, 1rem);
-  inset-inline-start: var(--banner-back-inset, 1rem);
+  inset-inline: 0;
+  padding-inline: var(--banner-back-inset, 1rem);
+  pointer-events: none;
+}
+:where(.cb-banner__back-link).bnb-banner__back-link {
+  pointer-events: auto;
   display: inline-flex;
   align-items: center;
   gap: .5em;

@@ -192,7 +192,10 @@
     label.className = 'cb-banner__back-label bnb-banner__back-label';
     label.textContent = options.label || 'Back';
     link.append(icon, label);
-    banner.prepend(link);
+    const navigation = document.createElement('div');
+    navigation.className = 'cb-banner__back bnb-banner__back';
+    navigation.append(link);
+    banner.prepend(navigation);
   }
 
   function selectBannerBlock(contentWrapper, config) {

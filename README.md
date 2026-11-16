@@ -1546,7 +1546,7 @@ content in a wrapper selected by `hideSourceSelector`.
 `backLink: { href: '/members', label: 'Members', preserveFilters: true }` adds a
 top-left overview link, independently of `heading`. It uses `arrow_back` from
 Material Symbols (or `backLink.icon`) with a visible accessible label. Classes
-pair `cb-banner__back-link`, `__back-icon`, `__back-label` with `bnb-*` aliases.
+pair `cb-banner__back`, `__back-link`, `__back-icon`, `__back-label` with `bnb-*` aliases.
 `--banner-back-inset` controls its position; site CSS controls colors and type.
 With the shared core loaded, the link can restore a Query overview URL captured
 when that item was opened. It accepts only the configured same-origin overview
@@ -1621,7 +1621,7 @@ configuration's `routePlanner` to `{ categories: ['Gallery'], maxStops: 4,
 storageKey: 'member-galleries' }`. Category names must match that site's source;
 omit `categories` to allow all resolved places. `enabled: false` disables it.
 Use `display.cardClickable: false` so cards can contain real buttons; normal
-member links can remain enabled. No other collection or API request is made.
+member links can remain enabled. No parallel collection request is made.
 
 The extension uses `LocatorBlock.getInstances()` and the `cb:locator-ready` /
 `cb:locator-render` lifecycle events, so either script order works. It reads the
@@ -1639,8 +1639,35 @@ single-stop navigation link. Google supplies directions, durations and guidance;
 this extension does not optimize stops or infer opening hours. Removing a visited
 stop advances the next-stop link. Labels support `locale` and `i18n` overrides.
 
+Version 0.14 adds optional `cardControl: 'icon'` (add-only image control),
+`urlState: { param: 'parcours' }` (ordered venue keys, falling back to IDs), and
+`mapRoute: { enabled: true, color: '#4668e8' }`. Explicit URL selections override
+browser storage, including an empty value; unrelated parameters are preserved.
+Locator independently supports `urlState: { filter: 'categorie', search: 'recherche' }`.
+Choose distinct parameter names when multiple Locators share a page.
+
+Navigation links prefer the resolved place name and full address over bare
+coordinates. An optional resolved `location.placeId` provides Google's exact
+business identity. A shortened Maps link is not a Place ID. Without either a
+name/address or a Place ID, coordinate fallback remains available.
+
+The optional preview uses the existing Locator map (`instance.getMap()`) and
+Google's Routes library, requiring Routes API access on that Maps project. It
+calculates walking directions between selected stops, in their given order;
+the visitor's location is used only by Google Maps after opening navigation.
+Route duration excludes travel to the first stop. Requests follow changed stop
+sequences with a short debounce; unchanged renders do not recalculate. A bounded
+in-memory cache avoids repeated requests within the mounted session. Stale
+responses are ignored, and teardown removes map overlays. Google route warnings
+remain visible even when the selection panel is collapsed. On service failure,
+no approximate line is drawn; navigation links remain available. Google billing
+and quotas apply. The feature is disabled unless explicitly configured.
+
 All planner elements pair `cb-route-planner*` with `lb-route-planner*`: root,
 `__summary`, `__list`, `__stop`, `__name`, `__controls`, `__button`, `__icon`,
-`__add`, `__empty`, `__actions`, `__maps`, `__next`, `__status`. Buttons use native
+`__add`, `__add--icon`, `__media`, `__empty`, `__actions`, `__action-label`,
+`__maps`, `__next`, `__status`, `__preview`, `__warnings`, `__number`, `__title`,
+`__expand`, `__collapse`. Buttons use native
 `disabled` and `aria-pressed` states. Load `arrow_downward`, `arrow_upward` and
-`close` Material Symbols. Site-specific typography belongs in Custom CSS.
+`close`, `add_location`, `check`, `expand_less`, `expand_more`, and `navigation`
+Material Symbols. Site-specific typography belongs in Custom CSS.

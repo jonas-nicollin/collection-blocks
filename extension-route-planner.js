@@ -1,4 +1,4 @@
-/* Optional Locator route selection. Google Maps owns routing and navigation. */
+/* Optional Locator selection and Google walking-route preview. */
 (function () {
   'use strict';
   if (window.CollectionBlocksRoutePlanner) return;
@@ -8,11 +8,15 @@
       up: 'Monter', down: 'Descendre', maps: 'Ouvrir dans Google Maps',
       next: 'Rejoindre la prochaine étape', empty: 'Ajoutez des lieux à votre parcours.',
       limit: 'Le parcours est complet.', saved: 'Parcours mis à jour.',
+      added: 'Ajouté au parcours', preview: 'Entre les étapes', loading: 'Calcul du trajet…',
+      routeError: 'Tracé indisponible. Le parcours reste accessible dans Google Maps.',
       unavailable: 'La sélection ne peut pas être enregistrée sur cet appareil.' },
     en: { title: 'My route', add: 'Add to route', remove: 'Remove from route',
       up: 'Move up', down: 'Move down', maps: 'Open in Google Maps',
       next: 'Navigate to the next stop', empty: 'Add places to your route.',
       limit: 'The route is full.', saved: 'Route updated.',
+      added: 'Added to route', preview: 'Between stops', loading: 'Calculating route…',
+      routeError: 'Route preview unavailable. You can still open the route in Google Maps.',
       unavailable: 'This device cannot save your selection.' }
   };
   function coordinates(item) {
@@ -25,12 +29,20 @@
     var stops = items.filter(coordinates).slice(0, 4);
     if (!stops.length) return '';
     if (next) stops = stops.slice(0, 1);
-    var point = function(item) { return Number(item.lat) + ',' + Number(item.lng); };
+    var point = function(item) { return item.navigationQuery ||
+      Number(item.lat) + ',' + Number(item.lng); };
     var url = new URL('https://www.google.com/maps/dir/');
     url.searchParams.set('api', '1');
     url.searchParams.set('travelmode', 'walking');
     url.searchParams.set('destination', point(stops[stops.length - 1]));
     if (stops.length > 1) url.searchParams.set('waypoints', stops.slice(0, -1).map(point).join('|'));
+    var last = stops[stops.length - 1];
+    if (last.placeId) url.searchParams.set('destination_place_id', last.placeId);
+    if (stops.length > 1 && stops.slice(0, -1).every(function(item) { return !!item.placeId; })) {
+      url.searchParams.set('waypoint_place_ids', stops.slice(0, -1).map(function(item) {
+        return item.placeId;
+      }).join('|'));
+    }
     if (next) url.searchParams.set('dir_action', 'navigate');
     return url.href;
   }
@@ -68,6 +80,11 @@
           if (valid.length !== ids.length) { ids = valid; save(); }
         }
       },
+      replace: function(next) {
+        ids = Array.from(new Set(next)).filter(function(id) {
+          return items.some(function(item) { return item.id === id && eligible(item); });
+        }).slice(0, max); save();
+      },
       toggle: function(id) {
         var index = ids.indexOf(id);
         if (index >= 0) ids.splice(index, 1);
@@ -92,10 +109,83 @@
     if (text !== undefined) element.textContent = text;
     return element;
   }
+  // Optional preview: compute only when the ordered resolved stops change.
+  function createPreview(instance, options, report) {
+    var signature = '', generation = 0, timer, disposed = false;
+    var polylines = [], markers = [], cache = new Map();
+    function clear() {
+      polylines.concat(markers).forEach(function(overlay) { overlay.setMap(null); });
+      polylines = []; markers = [];
+    }
+    async function draw(stops, key, ticket) {
+      try {
+        var maps = window.google && window.google.maps;
+        var map = instance.getMap && instance.getMap();
+        if (!maps || !map) throw new Error('Map unavailable');
+        var route = cache.get(key);
+        if (!route) {
+          var library = await maps.importLibrary('routes');
+          if (disposed || ticket !== generation) return;
+          var point = function(item) { return item.placeId ? 'places/' + item.placeId :
+            {lat: Number(item.lat), lng: Number(item.lng)}; };
+          var result = await library.Route.computeRoutes({
+            origin: point(stops[0]), destination: point(stops[stops.length - 1]),
+            intermediates: stops.slice(1, -1).map(function(item) {
+              return {location: point(item)};
+            }),
+            travelMode: 'WALKING',
+            fields: ['path', 'warnings', 'durationMillis', 'distanceMeters']
+          });
+          route = result.routes && result.routes[0];
+          if (!route) throw new Error('No walking route');
+          cache.set(key, route);
+          if (cache.size > 10) cache.delete(cache.keys().next().value);
+        }
+        if (disposed || ticket !== generation) return;
+        clear();
+        var color = options.color || '#4668e8';
+        polylines = route.createPolylines({polylineOptions: {
+          strokeColor: color, strokeOpacity: .9, strokeWeight: 5, zIndex: 2
+        }});
+        polylines.forEach(function(line) { line.setMap(map); });
+        markers = stops.map(function(item, index) {
+          return new maps.Marker({map: map, position: pointCoordinates(item),
+            title: (index + 1) + '. ' + item.title, zIndex: 1000 + index,
+            label: {text: String(index + 1), color: '#ffffff'},
+            icon: {path: maps.SymbolPath.CIRCLE, scale: 13, fillColor: color,
+              fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2}
+          });
+        });
+        var bounds = new maps.LatLngBounds();
+        (route.path || stops.map(pointCoordinates)).forEach(function(point) { bounds.extend(point); });
+        map.fitBounds(bounds, 60);
+        report('ready', route);
+      } catch (error) {
+        if (disposed || ticket !== generation) return;
+        clear(); report('error');
+        console.warn('[Route Planner] Walking preview unavailable:', error.message);
+      }
+    }
+    function pointCoordinates(item) { return {lat: Number(item.lat), lng: Number(item.lng)}; }
+    return {
+      update: function(stops) {
+        var key = JSON.stringify(stops.map(function(item) {
+          return [item.id, item.lat, item.lng, item.placeId || ''];
+        }));
+        if (key === signature || disposed) return;
+        signature = key; generation++; clearTimeout(timer); clear();
+        if (stops.length < 2) { report('empty'); return; }
+        report('loading');
+        var ticket = generation;
+        timer = setTimeout(function() { draw(stops.slice(), key, ticket); },
+          options.debounceMs === undefined ? 400 : options.debounceMs);
+      },
+      destroy: function() { disposed = true; generation++; clearTimeout(timer); clear(); cache.clear(); }
+    };
+  }
   function mount(instance) {
     var root = instance.root, options = instance.config.routePlanner;
     if (!options || options.enabled === false || mounted.has(root)) return mounted.get(root);
-    // A linked card cannot contain interactive controls. This contract is explicit.
     if (instance.config.display.cardClickable) {
       console.warn('[Route Planner] Use display.cardClickable: false.'); return;
     }
@@ -107,34 +197,81 @@
     var labels = Object.assign({}, words[locale] || words.en, options.i18n || {});
     var storage;
     try { storage = window.localStorage; } catch (_) { storage = null; }
-    var model = createModel(options, storage);
+    var model = createModel(options, storage), iconCards = options.cardControl === 'icon';
+    var routeParam = options.urlState && (options.urlState.param || 'parcours');
+    function readRouteURL() {
+      var params = new URL(window.location.href).searchParams;
+      return routeParam && params.has(routeParam)
+        ? params.get(routeParam).split('|').filter(Boolean).slice(0, model.max) : null;
+    }
+    var pendingRoute = readRouteURL();
+    function writeRouteURL() {
+      if (!routeParam || pendingRoute !== null || !instance.isComplete()) return;
+      var url = new URL(window.location.href);
+      // An explicit empty route overrides a previously saved selection on shared URLs.
+      url.searchParams.set(routeParam, model.selected().map(function(item) {
+        return item.venueKey || item.id;
+      }).join('|'));
+      if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url.href);
+    }
     var panel = node('details', ''), summary = node('summary', '__summary');
+    var summaryLabel = node('span', '__title');
+    function glyph(name, part) {
+      var el = node('span', part || '__icon', name); el.setAttribute('aria-hidden', 'true');
+      return el;
+    }
+    summary.append(summaryLabel, glyph('expand_more', '__expand'), glyph('expand_less', '__collapse'));
     var list = node('ol', '__list'), empty = node('p', '__empty', labels.empty);
-    var actions = node('div', '__actions'), maps = node('a', '__maps', labels.maps);
+    var actions = node('div', '__actions'), maps = node('a', '__maps');
+    maps.append(glyph('navigation'), node('span', '__action-label', labels.maps));
     var next = node('a', '__next', labels.next), status = node('p', '__status');
-    status.setAttribute('role', 'status');
-    status.setAttribute('aria-live', 'polite');
+    var previewStatus = node('p', '__preview'), warnings = node('p', '__warnings');
+    status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
+    previewStatus.setAttribute('role', 'status');
     [maps, next].forEach(function(link) { link.target = '_blank'; link.rel = 'noopener'; });
-    actions.append(maps, next); panel.append(summary, empty, list, actions, status);
+    actions.append(maps, next);
+    panel.append(summary, empty, list, previewStatus, actions, status);
     var grid = root.querySelector('.lb-grid');
     if (grid) grid.before(panel); else sidebar.append(panel);
+    panel.after(warnings);
+    var preview = options.mapRoute && options.mapRoute.enabled !== false
+      ? createPreview(instance, options.mapRoute, function(state, route) {
+        panel.dataset.routePreview = state;
+        warnings.textContent = route && route.warnings ? route.warnings.join(' ') : '';
+        if (state === 'ready') {
+          var details = [];
+          if (route.durationMillis) details.push(Math.ceil(route.durationMillis / 60000) + ' min');
+          if (route.distanceMeters) details.push((route.distanceMeters / 1000).toLocaleString(locale,
+            {maximumFractionDigits: 1}) + ' km');
+          previewStatus.textContent = labels.preview + (details.length ? ' · ' + details.join(' · ') : '');
+        } else previewStatus.textContent = state === 'loading' ? labels.loading :
+          state === 'error' ? labels.routeError : '';
+      }) : null;
     function button(action, id, title, icon) {
       var control = node('button', '__button'); control.type = 'button';
       control.dataset.routeAction = action; control.dataset.routeId = id;
       control.setAttribute('aria-label', title); control.title = title;
-      var glyph = node('span', '__icon', icon); glyph.setAttribute('aria-hidden', 'true');
-      control.append(glyph); return control;
+      control.append(glyph(icon)); return control;
     }
     function refresh() {
       var items = instance.getItems();
       var byId = new Map(items.map(function(item) { return [item.id, item]; }));
       model.setItems(items, instance.isComplete());
+      if (pendingRoute !== null && instance.isComplete()) {
+        model.replace(pendingRoute.map(function(token) {
+          var item = items.find(function(item) { return (item.venueKey || item.id) === token; });
+          return item && item.id;
+        }).filter(Boolean));
+        pendingRoute = null;
+      }
       var selected = model.selected(), ids = model.ids();
-      summary.textContent = labels.title + ' (' + selected.length + '/' + model.max + ')';
+      summaryLabel.textContent = labels.title + ' (' + selected.length + '/' + model.max + ')';
       list.replaceChildren();
       selected.forEach(function(item, index) {
         var row = node('li', '__stop'); row.dataset.routeId = item.id;
-        row.append(node('span', '__name', item.title));
+        var number = node('span', '__number', String(index + 1));
+        number.setAttribute('aria-hidden', 'true');
+        row.append(number, node('span', '__name', item.title));
         var controls = node('span', '__controls');
         var up = button('up', item.id, labels.up + ' : ' + item.title, 'arrow_upward');
         var down = button('down', item.id, labels.down + ' : ' + item.title, 'arrow_downward');
@@ -151,37 +288,62 @@
         if (!item || !model.eligible(item)) { if (control) control.remove(); return; }
         if (!control) {
           control = node('button', '__add'); control.type = 'button';
-          control.dataset.routeAction = 'toggle'; control.dataset.routeId = item.id;
-          var host = card.querySelector('.cb-card__body') || card;
+          control.dataset.routeAction = iconCards ? 'add' : 'toggle';
+          control.dataset.routeId = item.id;
+          var media = iconCards && card.querySelector('.cb-card__media');
+          var host = media || card.querySelector('.cb-card__body') || card;
+          if (iconCards) control.classList.add('cb-route-planner__add--icon', 'lb-route-planner__add--icon');
+          if (media) media.classList.add('cb-route-planner__media', 'lb-route-planner__media');
           host.append(control);
         }
         var chosen = ids.includes(item.id);
-        control.textContent = chosen ? labels.remove : labels.add;
+        var label = chosen ? (iconCards ? labels.added : labels.remove) : labels.add;
+        if (iconCards) control.replaceChildren(glyph(chosen ? 'check' : 'add_location'));
+        else control.textContent = label;
         control.setAttribute('aria-pressed', String(chosen));
-        control.setAttribute('aria-label', control.textContent + ' : ' + item.title);
-        control.disabled = !chosen && ids.length >= model.max;
+        control.setAttribute('aria-label', label + ' : ' + item.title);
+        control.title = label;
+        control.disabled = chosen && iconCards || !chosen && ids.length >= model.max;
       });
+      writeRouteURL();
+      if (preview && instance.isComplete()) preview.update(selected);
     }
     function onClick(event) {
       var control = event.target.closest('[data-route-action]');
       if (!control || !root.contains(control)) return;
       event.preventDefault(); event.stopPropagation();
+      if (control.disabled) return;
       var action = control.dataset.routeAction, id = control.dataset.routeId;
+      if (action === 'add' && model.ids().includes(id)) return;
+      pendingRoute = null;
       var changed = action === 'up' || action === 'down'
         ? model.move(id, action === 'up' ? -1 : 1) : model.toggle(id);
       if (!changed) { status.textContent = labels.limit; return; }
       panel.open = true; refresh();
       status.textContent = model.persistent() ? labels.saved : labels.unavailable;
-      if (action !== 'toggle') {
+      if (action !== 'toggle' && action !== 'add') {
         var row = Array.from(list.children).find(function(el) { return el.dataset.routeId === id; });
         var focus = row && row.querySelector('[data-route-action="' + action + '"]:not(:disabled)');
         (focus || summary).focus();
       }
     }
+    function onHistory() {
+      if (!root.isConnected) { controller.destroy(); return; }
+      pendingRoute = readRouteURL();
+      if (pendingRoute === null) pendingRoute = [];
+      refresh();
+    }
     root.addEventListener('click', onClick);
+    if (routeParam) window.addEventListener('popstate', onHistory);
     var controller = { refresh: refresh, destroy: function() {
-      root.removeEventListener('click', onClick); panel.remove();
+      root.removeEventListener('click', onClick);
+      window.removeEventListener('popstate', onHistory);
+      if (preview) preview.destroy();
+      panel.remove(); warnings.remove();
       root.querySelectorAll('.cb-route-planner__add').forEach(function(el) { el.remove(); });
+      root.querySelectorAll('.cb-route-planner__media').forEach(function(el) {
+        el.classList.remove('cb-route-planner__media', 'lb-route-planner__media');
+      });
       mounted.delete(root);
     }};
     mounted.set(root, controller); refresh(); return controller;
@@ -192,7 +354,7 @@
       window.LocatorBlock.getInstances().forEach(mount);
     }
   }
-  window.CollectionBlocksRoutePlanner = { mount: mount, createModel: createModel, directions: directions };
+  window.CollectionBlocksRoutePlanner = { mount: mount, createModel: createModel, directions: directions, createPreview: createPreview };
   document.addEventListener('cb:locator-ready', function(event) { mount(event.detail.instance); });
   document.addEventListener('cb:locator-render', function(event) {
     var controller = mounted.get(event.detail.root); if (controller) controller.refresh();
