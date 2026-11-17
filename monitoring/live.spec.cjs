@@ -69,6 +69,7 @@ for (const target of targets) {
         .toHaveAttribute('aria-pressed', 'true');
     } else if (target.kind === 'member') {
       await expect(page.locator('.cb-banner__title')).toHaveText(target.title);
+      if (isMobile) await page.locator('.locb-collapse__toggle').click();
       await expect(page.locator('.locb-card').first()).toBeVisible();
       await expect(page.locator('.mb-elements').first()).not.toBeEmpty();
       await expect(page.locator('.cb-banner__back-link')).toHaveAttribute('href',
