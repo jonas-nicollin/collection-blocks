@@ -976,6 +976,8 @@ function validCoordinate(value, min, max){
 function getMapSrc(lieu, cfg){
   var lat = validCoordinate(lieu.latitude, -90, 90);
   var lng = validCoordinate(lieu.longitude, -180, 180);
+  // A name and country alone must not resolve to an unrelated Google location.
+  if ((lat === null || lng === null) && !lieu.address1 && !lieu.address2) return '';
   var addressQuery = [lieu.title, lieu.address1, lieu.address2, lieu.address3].filter(Boolean).join(', ');
   var coordinateQuery = lat !== null && lng !== null ? (lat + ',' + lng) : '';
   var mode = cfg.mapQuery || 'coordinates-first';
@@ -1005,6 +1007,7 @@ function buildMapIframe(src, title){
 
 function buildMap(lieu, cfg){
   var src = getMapSrc(lieu, cfg);
+  if (!src) return '';
   var title = 'Carte - ' + lieu.title;
   var lat = validCoordinate(lieu.latitude, -90, 90);
   var lng = validCoordinate(lieu.longitude, -180, 180);
@@ -1024,6 +1027,7 @@ function buildMap(lieu, cfg){
 }
 
 function buildMapLink(lieu, cfg){
+  if (!getMapSrc(lieu, cfg)) return '';
   var mapLinkTarget = '';
   var mapLinkHref = '';
   if(cfg.showMapLink){

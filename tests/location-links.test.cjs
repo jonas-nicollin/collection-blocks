@@ -34,7 +34,7 @@ test('Missing or invalid coordinates never generate a zero-coordinate place',()=
 });
 const window={};
 vm.runInNewContext(read('location-block.js').replace("if(document.readyState === 'loading'){",
- 'window.test={fieldValueHtml,buildMap};\n'+"if(document.readyState === 'loading'){"),{
+ 'window.test={fieldValueHtml,buildMap,buildMapLink};\n'+"if(document.readyState === 'loading'){"),{
  window,URL,document:{readyState:'loading',addEventListener(){}},Intl,Date});
 const field=window.test.fieldValueHtml;
 test('Compact contacts preserve destinations and never fabricate channel handles',()=>{
@@ -60,4 +60,13 @@ test('Shared map accepts decimal-comma coordinates from Sheets',()=>{
  assert(html.includes('data-map-provider="google"'));
  assert(html.includes('data-map-lat="46.1989"'));
  assert(html.includes('data-map-lng="6.1451"'));
+});
+
+test('A venue name or country without an address does not create a map or link',()=>{
+ for (const venue of [{title:'Kreëmart'}, {title:'Kreëmart',address3:'Suisse'},
+  {title:'Kreëmart',latitude:'',longitude:''}]) {
+  assert.equal(window.test.buildMap(venue,{lazyMap:true}),'');
+  assert.equal(window.test.buildMapLink(venue,{showMapLink:true,mapLinkUrl:'/map'}),'');
+ }
+ assert(window.test.buildMap({title:'Known venue',address1:'Rue Exemple 12'},{}).includes('<iframe'));
 });

@@ -1709,6 +1709,13 @@ indicate a full route. `showNextStop: false` removes next-stop navigation; when
 The closed summary includes an aria-hidden, noninteractive faded mode preview.
 Google's walking/cycling caution and returned route warnings stay visible while
 a route is drawn, including when the panel is closed.
+Warnings remain inside the planner: below its actions when open and inside its
+summary when closed. Step numbers keep a 1.6em circle centered in a 44px square;
+move controls are always visible below 768px and on touch devices. Sharing uses
+a plain icon control, without a background or border.
+
+Location Block does not render a map or map link without coordinates or a
+street/locality address. A venue name or country alone is not a map location.
 
 Locator `compactControls: true` keeps category buttons on desktop and uses a
 select plus a search disclosure below 768px. Both use the existing filter/search

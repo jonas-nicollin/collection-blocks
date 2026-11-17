@@ -257,5 +257,13 @@ test('compact durations and share preserve the current ordered route and filters
   assert.equal(root.querySelector('.cb-route-planner__mode-note'),null);
   assert.equal(root.querySelector('.cb-route-planner__peek').getAttribute('aria-hidden'),'true');
   assert.equal(root.querySelector('.cb-route-planner__peek button'),null);
+  const panel=root.querySelector('.cb-route-planner');
+  const warnings=root.querySelector('.cb-route-planner__warnings');
+  assert.equal(warnings.parentNode,root.querySelector('.cb-route-planner__summary'));
+  panel.open=true; panel.dispatchEvent(new p.window.Event('toggle'));
+  assert.equal(warnings.parentNode,panel);
+  panel.open=false; panel.dispatchEvent(new p.window.Event('toggle'));
+  assert.equal(warnings.parentNode,root.querySelector('.cb-route-planner__summary'));
+
   c.destroy();
 });

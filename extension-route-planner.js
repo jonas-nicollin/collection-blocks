@@ -279,7 +279,7 @@
     var actions = node('div', '__actions'), maps = node('a', '__maps');
     maps.append(glyph('navigation'), node('span', '__action-label', labels.maps));
     var next = node('a', '__next', labels.next), status = node('p', '__status');
-    var previewStatus = node('p', '__preview'), warnings = node('p', '__warnings');
+    var previewStatus = node('p', '__preview'), warnings = node('span', '__warnings');
     var modeControls = node('div', '__modes'), duration = node('span', '__duration');
     duration.title = labels.between; duration.setAttribute('aria-live', 'polite');
     var peek = node('span', '__peek'); peek.setAttribute('aria-hidden', 'true');
@@ -296,7 +296,11 @@
       peek.append(hint);
     });
     modeControls.append(duration);
-    summary.append(peek);
+    summary.append(peek, warnings);
+    summary.setAttribute('aria-label', labels.title);
+    // Keep required route cautions inside the planner and visible when collapsed.
+    function placeWarnings() { (panel.open ? panel : summary).append(warnings); }
+    panel.addEventListener('toggle', placeWarnings);
     var modeNote = node('p', '__mode-note', labels.transitNote);
     status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
     previewStatus.setAttribute('role', 'status');
@@ -314,7 +318,6 @@
     if (modes.includes('transit')) list.after(modeNote);
     var grid = root.querySelector('.lb-grid');
     if (grid) grid.before(panel); else sidebar.append(panel);
-    panel.after(warnings); // Google requires route cautions while the map remains visible.
     var preview = options.mapRoute && options.mapRoute.enabled !== false
       ? createPreview(instance, options.mapRoute, function(state, route) {
         panel.dataset.routePreview = state;
@@ -332,6 +335,7 @@
       control.append(glyph(icon)); return control;
     }
     function refresh() {
+      placeWarnings();
       var items = instance.getItems();
       var byId = new Map(items.map(function(item) { return [item.id, item]; }));
       model.setItems(items, instance.isComplete());
@@ -456,7 +460,8 @@
       if (listMedia) listMedia.removeEventListener('change', refresh);
       window.removeEventListener('popstate', onHistory);
       if (preview) preview.destroy();
-      panel.remove(); warnings.remove();
+      panel.removeEventListener('toggle', placeWarnings);
+      panel.remove();
       root.querySelectorAll('.cb-route-planner__add').forEach(function(el) { el.remove(); });
       root.querySelectorAll('.cb-route-planner__media').forEach(function(el) {
         el.classList.remove('cb-route-planner__media', 'lb-route-planner__media');

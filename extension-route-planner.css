@@ -8,6 +8,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   min-height: 44px;
   cursor: pointer;
   list-style: none;
@@ -33,20 +34,28 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: .5rem;
+  gap: 0;
   min-width: 0;
   padding: .125rem;
   border: 1px solid var(--tweak-line-block-line-color, currentColor);
   background: var(--siteBackgroundColor, #fff);
 }
 :where(.cb-route-planner__number).lb-route-planner__number {
+  position: relative;
   display: grid;
   place-items: center;
+  width: 44px;
+  height: 44px;
+  line-height: 1;
+}
+:where(.cb-route-planner__number).lb-route-planner__number::before {
+  content: '';
+  position: absolute;
+  box-sizing: border-box;
   width: 1.6em;
   height: 1.6em;
   border: 1px solid currentColor;
   border-radius: 50%;
-  line-height: 1;
 }
 :where(.cb-route-planner__name).lb-route-planner__name {
   min-width: 0;
@@ -68,7 +77,7 @@
   font: inherit;
   line-height: 1;
 }
-@media (hover: hover) and (pointer: fine) {
+@media (min-width: 768px) and (hover: hover) and (pointer: fine) {
   :where(.cb-route-planner__stop):not(:hover):not(:focus-within)
     :where([data-route-action="up"], [data-route-action="down"]) {
     display: none;
@@ -172,9 +181,6 @@
   margin-block: .5rem;
   font-size: .875em;
 }
-:where(.cb-route-planner__warnings).lb-route-planner__warnings {
-  padding-inline: var(--locator-sidebar-padding, 1rem);
-}
 :where(.cb-route-planner__status).lb-route-planner__status {
   position: absolute;
   width: 1px;
@@ -221,12 +227,10 @@
 :where(.cb-route-planner__summary).lb-route-planner__summary {
   position: relative;
 }
-:where(.cb-route-planner):not([open]) .lb-route-planner__summary {
-  padding-bottom: 1.5rem;
-}
+:where(.cb-route-planner__title).lb-route-planner__title { flex: 1; }
 :where(.cb-route-planner__peek).lb-route-planner__peek {
-  position: absolute;
-  inset: auto 0 0;
+  flex-basis: 100%;
+  margin-top: .25rem;
   display: flex;
   gap: .25rem;
   height: 1.25rem;
@@ -248,7 +252,10 @@
 :where(.cb-route-planner__share).lb-route-planner__share {
   appearance: none;
   font: inherit;
-  background: var(--siteBackgroundColor, #fff);
+  border: 0;
+  background: transparent;
+  min-width: 44px;
+  padding-inline: .5em;
   cursor: pointer;
 }
 :where(.cb-route-planner__share-url).lb-route-planner__share-url {
@@ -258,7 +265,10 @@
   font: inherit;
 }
 :where(.cb-route-planner__warnings).lb-route-planner__warnings {
+  display: block;
+  flex-basis: 100%;
   font-size: .75em;
   line-height: 1.35;
   margin-block: .5rem;
 }
+:where(.cb-route-planner__warnings).lb-route-planner__warnings:empty { display: none; }
