@@ -14,11 +14,13 @@ for (const target of targets) {
 
     if (target.kind === 'query') {
       await expect(page.locator('.qb-card').first()).toBeVisible();
+      if (isMobile) await page.getByRole('button', { name: 'Filtrer', exact: true }).click();
       await page.getByRole('button', { name: target.filter, exact: true }).click();
       await expect.poll(() => new URL(page.url()).searchParams.get(target.filterParam))
         .toBe(target.filter);
       await page.reload({ waitUntil: 'domcontentloaded' });
       await expect(page.locator('.qb-card').first()).toBeVisible();
+      if (isMobile) await page.getByRole('button', { name: 'Filtrer', exact: true }).click();
       await expect(page.getByRole('button', { name: target.filter, exact: true }))
         .toHaveClass(/qb-filter-btn--active/);
     } else if (target.kind === 'locator') {
