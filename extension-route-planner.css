@@ -31,9 +31,9 @@
 }
 :where(.cb-route-planner__stop).lb-route-planner__stop {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: .25rem;
+  gap: .5rem;
   min-width: 0;
   padding: .125rem;
   border: 1px solid var(--tweak-line-block-line-color, currentColor);
@@ -67,18 +67,6 @@
   cursor: pointer;
   font: inherit;
   line-height: 1;
-}
-:where(.cb-route-planner__drag).lb-route-planner__drag {
-  cursor: grab;
-  touch-action: none;
-}
-:where(.cb-route-planner__stop--dragging).lb-route-planner__stop--dragging {
-  opacity: .6;
-  cursor: grabbing;
-}
-:where(.cb-route-planner__stop--drop-target).lb-route-planner__stop--drop-target {
-  outline: 2px solid currentColor;
-  outline-offset: 1px;
 }
 @media (hover: hover) and (pointer: fine) {
   :where(.cb-route-planner__stop):not(:hover):not(:focus-within)
@@ -153,7 +141,7 @@
   background: var(--route-selected-background, #222);
 }
 :where(.cb-route-planner__button,.cb-route-planner__add,.cb-route-planner__summary,
-  .cb-route-planner__maps,.cb-route-planner__next,.cb-route-planner__mode):focus-visible {
+  .cb-route-planner__maps,.cb-route-planner__next,.cb-route-planner__share,.cb-route-planner__mode):focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 2px;
 }
@@ -162,7 +150,7 @@
   flex-wrap: wrap;
   gap: .5rem;
 }
-:where(.cb-route-planner__maps,.cb-route-planner__next) {
+:where(.cb-route-planner__maps,.cb-route-planner__next,.cb-route-planner__share) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -220,10 +208,57 @@
   cursor: pointer;
 }
 :where(.cb-route-planner__mode)[aria-pressed="true"] {
+  border-color: var(--route-selected-background, #222);
   background: var(--route-selected-background, #222);
   color: var(--route-selected-color, #fff);
 }
-:where(.cb-route-planner__mode-label).lb-route-planner__mode-label { margin-inline: .5em; }
+:where(.cb-route-planner__duration).lb-route-planner__duration { margin-inline-start: .5em; white-space: nowrap; }
 :where(.cb-route-planner__status,.cb-route-planner__preview,.cb-route-planner__warnings):empty {
   display: none;
+}
+
+/* Decorative preview stays inside the summary: no hidden focusable controls. */
+:where(.cb-route-planner__summary).lb-route-planner__summary {
+  position: relative;
+}
+:where(.cb-route-planner):not([open]) .lb-route-planner__summary {
+  padding-bottom: 1.5rem;
+}
+:where(.cb-route-planner__peek).lb-route-planner__peek {
+  position: absolute;
+  inset: auto 0 0;
+  display: flex;
+  gap: .25rem;
+  height: 1.25rem;
+  overflow: hidden;
+  opacity: .5;
+  mask-image: linear-gradient(#000, transparent);
+  pointer-events: none;
+}
+:where(.cb-route-planner__peek-mode).lb-route-planner__peek-mode {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 44px;
+  height: 44px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+}
+:where(.cb-route-planner)[open] .lb-route-planner__peek { display: none; }
+:where(.cb-route-planner__share).lb-route-planner__share {
+  appearance: none;
+  font: inherit;
+  background: var(--siteBackgroundColor, #fff);
+  cursor: pointer;
+}
+:where(.cb-route-planner__share-url).lb-route-planner__share-url {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+}
+:where(.cb-route-planner__warnings).lb-route-planner__warnings {
+  font-size: .75em;
+  line-height: 1.35;
+  margin-block: .5rem;
 }

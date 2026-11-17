@@ -4,8 +4,10 @@
   if (window.CollectionBlocksRoutePlanner) return;
   var mounted = new Map();
   var words = {
-    fr: { title: 'Mon parcours', add: 'Ajouter au parcours', remove: 'Retirer du parcours',
+    fr: { title: 'Créer votre parcours', add: 'Ajouter au parcours', remove: 'Retirer du parcours',
       up: 'Monter', down: 'Descendre', maps: 'Ouvrir dans Google Maps',
+      share: 'Copier le lien du parcours', copied: 'Lien copié', between: 'Temps estimé entre les lieux',
+      caution: 'Tracé à pied ou à vélo en bêta : certains trottoirs et chemins peuvent manquer.',
       next: 'Rejoindre la prochaine étape', empty: 'Ajoutez des lieux à votre parcours.',
       limit: 'Le parcours est complet.', saved: 'Parcours mis à jour.',
       added: 'Ajouté au parcours', move: 'Déplacer (flèches haut et bas)',
@@ -15,8 +17,10 @@
       loading: 'Calcul du trajet…',
       routeError: 'Tracé indisponible. Le parcours reste accessible dans Google Maps.',
       unavailable: 'La sélection ne peut pas être enregistrée sur cet appareil.' },
-    en: { title: 'My route', add: 'Add to route', remove: 'Remove from route',
+    en: { title: 'Create your route', add: 'Add to route', remove: 'Remove from route',
       up: 'Move up', down: 'Move down', maps: 'Open in Google Maps',
+      share: 'Copy route link', copied: 'Link copied', between: 'Estimated travel time between places',
+      caution: 'Walking and cycling routes are in beta: some sidewalks and paths may be missing.',
       next: 'Navigate to the next stop', empty: 'Add places to your route.',
       limit: 'The route is full.', saved: 'Route updated.',
       added: 'Added to route', move: 'Reorder (up and down arrow keys)',
@@ -121,6 +125,12 @@
       }
     };
   }
+  function shortDuration(milliseconds) {
+    if (!Number.isFinite(milliseconds) || milliseconds < 0) return '';
+    var minutes = Math.max(1, Math.round(milliseconds / 60000));
+    return minutes < 60 ? minutes + ' min.' : Math.floor(minutes / 60) + 'h' +
+      String(minutes % 60).padStart(2, '0');
+  }
   function node(tag, part, text) {
     var element = document.createElement(tag);
     element.className = 'cb-route-planner' + part + ' lb-route-planner' + part;
@@ -152,7 +162,7 @@
               return {location: point(item)};
             }),
             travelMode: travelModes[mode],
-            fields: ['path', 'warnings']
+            fields: ['path', 'warnings', 'durationMillis']
           });
           route = result.routes && result.routes[0];
           if (!route) throw new Error('No route');
@@ -270,7 +280,9 @@
     maps.append(glyph('navigation'), node('span', '__action-label', labels.maps));
     var next = node('a', '__next', labels.next), status = node('p', '__status');
     var previewStatus = node('p', '__preview'), warnings = node('p', '__warnings');
-    var modeControls = node('div', '__modes'), modeLabel = node('span', '__mode-label');
+    var modeControls = node('div', '__modes'), duration = node('span', '__duration');
+    duration.title = labels.between; duration.setAttribute('aria-live', 'polite');
+    var peek = node('span', '__peek'); peek.setAttribute('aria-hidden', 'true');
     modeControls.setAttribute('role', 'group');
     modeControls.setAttribute('aria-label', labels.transport);
     var modeIcons = {walking: 'directions_walk', bicycling: 'directions_bike',
@@ -280,23 +292,38 @@
       control.dataset.routeMode = value; control.setAttribute('aria-label', labels[value]);
       control.title = labels[value]; control.append(glyph(modeIcons[value]));
       modeControls.append(control);
+      var hint = node('span', '__peek-mode'); hint.append(glyph(modeIcons[value]));
+      peek.append(hint);
     });
-    modeControls.append(modeLabel); modeControls.hidden = modes.length < 2;
+    modeControls.append(duration);
+    summary.append(peek);
     var modeNote = node('p', '__mode-note', labels.transitNote);
     status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
     previewStatus.setAttribute('role', 'status');
     [maps, next].forEach(function(link) { link.target = '_blank'; link.rel = 'noopener'; });
-    actions.append(maps, next);
-    panel.append(summary, modeControls, empty, list, modeNote, previewStatus, actions, status);
+    var share = node('button', '__share'); share.type = 'button';
+    share.setAttribute('aria-label', labels.share); share.title = labels.share;
+    share.append(glyph('share'));
+    var shareField = node('input', '__share-url'); shareField.readOnly = true;
+    shareField.setAttribute('aria-label', labels.share); shareField.hidden = true;
+    var shareTimer;
+    actions.append(maps);
+    if (options.showNextStop !== false) actions.append(next);
+    if (routeParam && options.share !== false) actions.append(share, shareField);
+    panel.append(summary, modeControls, empty, list, previewStatus, actions, status);
+    if (modes.includes('transit')) list.after(modeNote);
     var grid = root.querySelector('.lb-grid');
     if (grid) grid.before(panel); else sidebar.append(panel);
-    panel.after(warnings);
+    panel.after(warnings); // Google requires route cautions while the map remains visible.
     var preview = options.mapRoute && options.mapRoute.enabled !== false
       ? createPreview(instance, options.mapRoute, function(state, route) {
         panel.dataset.routePreview = state;
-        warnings.textContent = route && route.warnings ? route.warnings.join(' ') : '';
-        previewStatus.textContent = state === 'loading' ? labels.loading :
-          state === 'error' ? labels.routeError : '';
+        var notes = route && route.warnings ? route.warnings.slice() : [];
+        if (state === 'ready' && (mode === 'walking' || mode === 'bicycling')) notes.push(labels.caution);
+        warnings.textContent = notes.join(' ');
+        duration.textContent = state === 'ready' ? shortDuration(route.durationMillis) : '';
+        duration.setAttribute('aria-label', labels.between + ' : ' + duration.textContent);
+        previewStatus.textContent = state === 'error' ? labels.routeError : '';
       }) : null;
     function button(action, id, title, icon) {
       var control = node('button', '__button'); control.type = 'button';
@@ -305,7 +332,6 @@
       control.append(glyph(icon)); return control;
     }
     function refresh() {
-      cancelDrag();
       var items = instance.getItems();
       var byId = new Map(items.map(function(item) { return [item.id, item]; }));
       model.setItems(items, instance.isComplete());
@@ -317,16 +343,14 @@
         pendingRoute = null;
       }
       var selected = model.selected(), ids = model.ids();
-      summaryLabel.textContent = labels.title + ' (' + selected.length + '/' + model.max + ')';
+      summaryLabel.textContent = labels.title;
       list.replaceChildren();
       selected.forEach(function(item, index) {
         var row = node('li', '__stop'); row.dataset.routeId = item.id;
         var number = node('span', '__number', String(index + 1));
         number.setAttribute('aria-hidden', 'true');
-        var handle = button('drag', item.id, labels.move + ' : ' + item.title, 'drag_indicator');
-        handle.classList.add('cb-route-planner__drag', 'lb-route-planner__drag');
         var name = node('span', '__name', item.title); name.title = item.title;
-        row.append(handle, number, name);
+        row.append(number, name);
         var controls = node('span', '__controls');
         var up = button('up', item.id, labels.up + ' : ' + item.title, 'arrow_upward');
         var down = button('down', item.id, labels.down + ' : ' + item.title, 'arrow_downward');
@@ -338,7 +362,6 @@
       maps.hidden = mode === 'transit';
       next.hidden = mode !== 'transit' && selected.length < 2;
       modeNote.hidden = mode !== 'transit';
-      modeLabel.textContent = labels[mode];
       modeControls.querySelectorAll('[data-route-mode]').forEach(function(control) {
         control.setAttribute('aria-pressed', String(control.dataset.routeMode === mode));
       });
@@ -385,7 +408,7 @@
       event.preventDefault(); event.stopPropagation();
       if (control.disabled) return;
       var action = control.dataset.routeAction, id = control.dataset.routeId;
-      if (action === 'drag') return;
+      if (!['add', 'toggle', 'remove', 'up', 'down'].includes(action)) return;
       if (action === 'add' && model.ids().includes(id)) return;
       pendingRoute = null; urlDirty = true;
       var changed = action === 'up' || action === 'down'
@@ -407,87 +430,29 @@
       refresh();
     }
     root.addEventListener('click', onClick);
-    var drag = null;
-    function cancelDrag() {
-      if (!drag) return;
-      var pointerId = drag.pointerId;
-      drag = null;
-      if (list.hasPointerCapture && list.hasPointerCapture(pointerId)) {
-        list.releasePointerCapture(pointerId);
+    async function copyRoute() {
+      writeRouteURL();
+      var value = window.location.href;
+      try {
+        if (!window.navigator || !window.navigator.clipboard) throw new Error('Clipboard unavailable');
+        await window.navigator.clipboard.writeText(value);
+        share.replaceChildren(glyph('check')); share.title = labels.copied;
+        status.textContent = labels.copied;
+        clearTimeout(shareTimer);
+        shareTimer = setTimeout(function() {
+          share.replaceChildren(glyph('share')); share.title = labels.share;
+        }, 2500);
+      } catch (_) {
+        shareField.value = value; shareField.hidden = false;
+        shareField.focus(); shareField.select();
       }
-      list.querySelectorAll('li').forEach(function(row) {
-        row.classList.remove('cb-route-planner__stop--dragging', 'lb-route-planner__stop--dragging',
-          'cb-route-planner__stop--drop-target', 'lb-route-planner__stop--drop-target');
-      });
     }
-    function focusHandle(id) {
-      var row = Array.from(list.children).find(function(el) { return el.dataset.routeId === id; });
-      if (row) row.querySelector('[data-route-action="drag"]').focus();
-    }
-    function reordered(id, index) {
-      if (model.moveTo(id, index)) {
-        pendingRoute = null; urlDirty = true; refresh();
-        status.textContent = model.persistent() ? labels.saved : labels.unavailable;
-      }
-      focusHandle(id);
-    }
-    function onPointerDown(event) {
-      var handle = event.target.closest('[data-route-action="drag"]');
-      if (!handle || !list.contains(handle) || event.button !== 0 || event.isPrimary === false) return;
-      event.preventDefault(); handle.focus();
-      drag = {id: handle.dataset.routeId, pointerId: event.pointerId, y: event.clientY,
-        index: model.ids().indexOf(handle.dataset.routeId), moved: false};
-      if (list.setPointerCapture) list.setPointerCapture(event.pointerId);
-    }
-    function onPointerMove(event) {
-      if (!drag || drag.pointerId !== event.pointerId) return;
-      if (!drag.moved && Math.abs(event.clientY - drag.y) < 5) return;
-      drag.moved = true; event.preventDefault();
-      var rows = Array.from(list.children), others = rows.filter(function(row) {
-        return row.dataset.routeId !== drag.id;
-      });
-      drag.index = others.filter(function(row) {
-        var rect = row.getBoundingClientRect(); return event.clientY > rect.top + rect.height / 2;
-      }).length;
-      rows.forEach(function(row) {
-        var active = row.dataset.routeId === drag.id;
-        var target = row === others[Math.min(drag.index, others.length - 1)];
-        ['cb', 'lb'].forEach(function(prefix) {
-          row.classList.toggle(prefix + '-route-planner__stop--dragging', active);
-          row.classList.toggle(prefix + '-route-planner__stop--drop-target', target);
-        });
-      });
-    }
-    function onPointerUp(event) {
-      if (!drag || drag.pointerId !== event.pointerId) return;
-      var dropped = drag; cancelDrag();
-      if (dropped.moved) reordered(dropped.id, dropped.index);
-    }
-    function onKey(event) {
-      if (event.key === 'Escape') { cancelDrag(); return; }
-      var handle = event.target.closest('[data-route-action="drag"]');
-      if (!handle || !list.contains(handle) || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
-      event.preventDefault();
-      reordered(handle.dataset.routeId, model.ids().indexOf(handle.dataset.routeId) +
-        (event.key === 'ArrowUp' ? -1 : 1));
-    }
-    list.addEventListener('pointerdown', onPointerDown);
-    list.addEventListener('pointermove', onPointerMove);
-    list.addEventListener('pointerup', onPointerUp);
-    list.addEventListener('pointercancel', cancelDrag);
-    list.addEventListener('lostpointercapture', cancelDrag);
-    list.addEventListener('keydown', onKey);
+    share.addEventListener('click', copyRoute);
     if (listMedia) listMedia.addEventListener('change', refresh);
     if (routeParam) window.addEventListener('popstate', onHistory);
     var controller = { refresh: refresh, destroy: function() {
       root.removeEventListener('click', onClick);
-      cancelDrag();
-      list.removeEventListener('pointerdown', onPointerDown);
-      list.removeEventListener('pointermove', onPointerMove);
-      list.removeEventListener('pointerup', onPointerUp);
-      list.removeEventListener('pointercancel', cancelDrag);
-      list.removeEventListener('lostpointercapture', cancelDrag);
-      list.removeEventListener('keydown', onKey);
+      share.removeEventListener('click', copyRoute); clearTimeout(shareTimer);
       if (listMedia) listMedia.removeEventListener('change', refresh);
       window.removeEventListener('popstate', onHistory);
       if (preview) preview.destroy();
@@ -506,7 +471,7 @@
       window.LocatorBlock.getInstances().forEach(mount);
     }
   }
-  window.CollectionBlocksRoutePlanner = { mount: mount, createModel: createModel, directions: directions, createPreview: createPreview };
+  window.CollectionBlocksRoutePlanner = { mount: mount, createModel: createModel, directions: directions, createPreview: createPreview, shortDuration: shortDuration };
   document.addEventListener('cb:locator-ready', function(event) { mount(event.detail.instance); });
   document.addEventListener('cb:locator-render', function(event) {
     var controller = mounted.get(event.detail.root); if (controller) controller.refresh();

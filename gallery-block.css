@@ -30,7 +30,7 @@
   display: block;
   overflow: hidden;
   padding-bottom: var(--gallery-image-padding, 66.6667%) !important;
-  border-radius: var(--gallery-radius, .25rem);
+  border-radius: var(--gallery-radius, 0);
 }
 :where(.cb-gallery--compact).glb-gallery--compact .cb-gallery__link:focus-visible {
   outline: 2px solid currentColor;
@@ -77,6 +77,6 @@
   }
 }
 :where(.cb-gallery--compact).glb-gallery--compact .cb-gallery__item:only-child {
-  grid-column: 1 / -1;
+  grid-column: auto;
 }
 

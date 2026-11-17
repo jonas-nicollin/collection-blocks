@@ -91,7 +91,7 @@ test('planner stays unique through card rerenders and restores all controls on t
     getItems:()=>galleries,isComplete:()=>true};
   const c=p.api.mount(instance); assert.equal(p.api.mount(instance),c);
   root.querySelector('[data-route-id="g0"]').click();
-  assert.equal(root.querySelector('.cb-route-planner__title').textContent,'Mon parcours (1/4)');
+  assert.equal(root.querySelector('.cb-route-planner__title').textContent,'Créer votre parcours');
   c.refresh(); assert.equal(root.querySelectorAll('details').length,1);
   assert.equal(root.querySelectorAll('.cb-route-planner__add').length,2);
   assert.equal(root.querySelectorAll('.cb-card__media button').length,0);
@@ -175,7 +175,7 @@ test('travel modes preserve route identity and transit opens only the next stop'
   assert.equal(next.searchParams.has('waypoints'),false);
 });
 
-test('all categories, responsive add position, transport history and drag ordering', () => {
+test('all categories, responsive add position, transport history and button ordering', () => {
   const items=galleries.slice(0,3).map((g,i)=>({...g,categories:[i?'Institution':'Galerie']}));
   const p=environment('<div class="lb-block"><div class="lb-sidebar"><div class="lb-grid">'+
     items.map(i=>'<div class="lb-card" data-item-id="'+i.id+'"><div class="cb-card__media"></div><div class="cb-card__body"></div></div>').join('')+'</div></div></div>');
@@ -199,15 +199,13 @@ test('all categories, responsive add position, transport history and drag orderi
   assert.equal(p.window.location.searchParams.get('categorie'),'Galerie');
   assert.equal(p.window.location.searchParams.get('transport'),'transit');
   const list=root.querySelector('.cb-route-planner__list');
-  Array.from(list.children).forEach((row,i)=>row.getBoundingClientRect=()=>({top:i*50,height:50}));
-  const event=(type,target,props)=>{const e=new p.window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,props);target.dispatchEvent(e)};
-  event('pointerdown',list.querySelector('[data-route-id="g0"] [data-route-action="drag"]'),
-    {button:0,isPrimary:true,pointerId:7,clientY:25});
-  event('pointermove',list,{pointerId:7,clientY:160});
-  event('pointerup',list,{pointerId:7,clientY:160});
-  assert.equal(p.window.location.searchParams.get('parcours'),'g1|g2|g0');
-  event('keydown',list.querySelector('[data-route-id="g0"] [data-route-action="drag"]'),{key:'ArrowUp'});
+  list.querySelector('[data-route-id="g0"] [data-route-action="down"]').click();
   assert.equal(p.window.location.searchParams.get('parcours'),'g1|g0|g2');
+  list.querySelector('[data-route-id="g0"] [data-route-action="down"]').click();
+  assert.equal(p.window.location.searchParams.get('parcours'),'g1|g2|g0');
+  list.querySelector('[data-route-id="g0"] [data-route-action="up"]').click();
+  assert.equal(p.window.location.searchParams.get('parcours'),'g1|g0|g2');
+  assert.equal(list.querySelector('[data-route-action="drag"]'),null);
   p.window.location=new URL('https://example.com/membres?categorie=Design&parcours=g2|g0&transport=driving');
   p.window.dispatchEvent(new p.window.Event('popstate'));
   assert.equal(root.querySelector('[data-route-mode="driving"]').getAttribute('aria-pressed'),'true');
@@ -233,4 +231,31 @@ test('preview caches each travel mode separately and leaves default Google line 
   c.update(galleries.slice(0,2),'walking');await tick();
   assert.deepEqual(requests.map(x=>x.travelMode),['WALKING','BICYCLING']);
   assert(styles.every(x=>x===undefined));c.destroy();
+});
+
+test('compact durations and share preserve the current ordered route and filters', async()=>{
+  const p=environment('<div class="lb-block"><div class="lb-sidebar"><div class="lb-grid"></div></div></div>');
+  assert.equal(p.api.shortDuration(35*60000),'35 min.');
+  assert.equal(p.api.shortDuration(107*60000),'1h47');
+  assert.equal(p.api.shortDuration(120*60000),'2h00');
+  assert.equal(p.api.shortDuration(undefined),'');
+  const root=p.document.querySelector('.lb-block');
+  p.window.location=new URL('https://example.com/map?categorie=Galerie&parcours=g2|g0&transport=bicycling');
+  p.window.history={state:null,replaceState(_s,_t,url){p.window.location=new URL(url)}};
+  let copied;
+  p.window.navigator={clipboard:{writeText:async text=>{copied=text}}};
+  const c=p.api.mount({root,config:{key:'share',display:{},routePlanner:{
+    travelModes:['walking','bicycling','driving'],showNextStop:false,
+    urlState:{param:'parcours',mode:'transport'}}},getItems:()=>galleries,isComplete:()=>true});
+  root.querySelector('.cb-route-planner__share').click();
+  await Promise.resolve();
+  assert.equal(new URL(copied).searchParams.get('parcours'),'g2|g0');
+  assert.equal(new URL(copied).searchParams.get('transport'),'bicycling');
+  assert.equal(new URL(copied).searchParams.get('categorie'),'Galerie');
+  assert.equal(root.querySelector('.cb-route-planner__next'),null);
+  assert.equal(root.querySelector('.cb-route-planner__mode-label'),null);
+  assert.equal(root.querySelector('.cb-route-planner__mode-note'),null);
+  assert.equal(root.querySelector('.cb-route-planner__peek').getAttribute('aria-hidden'),'true');
+  assert.equal(root.querySelector('.cb-route-planner__peek button'),null);
+  c.destroy();
 });
