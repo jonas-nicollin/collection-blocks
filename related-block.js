@@ -447,6 +447,10 @@
         return BODY_CLASS_PREFIX + slugifyToken(key || "rb-block");
     }
     function syncBodyRelatedBlockClasses() {
+        if (window.CollectionBlocks?.body) {
+            window.CollectionBlocks.body.refresh();
+            return;
+        }
         if (!document.body) return;
         Array.from(document.body.classList).forEach(cls => {
             if (cls.indexOf(BODY_CLASS_PREFIX) === 0) document.body.classList.remove(cls);

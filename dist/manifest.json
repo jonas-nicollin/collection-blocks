@@ -40,25 +40,25 @@
     {
       "source": "collection-blocks.js",
       "output": "dist/collection-blocks.min.js",
-      "sourceSHA256": "c3062a3d0fbf78c1719051c5e95675da31ee9e2a247e30ba558874cc92891e4a",
-      "outputSHA256": "02377b5e3d11f9d74adfcfa4cbf35542de1b622557b69458dd7b6fcbd5ddcb6c",
+      "sourceSHA256": "d711c3ba9852696f06e94d0815fefd7d6440f71aba819772fec1c69cf84b2869",
+      "outputSHA256": "965a39d24be5694fd9c36ec3900433ceda8f747bfcaa40aded21889a3160602a",
       "before": {
-        "raw": 99334
+        "raw": 103496
       },
       "after": {
-        "raw": 46569
+        "raw": 48936
       }
     },
     {
       "source": "extension-collapse.js",
       "output": "dist/extension-collapse.min.js",
-      "sourceSHA256": "b3db9c2afb63a560067b451f2042fed1116a1f3a20548132d1faafa6ace38ae5",
-      "outputSHA256": "1953a8aeb6303c8a7702aaa81663033e8481ace2d7f00186995c4b2a538a605d",
+      "sourceSHA256": "8f6ae83478008b286dc8b0f0ed2089e5835ad69728eb0b852fa1010b157f7f39",
+      "outputSHA256": "6294406478fe39a305d52579457bc6c3208fb88becf6f544ca869056f57d5094",
       "before": {
-        "raw": 9946
+        "raw": 11232
       },
       "after": {
-        "raw": 5185
+        "raw": 5815
       }
     },
     {
@@ -256,13 +256,37 @@
     {
       "source": "related-block.js",
       "output": "dist/related-block.min.js",
-      "sourceSHA256": "d5e22062fdcc617a2618f31ccd801030a4299ce9b6cd8ddce261d9c3fa024f34",
-      "outputSHA256": "a464263625d7ada1200bd396665544ccd324310601790e1337a086e75f143fd1",
+      "sourceSHA256": "a674003ccec39bcd97af33bb93570008414765347997a6afb76380f2191cbf59",
+      "outputSHA256": "aaa6e50b08f75b60afce865c2f184396fc485869b3ef233af5bfdca691f9cdd3",
       "before": {
-        "raw": 125384
+        "raw": 125511
       },
       "after": {
-        "raw": 52205
+        "raw": 52285
+      }
+    },
+    {
+      "source": "toc-block.css",
+      "output": "dist/toc-block.min.css",
+      "sourceSHA256": "71dd578681b6b2fc63e957f282e34b59ac7ef30e2033849d62503873dfea9a28",
+      "outputSHA256": "e670da7443b911c5b65864eebd9ae3fd6cb546a70909c542c382ccb304e4fa46",
+      "before": {
+        "raw": 8800
+      },
+      "after": {
+        "raw": 7791
+      }
+    },
+    {
+      "source": "toc-block.js",
+      "output": "dist/toc-block.min.js",
+      "sourceSHA256": "a44303b5f415821516044c2e09a9954a2e0f45e3e0d349eb216d51ef86c7efa4",
+      "outputSHA256": "2ff186e474072d42c08fae616a89fe51086bba33c9e2e68de2444daa7004e333",
+      "before": {
+        "raw": 25206
+      },
+      "after": {
+        "raw": 12541
       }
     }
   ]

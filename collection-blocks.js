@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.25';
+  var VERSION = '0.26';
   var STORE_KEY_PREFIX = 'collection-blocks::v0.7::';
 
   var memoryCache = new Map();
@@ -2985,7 +2985,101 @@
     appendProgressiveDOM: appendProgressiveDOM
   };
 
+  // Page-level classes describe mounted blocks on every Squarespace page type.
+  // No collection fetch: only native item taxonomy and actual component roots.
+  var bodyClassOwnership = new Map();
+  var bodyClassFrame = 0;
+  var presenceKinds = [
+    ['qb', '.qb-block', 'data-qb-key'],
+    ['rb', '.rb-block', 'data-rb-key'],
+    ['lb', '.lb-block', 'data-lb-key'],
+    ['mb', '.mb-blocks', 'data-metadata-key'],
+    ['locb', '.locb-block', 'data-location-config'],
+    ['bnb', '.bnb-block', 'data-cb-key'],
+    ['glb', '.glb-block', 'data-cb-key'],
+    ['tocb', '.tocb-block', 'data-cb-key']
+  ];
+  var presenceSelector = presenceKinds.map(function (kind) { return kind[1]; }).join(',');
+  var taxonomySelector = '.blog-item-category, .blog-item-tag';
+  function bodyToken(value) {
+    return String(value || '').toLowerCase().normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9-]+/g, '-')
+      .replace(/-+/g, '-').replace(/^-+|-+$/g, '');
+  }
+  function syncBodyClasses() {
+    var body = document.body;
+    if (!body) return;
+    var desired = new Set();
+    presenceKinds.forEach(function (kind) {
+      document.querySelectorAll(kind[1]).forEach(function (node) {
+        desired.add('has-cb-blocks');
+        desired.add('has-' + kind[0] + '-blocks');
+        var key = bodyToken(node.getAttribute(kind[2]) || node.getAttribute('data-cb-key'));
+        if (key) desired.add('has-' + kind[0] + '-block--' + key);
+      });
+    });
+    if (body.classList.contains('view-item')) {
+      document.querySelectorAll(taxonomySelector).forEach(function (node) {
+        if (node.closest('.cb-card, .summary-item, .blog-list, nav, footer')) return;
+        var value = bodyToken(node.textContent);
+        if (value) desired.add((node.matches('.blog-item-category') ? 'category-' : 'tag-') + value);
+      });
+    }
+    bodyClassOwnership.forEach(function (owner, name) {
+      if (owner !== body || !desired.has(name)) {
+        owner.classList.remove(name);
+        bodyClassOwnership.delete(name);
+      }
+    });
+    desired.forEach(function (name) {
+      if (!body.classList.contains(name)) {
+        body.classList.add(name);
+        bodyClassOwnership.set(name, body);
+      }
+    });
+  }
+  function scheduleBodyClasses() {
+    if (bodyClassFrame) return;
+    bodyClassFrame = requestAnimationFrame(function () {
+      bodyClassFrame = 0;
+      syncBodyClasses();
+    });
+  }
+  function relevantBodyMutation(record) {
+    var target = record.target.nodeType === 1 ? record.target : record.target.parentElement;
+    if (!target) return false;
+    if (record.type === 'attributes') {
+      return target === document.body || target.matches(presenceSelector + ',' + taxonomySelector) ||
+        /(?:^|\s)(?:(?:qb|rb|lb|locb|bnb|glb|tocb)-block|mb-blocks|blog-item-(?:tag|category))(?:\s|$)/
+          .test(record.attributeName === 'class' ? record.oldValue || '' : '');
+    }
+    if (target.closest(taxonomySelector)) return true;
+    return Array.from(record.addedNodes || []).concat(Array.from(record.removedNodes || []))
+      .some(function (node) {
+        return node.nodeType === 1 && (node.matches(presenceSelector + ',' + taxonomySelector) ||
+          node.querySelector(presenceSelector + ',' + taxonomySelector));
+      });
+  }
+  if (typeof document !== 'undefined') {
+    syncBodyClasses();
+    document.addEventListener('DOMContentLoaded', syncBodyClasses);
+    document.addEventListener('mercury:load', scheduleBodyClasses);
+    window.addEventListener('page:loaded', scheduleBodyClasses);
+    window.addEventListener('pageshow', scheduleBodyClasses);
+    if (typeof MutationObserver !== 'undefined' && document.documentElement) {
+      new MutationObserver(function (records) {
+        if (records.some(relevantBodyMutation)) scheduleBodyClasses();
+      }).observe(document.documentElement, {
+        childList: true, subtree: true, characterData: true, attributes: true,
+        attributeOldValue: true,
+        attributeFilter: ['class', 'data-cb-key', 'data-qb-key', 'data-rb-key',
+          'data-lb-key', 'data-metadata-key', 'data-location-config']
+      });
+    }
+  }
+
   window.CollectionBlocks = {
+    body: { refresh: syncBodyClasses },
     extensions: extensionsApi,
     selection: selectionApi,
     grouping: groupingApi,

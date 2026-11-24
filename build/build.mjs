@@ -12,7 +12,7 @@ const assets = [
   'extension-masonry.js', 'extension-route-planner.css', 'extension-route-planner.js',
   'extension-scroller.css', 'extension-scroller.js', 'extension-slider.js',
   'gallery-block.css', 'gallery-block.js', 'location-block.js', 'locator-block.js',
-  'metadata-block.js', 'query-block.js', 'related-block.js'
+  'metadata-block.js', 'query-block.js', 'related-block.js', 'toc-block.css', 'toc-block.js'
 ];
 const check = process.argv.includes('--check');
 const hash = data => createHash('sha256').update(data).digest('hex');

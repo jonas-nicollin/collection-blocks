@@ -89,3 +89,69 @@ for (const minified of [false, true]) {
     } finally { dom.window.close(); }
   });
 }
+
+for (const minified of [false, true]) {
+  test(`${minified ? 'distribution' : 'source'}: page classes, TOC lifecycle and paragraph disclosure`, async () => {
+    const dom = new JSDOM('<body class="view-item keep-user-class"><header id="header"></header>' +
+      '<a class="blog-item-category">Événement & Art</a><a class="blog-item-tag">Fonction: Curatrice</a>' +
+      '<div class="entry"></div><main class="content"><h2>About</h2><h2>Works</h2>' +
+      '<div id="reading"><p>' + 'A'.repeat(350) + '</p><p>' + 'B'.repeat(370) + '</p><p>' +
+      'C'.repeat(500) + '</p></div></main>', {
+      url: 'https://example.com/item/test', runScripts: 'outside-only', pretendToBeVisual: true
+    });
+    const w = dom.window, d = w.document;
+    const load = name => w.eval(readFileSync(path.join(root, minified ?
+      'dist/' + name.replace('.js', '.min.js') : name), 'utf8'));
+    try {
+      w.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
+      w.scrollTo = () => {};
+      load('collection-blocks.js');
+      assert(d.body.classList.contains('category-evenement-art'));
+      assert(d.body.classList.contains('tag-fonction-curatrice'));
+      // Standard pages receive the same presence classes, without item taxonomy.
+      d.body.classList.remove('view-item');
+      const q = d.createElement('section');
+      q.className = 'cb-block qb-block'; q.dataset.cbKey = 'ordinary-page'; d.body.append(q);
+      await waitFor(() => d.body.classList.contains('has-qb-block--ordinary-page'));
+      assert(!d.body.classList.contains('tag-fonction-curatrice'));
+      const foreign = d.createElement('div'); foreign.className = 'cb-card';
+      foreign.innerHTML = '<a class="blog-item-tag">Not page metadata</a>'; d.body.append(foreign);
+      d.body.classList.add('view-item');
+      await pause(50);
+      assert(!d.body.classList.contains('tag-not-page-metadata'));
+      w.TOC_BLOCK_CONFIGS = [{ key: 'contents', contentSelector: '.content', selectors: 'h2',
+        targetContainerSelector: '.entry', sticky: true, legacyClasses: false }];
+      load('toc-block.js');
+      await waitFor(() => d.querySelectorAll('.cb-toc__link.tocb-toc__link').length === 2);
+      assert.equal(d.querySelectorAll('.automatic-toc').length, 0);
+      assert(d.querySelector('.cb-toc--sticky.tocb-toc--sticky'));
+      const ids = Array.from(d.querySelectorAll('.content h2')).map(e => e.id);
+      assert.equal(new Set(ids).size, 2);
+      load('toc-block.js');
+      assert.equal(d.querySelectorAll('.tocb-block').length, 1);
+      d.querySelector('.content h2').remove(); w.CollectionBlocksTOC.refresh();
+      assert.equal(d.querySelectorAll('.tocb-toc__link').length, 1);
+      w.CB_COLLAPSE_CONFIGS = [{ targets: '#reading', listSelector: ':scope',
+        itemSelector: ':scope > p', characterLimit: 800, step: 1000,
+        disableInEditMode: true, scrollToSectionOnCollapse: false,
+        labels: { showMore: 'Lire la suite', showLess: 'Réduire' } }];
+      load('extension-collapse.js');
+      await waitFor(() => d.querySelector('.cb-collapse__more'));
+      const paragraphs = Array.from(d.querySelectorAll('#reading p'));
+      assert.deepEqual(paragraphs.map(p => p.hidden), [false, false, true]);
+      d.querySelector('.cb-collapse__more').click();
+      assert(paragraphs.every(p => !p.hidden));
+      d.querySelector('.cb-collapse__less').click();
+      assert(paragraphs[2].hidden);
+      d.body.classList.add('sqs-edit-mode-active');
+      await waitFor(() => !d.querySelector('.cb-collapse__more'));
+      assert(paragraphs.every(p => !p.hidden));
+      d.body.classList.remove('sqs-edit-mode-active');
+      await waitFor(() => d.querySelector('.cb-collapse__more'));
+      q.classList.remove('qb-block'); w.CollectionBlocksTOC.destroy();
+      await waitFor(() => !d.body.classList.contains('has-qb-blocks') &&
+        !d.body.classList.contains('has-tocb-blocks'));
+      assert(d.body.classList.contains('keep-user-class'));
+    } finally { dom.window.close(); }
+  });
+}

@@ -94,6 +94,7 @@
     var threshold = positive(cfg.threshold, 8);
     var step = positive(cfg.step, threshold);
     var visibleCount = threshold, items = [], controls, more, less, list;
+    var initialBudget = true;
     var originals = new Map(), generatedList = null, generatedId = '';
     function restore(item) {
       if (!originals.has(item)) return;
@@ -145,6 +146,17 @@
       items = list ? Array.from(scope.querySelectorAll(cfg.itemSelector)).filter(function (item) {
         return list.contains(item) && (!cfg.excludeSelector || !item.matches(cfg.excludeSelector));
       }) : [];
+      // A character budget keeps whole paragraphs/items and always shows the first.
+      if (cfg.characterLimit) {
+        var budget = positive(cfg.characterLimit, 800), total = 0;
+        threshold = 0;
+        items.some(function (item) {
+          var length = item.textContent.trim().length;
+          if (threshold && total + length > budget) return true;
+          total += length; threshold++; return false;
+        });
+        threshold = Math.max(1, threshold);
+      }
       previous.forEach(function (item) { if (items.indexOf(item) < 0) restore(item); });
       items.forEach(function (item) {
         if (!originals.has(item)) originals.set(item, {
@@ -178,6 +190,8 @@
         if (footer) footer.appendChild(controls); else list.insertAdjacentElement('afterend', controls);
         toggle(scope, classes(''), true);
       }
+      if (initialBudget && cfg.characterLimit) visibleCount = threshold;
+      initialBudget = false;
       visibleCount = Math.max(threshold, Math.min(visibleCount, items.length));
       apply();
     }
@@ -202,11 +216,17 @@
     });
     array(window.CB_COLLAPSE_CONFIGS).forEach(function (cfg) {
       array(cfg.targets).forEach(function (selector) {
-        document.querySelectorAll(selector).forEach(function (scope) { mount(scope, cfg); });
+        document.querySelectorAll(selector).forEach(function (scope) {
+          var editing = cfg.disableInEditMode && document.querySelector(
+            '.sqs-edit-mode-active, .squarespace-edit-mode-active');
+          if (editing) {
+            if (controllers.has(scope)) controllers.get(scope).destroy();
+          } else mount(scope, cfg);
+        });
       });
     });
   }
-  window.CollectionBlocksCollapse = { version: '1.2.0', mount: mount, refresh: refresh };
+  window.CollectionBlocksCollapse = { version: '1.3.0', mount: mount, refresh: refresh };
   var scheduled = false;
   function schedule() {
     if (scheduled) return;
@@ -218,5 +238,15 @@
   window.addEventListener('page:loaded', schedule);
   window.addEventListener('site:refresh', schedule);
   new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
+  new MutationObserver(schedule).observe(document.documentElement, {
+    attributes: true, attributeFilter: ['class']
+  });
+  function watchBody() {
+    if (document.body) new MutationObserver(schedule).observe(document.body, {
+      attributes: true, attributeFilter: ['class']
+    });
+  }
+  if (document.body) watchBody();
+  else document.addEventListener('DOMContentLoaded', watchBody, { once: true });
   schedule();
 })();

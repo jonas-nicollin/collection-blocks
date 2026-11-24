@@ -760,6 +760,21 @@ editorial taxonomies must remain outside the shared naming contract.
 | Location | `cb-card locb-card` | `locb-*` |
 | Banner | `cb-banner bnb-banner` | `bnb-*` |
 | Gallery | `cb-gallery glb-gallery` | `glb-*` |
+| TOC | `cb-toc tocb-toc` | `tocb-*` |
+
+Page presence is synchronized by the core on standard pages and collection items:
+`has-cb-blocks`, plus `has-qb-blocks`, `has-rb-blocks`, `has-lb-blocks`,
+`has-mb-blocks`, `has-locb-blocks`, `has-bnb-blocks`, `has-glb-blocks` and
+`has-tocb-blocks` for actual mounted roots. When a root exposes a stable key,
+`has-<prefix>-block--<key>` is added. Removed roots are reconciled after AJAX
+navigation. Unrelated pre-existing body classes are preserved.
+`CollectionBlocks.body.refresh()` can request synchronous reconciliation.
+
+The core also owns the former `blog-category-tag-classes.js` behavior:
+`category-<normalized-native-category>` and `tag-<normalized-native-tag>` on
+`view-item` pages. It reads native blog taxonomy only, excluding card/list/nav
+content; it makes no network request and removes its classes when leaving an item.
+Do not load the old utility alongside the updated core.
 
 Generated block attributes:
 
@@ -1737,8 +1752,8 @@ focus. Public paired cb-/lb- classes: `cb-block--compact-controls`,
 
 ## Minified distribution
 
-Readable, stable source filenames remain at the repository root. Optional
-minified assets live exclusively in `dist/`: for example,
+Readable, stable source filenames remain at the repository root. Every release
+includes verified minified assets, which live exclusively in `dist/`: for example,
 `@v0.17.1/dist/query-block.min.js`. Never load a source and its minified copy
 together. Preserve dependency order and pin published sites to an immutable tag.
 
@@ -1767,3 +1782,38 @@ sources in the same tag and are only fetched by debugging tools when needed.
 `dist/manifest.json` records source/output SHA256 and raw sizes. Run
 `node build/measure.mjs` for equal-setting gzip/Brotli estimates. These estimates
 can vary with the local compression library and are not page-speed measurements.
+
+
+## TOC Block
+
+`toc-block.js` and `toc-block.css` replace Automatic TOC from
+squarespace-components. Configure `window.TOC_BLOCK_CONFIGS` before loading the
+runtime; the first matching configuration wins. All existing selection,
+placement, sticky-offset, backlink and section-boundary settings are supported.
+`window.tableOfContentSettings` remains a fallback and `window.AutomaticTOC`
+remains an alias for `window.CollectionBlocksTOC` (`refresh()` / `destroy()`).
+Do not load both old and new scripts.
+
+The root receives `cb-block tocb-block cb-toc tocb-toc`; children pair
+`cb-toc__<part>` and `tocb-toc__<part>` for inner, viewport, list, link, label,
+back, back-icon, back-label and offset-probe. Modifiers pair both prefixes:
+root `--sticky`, `--back-link`, `--back-only`, `--back-stacked`, `--overflowing`;
+link `--active`; back-icon `--chevron`. `key` optionally supplies `data-cb-key`.
+Custom prefixes add `<prefix>--tocb-toc[__part]`.
+
+Legacy classes and custom-prefix aliases remain enabled by default to preserve
+existing site CSS; set `legacyClasses: false` for a new installation. Existing
+`--automatic-toc-*` variables and the shared `--toc-height` geometry contract are
+retained. The new stylesheet targets the paired canonical classes. Heading IDs
+survive teardown so existing anchor links remain valid. Editing mode suspends
+navigation, and dynamic headings are reconciled without duplicate menus.
+
+## Paragraph disclosure
+
+The existing Collapse extension accepts optional `characterLimit` (for example
+800) with its normal `listSelector` / `itemSelector`. It keeps whole initial
+items/paragraphs within that budget, always showing at least one. The first
+paragraph may therefore exceed the budget; it is never split or duplicated.
+`step` controls subsequent disclosure as before. Short content has no control.
+`disableInEditMode: true` restores the full content in the Squarespace editor.
+No content is fetched, removed from the page or replaced with a plain-text copy.
