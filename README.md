@@ -1531,6 +1531,17 @@ Each configuration supports the existing `bodyClassConditions`,
 `BlogBanner` and legacy classes remain compatibility aliases. The new public
 API is `BannerBlock.refresh()` and `getBannerFor(viewItem)`.
 
+`imageSource: 'thumbnail'` opts into the current post's `assetUrl` from its
+Squarespace JSON, including its focal point and original dimensions. Existing
+content-only configurations do not fetch JSON. `thumbnailOverrideSelector`,
+for example `.design-layout-poster`, gives an explicitly chosen content image
+priority over the thumbnail. If the post has no thumbnail or its JSON fails,
+`bannerSelectors` remains the content fallback; no native heading is hidden
+when neither image exists. Requests are deduplicated per page and pending
+mounts are invalidated on editor entry. `hideMatchingContentImage: true`
+optionally hides only a native image block with the exact same image URL as
+the chosen thumbnail, restoring it in the editor. Other content images remain.
+
 `paths` optionally restricts a configuration to exact pathnames (without a
 trailing slash). Put specific configurations before a broader fallback.
 `heading: { selector: '.blog-item-title h1',

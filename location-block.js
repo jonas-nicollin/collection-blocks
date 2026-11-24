@@ -796,6 +796,24 @@ function cleanUrlDisplay(value){
     .replace(/\/$/, '');
 }
 
+function compactWebsite(value){
+  // A terminal locale belongs to the destination, not its compact label.
+  return cleanUrlDisplay(value).replace(/\/(?:fr|en|de|it|es|pt|nl)(?:[-_][a-z]{2})?$/i, '');
+}
+
+function publicLinkedInUrl(value){
+  try {
+    var url = new URL(normUrl(value));
+    if (!/(^|\.)linkedin\.com$/i.test(url.hostname)) return value;
+    var match = url.pathname.match(/^\/(company|in|showcase)\/([^/]+)(?:\/.*)?$/);
+    if (match) {
+      url.pathname = '/' + match[1] + '/' + match[2] + '/';
+      url.search = ''; url.hash = '';
+    }
+    return url.href;
+  } catch (_) { return value; }
+}
+
 function socialHandle(value, service){
   var v = String(value || '').trim();
   if(!v) return '';
@@ -803,9 +821,16 @@ function socialHandle(value, service){
   try{
     var url = new URL(/^https?:\/\//i.test(v) ? v : 'https://' + v);
     var parts = url.pathname.split('/').filter(Boolean);
+    if(service==='linkedin') return cleanUrlDisplay(publicLinkedInUrl(v));
     if(service==='youtube' && parts[0]==='channel') return cleanUrlDisplay(v);
     if(parts[0]==='profile.php') return cleanUrlDisplay(v);
-    if(parts.length) return '@' + parts[parts.length - 1].replace(/^@/, '');
+    if(service==='youtube' && ['user','c'].indexOf(parts[0])!==-1) {
+      return cleanUrlDisplay(url.origin + '/' + parts.slice(0,2).join('/'));
+    }
+    if(parts.length===1 || (service==='youtube' && parts[0]?.charAt(0)==='@')) {
+      return '@' + parts[0].replace(/^@/, '');
+    }
+    return cleanUrlDisplay(v);
   }catch(_){}
   if(service === 'instagram' || service === 'x') return '@' + v.replace(/^@/, '');
   return v;
@@ -838,9 +863,13 @@ function fieldValueHtml(def, rawValue){
   }else if(type === 'email'){
     href = 'mailto:' + value;
   }else if(type === 'url'){
+    if(def.display === 'compact' && def.key === 'linkedin') value = publicLinkedInUrl(value);
     href = normUrl(value);
     display = def.display === 'clean-url' || def.display === 'compact'
       ? cleanUrlDisplay(value) : value;
+    if(def.display === 'compact' && (!def.key || def.key === 'website')) {
+      display = compactWebsite(value);
+    }
     if(def.display === 'compact' && ['facebook','youtube','linkedin','vimeo','artsy'].indexOf(def.key)!==-1){
       display=socialHandle(value,def.key);
     }
@@ -978,7 +1007,7 @@ function getMapSrc(lieu, cfg){
   var lng = validCoordinate(lieu.longitude, -180, 180);
   // A name and country alone must not resolve to an unrelated Google location.
   if ((lat === null || lng === null) && !lieu.address1 && !lieu.address2) return '';
-  var addressQuery = [lieu.title, lieu.address1, lieu.address2, lieu.address3].filter(Boolean).join(', ');
+  var addressQuery = [lieu.address1, lieu.address2, lieu.address3].filter(Boolean).join(', ');
   var coordinateQuery = lat !== null && lng !== null ? (lat + ',' + lng) : '';
   var mode = cfg.mapQuery || 'coordinates-first';
   var query;

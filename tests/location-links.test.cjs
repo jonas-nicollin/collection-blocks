@@ -53,6 +53,29 @@ test('Legacy website rendering remains unchanged without compact option',()=>{
  assert(field({type:'url'},'https://example.com/').includes('>https://example.com/</a>'));
 });
 
+test('compact contacts preserve language destinations and expose public LinkedIn URLs',()=>{
+ const website=field({key:'website',type:'url',display:'compact'},'https://teojakob.ch/fr/');
+ assert(website.includes('href="https://teojakob.ch/fr/"'));
+ assert(website.includes('>teojakob.ch</a>'));
+ assert(field({key:'website',type:'url',display:'compact'},'https://example.com/exhibitions')
+   .includes('>example.com/exhibitions</a>'));
+ for(const suffix of ['posts/?feedView=all','admin/dashboard/','about/']){
+   const html=field({key:'linkedin',type:'url',display:'compact'},
+     'https://www.linkedin.com/company/teo-jakob-ag/'+suffix);
+   assert(html.includes('href="https://www.linkedin.com/company/teo-jakob-ag/"'));
+   assert(html.includes('>www.linkedin.com/company/teo-jakob-ag</a>'));
+ }
+ assert(!field({key:'youtube',type:'url',display:'compact'},
+   'https://www.youtube.com/user/xippas/videos').includes('@videos'));
+});
+
+test('address-mode maps never search the unverified business name',()=>{
+ const html=window.test.buildMap({title:'Ambiguous business',address1:'Place du Marché 15',
+   address2:'1227 Carouge',address3:'Suisse'}, {mapQuery:'address'});
+ assert(!decodeURIComponent(html).includes('q=Ambiguous business'));
+ assert(decodeURIComponent(html).includes('q=Place du Marché 15, 1227 Carouge, Suisse'));
+});
+
 test('Shared map accepts decimal-comma coordinates from Sheets',()=>{
  window.CollectionBlocksMap={};
  const html=window.test.buildMap({title:'Venue',latitude:'46,1989',longitude:'6,1451'},

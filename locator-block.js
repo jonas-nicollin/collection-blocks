@@ -478,8 +478,8 @@ function getCollectionOptions(maxPages){
     return {
       id: item.id || item.urlId || '',
       venueKey: item.venue && item.venue.key || '',
-      navigationQuery: location.addressLine1 ? [location.addressTitle || item.title,
-        location.addressLine1, location.addressLine2, location.addressCountry]
+      navigationQuery: location.addressLine1 ? [location.addressLine1,
+        location.addressLine2, location.addressCountry]
         .filter(Boolean).join(', ') : '',
       placeId: location.placeId || '',
       url: item.sourceUrl || item.fullUrl || item.url || '',

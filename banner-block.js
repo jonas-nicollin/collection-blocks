@@ -15,6 +15,8 @@
   }
 
   const insertedBanners = new Map();
+  const pendingBanners = new Map();
+  const thumbnailRequests = new Map();
   const BANNER_WIDTHS = [750, 1000, 1500, 2500];
   let didPreloadFirstBanner = false;
 
@@ -63,7 +65,7 @@
     });
   }
 
-  function applyBannerConfig(config) {
+  async function applyBannerConfig(config) {
     // Retain existing banners and body states on idempotent refresh.
 
     let insertedImageCount = 0;
@@ -72,40 +74,68 @@
     const wrappers = document.querySelectorAll(".blog-item-content-wrapper");
     dbg("applyBannerConfig — wrappers:", wrappers.length);
 
-    wrappers.forEach(function (contentWrapper, i) {
+    for (const [i, contentWrapper] of Array.from(wrappers).entries()) {
       const viewItem = contentWrapper.closest(".view-item");
 
       if (!viewItem) {
         dbg("wrapper[" + i + "] — pas de .view-item, ignoré");
-        return;
+        continue;
       }
 
       if (insertedBanners.has(viewItem) && insertedBanners.get(viewItem).isConnected) {
         dbg("wrapper[" + i + "] — déjà traité, ignoré");
-        return;
+        continue;
       }
 
       const destination = viewItem.querySelector(config.destinationSelector);
 
       if (!destination) {
         dbg("wrapper[" + i + "] — destination introuvable, ignoré");
-        return;
+        continue;
       }
 
-      const bannerBlock = selectBannerBlock(contentWrapper, config);
+      if (pendingBanners.has(viewItem)) continue;
+      const ticket = {};
+      const requestPath = location.pathname;
+      pendingBanners.set(viewItem, ticket);
+      try {
+      let bannerBlock = selectBannerBlock(contentWrapper, config);
+      let thumbnail = null;
+      if (config.imageSource === 'thumbnail') {
+        const override = config.thumbnailOverrideSelector
+          ? contentWrapper.querySelector(config.thumbnailOverrideSelector) : null;
+        if (override?.querySelector('img')) {
+          bannerBlock = override;
+        } else {
+          thumbnail = await loadThumbnail(requestPath);
+          if (thumbnail) {
+            bannerBlock = null;
+            if (config.hideMatchingContentImage) {
+              // Hide only a duplicate of this exact image, never an arbitrary block.
+              const duplicate = Array.from(contentWrapper.querySelectorAll('.sqs-block img'))
+                .find(img => stripImageFormat(getBestImageSource(img)) ===
+                  stripImageFormat(thumbnail.source));
+              bannerBlock = duplicate?.closest('.sqs-block') || null;
+            }
+          }
+        }
+      }
+      if (pendingBanners.get(viewItem) !== ticket || isEditMode() ||
+          location.pathname !== requestPath ||
+          !viewItem.isConnected || !destination.isConnected) continue;
       const videoBlock = config.allowVideoFallback
         ? contentWrapper.querySelector(".video-block")
         : null;
 
       dbg("wrapper[" + i + "] — bannerBlock:", bannerBlock, "| videoBlock:", videoBlock);
 
-      if (bannerBlock) {
-        const banner = insertImageBanner(destination, bannerBlock, config);
+      if (bannerBlock || thumbnail) {
+        const banner = insertImageBanner(destination, bannerBlock, config, thumbnail);
         dbg("wrapper[" + i + "] — insertImageBanner →", banner ? "OK" : "null");
 
         if (banner) {
           insertedBanners.set(viewItem, banner);
-          markSourceBlock(bannerBlock);
+          if (bannerBlock) markSourceBlock(bannerBlock);
           mountHeading(viewItem, banner, config);
           mountBackLink(banner, config);
           insertedImageCount++;
@@ -120,7 +150,12 @@
           insertedVideoCount++;
         }
       }
-    });
+      } catch (error) {
+        dbg('Banner unavailable; preserving native content', error);
+      } finally {
+        if (pendingBanners.get(viewItem) === ticket) pendingBanners.delete(viewItem);
+      }
+    }
 
     dbg("insertedImageCount:", insertedImageCount, "| insertedVideoCount:", insertedVideoCount);
 
@@ -199,6 +234,7 @@
   }
 
   function selectBannerBlock(contentWrapper, config) {
+    if (!config.bannerSelectors) return null;
     const all = Array.from(contentWrapper.querySelectorAll(config.bannerSelectors));
 
     if (all.length === 0) return null;
@@ -211,14 +247,42 @@
     return all[0];
   }
 
-  function insertImageBanner(destination, bannerBlock, config) {
-    const sourceImg = bannerBlock.querySelector("img");
-    if (!sourceImg) return null;
+  function loadThumbnail(path) {
+    if (thumbnailRequests.has(path)) return thumbnailRequests.get(path);
+    const request = fetch(path.replace(/\/$/, '') + '?format=json', {
+      credentials: 'same-origin'
+    }).then(response => {
+      if (!response.ok) throw new Error('Post JSON unavailable');
+      return response.json();
+    }).then(json => {
+      const item = json?.item;
+      if (!item?.assetUrl) return null;
+      const itemPath = new URL(item.fullUrl || path, location.href).pathname;
+      if (itemPath.replace(/\/$/, '') !== path.replace(/\/$/, '')) return null;
+      const source = new URL(item.assetUrl, location.href);
+      if (!/^https?:$/.test(source.protocol)) return null;
+      const focal = item.mediaFocalPoint || {};
+      const dimensions = String(item.originalSize || '').split('x').map(Number);
+      return { source: source.href, alt: item.title || '',
+        focal: (focal.x ?? .5) + ',' + (focal.y ?? .5),
+        width: dimensions[0], height: dimensions[1] };
+    }).catch(error => {
+      thumbnailRequests.delete(path);
+      dbg('Thumbnail unavailable; using configured content fallback', error);
+      return null;
+    });
+    thumbnailRequests.set(path, request);
+    return request;
+  }
 
-    const source = getBestImageSource(sourceImg);
+  function insertImageBanner(destination, bannerBlock, config, thumbnail) {
+    const sourceImg = bannerBlock?.querySelector("img");
+    if (!sourceImg && !thumbnail) return null;
+
+    const source = thumbnail?.source || getBestImageSource(sourceImg);
     if (!source) return null;
 
-    const focal = sourceImg.getAttribute("data-image-focal-point") || "0.5,0.5";
+    const focal = thumbnail?.focal || sourceImg?.getAttribute("data-image-focal-point") || "0.5,0.5";
     const parts = focal.split(",");
     const focalX = normalizeFocalPoint(parts[0] !== undefined ? parts[0] : "0.5");
     const focalY = normalizeFocalPoint(parts[1] !== undefined ? parts[1] : "0.5");
@@ -241,7 +305,10 @@
     img.src = bannerSrc;
     img.setAttribute("srcset", bannerSrcset);
     img.setAttribute("sizes", bannerSizes);
-    img.setAttribute("alt", sourceImg.getAttribute("alt") || "");
+    img.setAttribute("alt", thumbnail?.alt || sourceImg?.getAttribute("alt") || "");
+    if (thumbnail?.width > 0 && thumbnail?.height > 0) {
+      img.width = thumbnail.width; img.height = thumbnail.height;
+    }
     img.setAttribute("loading", "eager");
     img.setAttribute("decoding", "async");
     img.setAttribute("fetchpriority", "high");
@@ -262,7 +329,7 @@
 
     banner.appendChild(img);
 
-    if (config.displayCaption) {
+    if (config.displayCaption && bannerBlock && !thumbnail) {
       const captionData = extractCaptionData(bannerBlock, config);
 
       if (captionData.hasContent) {
@@ -515,6 +582,9 @@
   }
 
   function releaseForEditor(){
+    // Invalidate pending mounts, including a fetch that finishes after editor entry.
+    pendingBanners.clear();
+    thumbnailRequests.clear();
     insertedBanners.forEach(function(banner){
       const heading = banner._bnbHeading;
       if (heading) {

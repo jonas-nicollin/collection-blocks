@@ -109,6 +109,19 @@ test('navigation retains business identity with full addresses and optional Plac
   assert.equal(url.searchParams.get('destination_place_id'),'place1');
   assert.equal(url.searchParams.get('waypoint_place_ids'),'place0');
 });
+test('mixed-ID routes retain the complete street addresses when waypoint IDs cannot be sent', () => {
+ const p=environment();
+ const selected=galleries.slice(0,3).map((g,i)=>({...g,
+   navigationQuery:['Rue Exemple 11, 1206 Genève, Suisse',
+     'Place du Marché 15, 1227 Carouge, Suisse',
+     'Chemin de la Marbrerie 13, 1227 Carouge, Suisse'][i],
+   placeId:i===0?'verified-id':''}));
+ const url=new URL(p.api.directions(selected));
+ assert.equal(url.searchParams.has('waypoint_place_ids'),false);
+ assert.equal(url.searchParams.get('waypoints'),selected.slice(0,2).map(x=>x.navigationQuery).join('|'));
+ assert.equal(url.searchParams.get('destination'),selected[2].navigationQuery);
+ assert(!url.href.includes('Gallery'));
+});
 test('shared route URL overrides local selection, preserves filters, and icon cards only add', () => {
   const p=environment('<div class="lb-block"><div class="lb-sidebar"><div class="lb-grid">'+
     galleries.slice(0,3).map(i=>'<div class="lb-card" data-item-id="'+i.id+'">'+
