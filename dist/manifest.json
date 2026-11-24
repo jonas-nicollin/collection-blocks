@@ -1,0 +1,269 @@
+{
+  "esbuild": "0.25.12",
+  "assets": [
+    {
+      "source": "banner-block.css",
+      "output": "dist/banner-block.min.css",
+      "sourceSHA256": "d26d6946d6b2f9ff7e143b13be394ef4700caa21b7b8cb6fa64acc2bd5a890c2",
+      "outputSHA256": "ef89dcc53b6518a6ffecd57ad504cdcadd2d2197aa53adde716c3076633e698f",
+      "before": {
+        "raw": 1350
+      },
+      "after": {
+        "raw": 1166
+      }
+    },
+    {
+      "source": "banner-block.js",
+      "output": "dist/banner-block.min.js",
+      "sourceSHA256": "936f6f183fe153f8e6c4bd43f1355a40c038c710caa8d37fba9b8df2ae3c68fa",
+      "outputSHA256": "78cfbc95a981107c7e8a10a7773d9efa8d4aa4d3262b46000b2cb54e684eb49c",
+      "before": {
+        "raw": 22845
+      },
+      "after": {
+        "raw": 12788
+      }
+    },
+    {
+      "source": "collection-blocks.css",
+      "output": "dist/collection-blocks.min.css",
+      "sourceSHA256": "ad679f46cc98227fe7442183572b73989df9b0c3068f12e91dc1813379b968e5",
+      "outputSHA256": "91571c05032377711779a6db568dc016ea3b47966a4d833532d12d22d0b06fbf",
+      "before": {
+        "raw": 57821
+      },
+      "after": {
+        "raw": 40077
+      }
+    },
+    {
+      "source": "collection-blocks.js",
+      "output": "dist/collection-blocks.min.js",
+      "sourceSHA256": "c3062a3d0fbf78c1719051c5e95675da31ee9e2a247e30ba558874cc92891e4a",
+      "outputSHA256": "02377b5e3d11f9d74adfcfa4cbf35542de1b622557b69458dd7b6fcbd5ddcb6c",
+      "before": {
+        "raw": 99334
+      },
+      "after": {
+        "raw": 46569
+      }
+    },
+    {
+      "source": "extension-collapse.js",
+      "output": "dist/extension-collapse.min.js",
+      "sourceSHA256": "b3db9c2afb63a560067b451f2042fed1116a1f3a20548132d1faafa6ace38ae5",
+      "outputSHA256": "1953a8aeb6303c8a7702aaa81663033e8481ace2d7f00186995c4b2a538a605d",
+      "before": {
+        "raw": 9946
+      },
+      "after": {
+        "raw": 5185
+      }
+    },
+    {
+      "source": "extension-explorer.css",
+      "output": "dist/extension-explorer.min.css",
+      "sourceSHA256": "b13f86a0f9e221ad6fb5243ff9db9ba2549e4b2b7c188c61859969b621d5f2e1",
+      "outputSHA256": "60255c7e7c5dd77656c66f0322e0858f2d89771db90ecaded569bfa4802b5264",
+      "before": {
+        "raw": 873
+      },
+      "after": {
+        "raw": 733
+      }
+    },
+    {
+      "source": "extension-explorer.js",
+      "output": "dist/extension-explorer.min.js",
+      "sourceSHA256": "84248635894a6065719530637f1e75a19d4fca3c788f79d9631db5a66ce60394",
+      "outputSHA256": "2eeae2cced6689d128a1ad4f27e4d15453f0a35fb0fa86147f9839fee0b4c3ed",
+      "before": {
+        "raw": 11720
+      },
+      "after": {
+        "raw": 6569
+      }
+    },
+    {
+      "source": "extension-fancybox.js",
+      "output": "dist/extension-fancybox.min.js",
+      "sourceSHA256": "0fedfd98f3c83fce85ea00f33d1457b305e248e618732f9967d0f9857154cc4e",
+      "outputSHA256": "94eaae27513d6b121941375d05385e0aa6020f27e9c6e0ee14c60f6c661b19c2",
+      "before": {
+        "raw": 23217
+      },
+      "after": {
+        "raw": 12132
+      }
+    },
+    {
+      "source": "extension-map.js",
+      "output": "dist/extension-map.min.js",
+      "sourceSHA256": "d88e69bd3dfcb8c97e62560affeb6bcbb6d42acdcf17d9f72d333a519528e4a8",
+      "outputSHA256": "ad8d31ea2deec8cb3920db8ecbe17cda71af4041531e99877c3d34da6818ed10",
+      "before": {
+        "raw": 3646
+      },
+      "after": {
+        "raw": 2270
+      }
+    },
+    {
+      "source": "extension-masonry.js",
+      "output": "dist/extension-masonry.min.js",
+      "sourceSHA256": "8f40767505954aab6c22a63643af73d190f14c26a7fd1fa4aa6b27dd1e1b63a1",
+      "outputSHA256": "03c788f3727dc2f7a06068ef320d99424a638fdbc26924a5fc0bd2128c6b4d4a",
+      "before": {
+        "raw": 8884
+      },
+      "after": {
+        "raw": 5077
+      }
+    },
+    {
+      "source": "extension-route-planner.css",
+      "output": "dist/extension-route-planner.min.css",
+      "sourceSHA256": "6c1c6f466ef2353ca4860bff90c56035f1821ec158a3453e4aec46065b8a4d06",
+      "outputSHA256": "dfee6e182dc4bd173bcf333ae61913fae60b6fbff022b8436366a807e0c4a7e8",
+      "before": {
+        "raw": 8200
+      },
+      "after": {
+        "raw": 7212
+      }
+    },
+    {
+      "source": "extension-route-planner.js",
+      "output": "dist/extension-route-planner.min.js",
+      "sourceSHA256": "64c5652d4a8ca250180e0daadba799728dcefd87a2b47d2cc5ce9cd591e574ce",
+      "outputSHA256": "86c9ecb3626f1f50c7b07f307b66f81d4c92daeb6ea61d889b51efe259af8834",
+      "before": {
+        "raw": 26394
+      },
+      "after": {
+        "raw": 15322
+      }
+    },
+    {
+      "source": "extension-scroller.css",
+      "output": "dist/extension-scroller.min.css",
+      "sourceSHA256": "c61cbfefc3d259244ac94c9218f2b2c18da5c0f1597e7ff2f7a8635c2e089a12",
+      "outputSHA256": "7ebe8e843ddbd9a431344c6649c74b77c8621a42c51ab79efd912e6d907105cc",
+      "before": {
+        "raw": 3296
+      },
+      "after": {
+        "raw": 2875
+      }
+    },
+    {
+      "source": "extension-scroller.js",
+      "output": "dist/extension-scroller.min.js",
+      "sourceSHA256": "8c5d30a036e944fb096c457f93704d74968cdc6d42548ed3728b65b80f05304c",
+      "outputSHA256": "6d323861fa4c53c9a50b9b91da0f89e97560ca9ad77bdf0af7ab7c43603a8f4d",
+      "before": {
+        "raw": 15310
+      },
+      "after": {
+        "raw": 9017
+      }
+    },
+    {
+      "source": "extension-slider.js",
+      "output": "dist/extension-slider.min.js",
+      "sourceSHA256": "1906305c25e58aaa245d17263e30c24836469f73aa89cc16a7a898aa5d034d96",
+      "outputSHA256": "be29662ab6c894eddc5f5683fb9b9b5ed84a94e15df8b1b6164bedd2bc5fa300",
+      "before": {
+        "raw": 12968
+      },
+      "after": {
+        "raw": 7449
+      }
+    },
+    {
+      "source": "gallery-block.css",
+      "output": "dist/gallery-block.min.css",
+      "sourceSHA256": "3296114dacc68ff88e684cbcfa4ca6a14333adda6fb73c548a545818d8040f43",
+      "outputSHA256": "d11b6f63751b600cca9deb5954c8ab99a16b116140875e1f47d08d302cd15850",
+      "before": {
+        "raw": 2980
+      },
+      "after": {
+        "raw": 2596
+      }
+    },
+    {
+      "source": "gallery-block.js",
+      "output": "dist/gallery-block.min.js",
+      "sourceSHA256": "ff84bf20a7e4295fc51023025e629ca8f9ee59bae417b8514af1ad6efeaecebf",
+      "outputSHA256": "c6b7b08f6a93db246d7867e0321bf7359390933588b7136719c44403e212fcfd",
+      "before": {
+        "raw": 6625
+      },
+      "after": {
+        "raw": 4071
+      }
+    },
+    {
+      "source": "location-block.js",
+      "output": "dist/location-block.min.js",
+      "sourceSHA256": "6bdbf74815e1f667aea26324ec33841534f9d789ad60e5139008ea75f81d0945",
+      "outputSHA256": "48bc4498ec4e9e4a63856c7eec6f5dc43a329b2b005bd971a2f16c69da0f6f03",
+      "before": {
+        "raw": 47340
+      },
+      "after": {
+        "raw": 30128
+      }
+    },
+    {
+      "source": "locator-block.js",
+      "output": "dist/locator-block.min.js",
+      "sourceSHA256": "48789092625d3f1bfd5f201d2395dbc624c1906ad624bbb15ca489c838c11905",
+      "outputSHA256": "09eb69e6e03447d735222e6c728b2ec5f282d21fac46d8f875f1988e027beb79",
+      "before": {
+        "raw": 74352
+      },
+      "after": {
+        "raw": 45712
+      }
+    },
+    {
+      "source": "metadata-block.js",
+      "output": "dist/metadata-block.min.js",
+      "sourceSHA256": "0d37e4882d4bf136b6a1a9a4e3d8d202bac5814e74697f045f1e1b48bd937c5f",
+      "outputSHA256": "b014b157ee4db0a748c41431a013aef469dc4ab016f907c8e87c973a9233ba8b",
+      "before": {
+        "raw": 43553
+      },
+      "after": {
+        "raw": 18562
+      }
+    },
+    {
+      "source": "query-block.js",
+      "output": "dist/query-block.min.js",
+      "sourceSHA256": "a1b35d8f455e4ee88f609ffd13d8b03cfaeda95f57a20d1cb5bb5ba4f546cefd",
+      "outputSHA256": "21b3ee44083ff8ba85f17113e9eea50e0113f1040375dd670f13123727659965",
+      "before": {
+        "raw": 173009
+      },
+      "after": {
+        "raw": 83796
+      }
+    },
+    {
+      "source": "related-block.js",
+      "output": "dist/related-block.min.js",
+      "sourceSHA256": "d5e22062fdcc617a2618f31ccd801030a4299ce9b6cd8ddce261d9c3fa024f34",
+      "outputSHA256": "a464263625d7ada1200bd396665544ccd324310601790e1337a086e75f143fd1",
+      "before": {
+        "raw": 125384
+      },
+      "after": {
+        "raw": 52205
+      }
+    }
+  ]
+}

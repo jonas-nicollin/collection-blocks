@@ -1734,3 +1734,36 @@ state and URL handling. Closing search clears it; Escape closes it and returns
 focus. Public paired cb-/lb- classes: `cb-block--compact-controls`,
 `cb-compact-filter`, `cb-search-toggle`, `cb-search-toggle__icon`, and
 `cb-controls--search-open`. The feature is opt-in and does not affect Query.
+
+## Minified distribution
+
+Readable, stable source filenames remain at the repository root. Optional
+minified assets live exclusively in `dist/`: for example,
+`@v0.17.1/dist/query-block.min.js`. Never load a source and its minified copy
+together. Preserve dependency order and pin published sites to an immutable tag.
+
+The build tool is development-only, free and MIT-licensed. It does not run on
+visitors' devices or require a subscription. Its exact esbuild version and npm
+dependency graph are locked in `build/package.json` and `build/package-lock.json`.
+
+Before creating a release tag:
+
+```sh
+npm ci --prefix build --ignore-scripts
+npm run build --prefix build
+npm test --prefix build
+npm run check --prefix build
+```
+
+Commit the updated `dist/` files before tagging. GitHub Actions rejects stale
+outputs and exercises filtering, URL restoration, mixed Related card ordering
+and Metadata against both readable and minified scripts. This complements the
+live-site checks; it is not exhaustive coverage of every optional extension.
+
+The explicit asset allowlist excludes site configurations and historical files.
+Files stay separate: no bundling, property mangling, injected polyfills or
+intentional runtime changes. Linked source maps point back to the readable
+sources in the same tag and are only fetched by debugging tools when needed.
+`dist/manifest.json` records source/output SHA256 and raw sizes. Run
+`node build/measure.mjs` for equal-setting gzip/Brotli estimates. These estimates
+can vary with the local compression library and are not page-speed measurements.

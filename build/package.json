@@ -1,0 +1,13 @@
+{
+  "name": "collection-blocks-build",
+  "private": true,
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "node build.mjs --check",
+    "test": "node --test runtime.test.cjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12",
+    "jsdom": "26.1.0"
+  }
+}
