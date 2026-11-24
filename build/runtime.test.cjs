@@ -7,6 +7,16 @@ const { JSDOM } = require('jsdom');
 const root = path.join(__dirname, '..');
 const manifest = require('../dist/manifest.json');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+// JSDOM does not disconnect MutationObservers when closing its Window. Explicit
+// fixture teardown prevents queued lifecycle work from accessing a closed URL.
+function manageObservers(window) {
+  const NativeObserver = window.MutationObserver, observers = [];
+  window.MutationObserver = class extends NativeObserver {
+    constructor(callback) { super(callback); observers.push(this); }
+  };
+  return () => observers.forEach(observer => observer.disconnect());
+}
+
 async function waitFor(predicate) {
   for (let i = 0; i < 100 && !predicate(); i++) await pause(20);
   assert(predicate(), 'Rendered condition did not become true');
@@ -24,6 +34,7 @@ for (const minified of [false, true]) {
       pretendToBeVisual: true
     });
     const w = dom.window;
+    const disconnectObservers = manageObservers(w);
     const load = name => w.eval(readFileSync(path.join(root, minified ?
       'dist/' + name.replace('.js', '.min.js') : name), 'utf8'));
     try {
@@ -86,7 +97,7 @@ for (const minified of [false, true]) {
       w.history.pushState({}, '', '/routes/person?q=Alpha');
       w.dispatchEvent(new w.PopStateEvent('popstate'));
       await waitFor(() => w.document.querySelector('#query .qb-card')?.textContent === 'Alpha');
-    } finally { dom.window.close(); }
+    } finally { disconnectObservers(); dom.window.close(); }
   });
 }
 
@@ -100,6 +111,7 @@ for (const minified of [false, true]) {
       url: 'https://example.com/item/test', runScripts: 'outside-only', pretendToBeVisual: true
     });
     const w = dom.window, d = w.document;
+    const disconnectObservers = manageObservers(w);
     const load = name => w.eval(readFileSync(path.join(root, minified ?
       'dist/' + name.replace('.js', '.min.js') : name), 'utf8'));
     try {
@@ -152,6 +164,6 @@ for (const minified of [false, true]) {
       await waitFor(() => !d.body.classList.contains('has-qb-blocks') &&
         !d.body.classList.contains('has-tocb-blocks'));
       assert(d.body.classList.contains('keep-user-class'));
-    } finally { dom.window.close(); }
+    } finally { disconnectObservers(); dom.window.close(); }
   });
 }
