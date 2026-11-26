@@ -32,6 +32,9 @@ for (const minified of [false, true]) {
       d.querySelector('.cb-editor__copy').click();
       await waitFor(() => d.querySelector('.cb-editor__copy').textContent === 'Code copié');
       const exported = new JSDOM(copied).window.document.querySelector('#route');
+      assert(copied.includes('\n  <div class="cb-selection"'));
+      assert(copied.includes('\n    {\n'));
+      assert.equal(d.querySelector('.cb-editor__output').wrap, 'off');
       assert.equal(exported.dataset.cbLabel, 'Son parcours – Sélection');
       assert.equal(exported.dataset.rbLabel, 'Parcours & choix');
       assert(exported.classList.contains('rb-target'));
@@ -40,7 +43,16 @@ for (const minified of [false, true]) {
       d.querySelector('[aria-label="Ajouter : Second member"]').click();
       assert.equal(d.querySelector('.cb-editor__copy').textContent, 'Copier le Code Block');
       assert(d.querySelector('.cb-editor__output').hidden);
-      d.querySelector('.cb-editor__close').click();
+      const dialog = d.querySelector('dialog');
+      dialog.getBoundingClientRect = () => ({ left: 100, right: 500, top: 100, bottom: 500 });
+      const pointer = (type, x) => dialog.dispatchEvent(new w.MouseEvent(type,
+        { bubbles: true, clientX: x, clientY: 200 }));
+      pointer('pointerdown', 200); pointer('click', 200);
+      assert(dialog.open, 'Empty space within the dialog must not close it');
+      pointer('pointerdown', 200); pointer('click', 50);
+      assert(dialog.open, 'A drag from inside to outside must not close it');
+      pointer('pointerdown', 50); pointer('click', 50);
+      assert(!d.querySelector('dialog'), 'Clicking the backdrop closes the dialog');
       d.body.classList.remove('sqs-edit-mode-active');
       await waitFor(() => !d.querySelector('.cb-editor__trigger'));
     } finally { stop(); w.close(); }
@@ -269,11 +281,18 @@ for (const minified of [false, true]) {
       assert.equal(route.directions(stops,false,'walking'),''); // Never silently truncate.
       assert.equal(new URL(route.directions(stops.slice(0,4),false,'walking')).searchParams.get('waypoints').split('|').length,3);
       let items=[{...stops[0],id:'one'}];
+      const warningHost = d.createElement('div'); warningHost.className = 'map-host';
+      d.querySelector('#locator').append(warningHost);
       const cfg={ key:'route',display:{cardClickable:false},routePlanner:{maxStops:25,
+        warningsTarget: '.map-host',
         urlState:{param:'parcours'},resolveItems:async()=>[{...stops[1],id:'external:two'}]}};
       const controller=route.mount({root:d.querySelector('#locator'),config:cfg,getItems:()=>items,isComplete:()=>true});
       await waitFor(()=>d.querySelectorAll('.cb-route-planner__stop').length===2);
       assert(d.querySelector('.cb-route-planner').open);
+      assert(warningHost.querySelector('.cb-route-planner__warnings'));
+      d.querySelector('.cb-route-planner').open = false;
+      d.querySelector('.cb-route-planner').dispatchEvent(new w.Event('toggle'));
+      assert(warningHost.querySelector('.cb-route-planner__warnings'));
       w.history.pushState({},'', '?parcours='+stops.map(x=>x.id).join('|'));
       items=stops; w.dispatchEvent(new w.PopStateEvent('popstate'));
       await waitFor(()=>d.querySelectorAll('.cb-route-planner__stop').length===8);
@@ -283,6 +302,41 @@ for (const minified of [false, true]) {
       assert.equal(destinations.at(-1),'46.007,6');
       assert(links.every(a=>new URL(a.href).searchParams.get('waypoints').split('|').length<=3));
       controller.destroy();
+      assert(!warningHost.querySelector('.cb-route-planner__warnings'));
     } finally { disconnect(); dom.window.close(); }
+  });
+}
+
+for (const minified of [false, true]) {
+  test(`${minified ? 'distribution' : 'source'}: enquiry links preserve complete captions and existing URLs`, () => {
+    const dom = new JSDOM('<div id="works"><a class="work"><img src="https://example.com/work.jpg">' +
+      '<span class="artist">Anne &amp; Bob</span><span class="title">L’œuvre &lt;3&gt;</span>' +
+      '<div class="details"><p>2026</p><p>Oil &amp; ink<br>30 × 40 cm</p></div></a></div>',
+      { url: 'https://example.com/artists/anne', runScripts: 'outside-only', pretendToBeVisual: true });
+    const w = dom.window, d = w.document, stop = manageObservers(w);
+    let slides;
+    w.Fancybox = { show: value => { slides = value; return {}; } };
+    try {
+      w.eval(readFileSync(path.join(root, minified ?
+        'dist/extension-fancybox.min.js' : 'extension-fancybox.js'), 'utf8'));
+      const cfg = { itemSelector: '.work', selectors: {
+        image: 'img', category: '.artist', title: '.title', excerpt: '.details'
+      }, button: { enabled: true, label: 'Enquire', href: '/enquire?existing=1#form' } };
+      let controller = w.CollectionBlocksFancybox.mount(d.querySelector('#works'), cfg);
+      controller.open(d.querySelector('.work'));
+      let caption = new JSDOM(slides[0].caption).window.document;
+      assert.equal(caption.querySelector('a').getAttribute('href'), '/enquire?existing=1#form');
+      controller.destroy();
+      cfg.button.prefill = { subjectParam: 'subject', captionParam: 'caption' };
+      controller = w.CollectionBlocksFancybox.mount(d.querySelector('#works'), cfg);
+      controller.open(d.querySelector('.work'));
+      caption = new JSDOM(slides[0].caption).window.document;
+      const url = new URL(caption.querySelector('a').href);
+      assert.equal(url.searchParams.get('existing'), '1');
+      assert.equal(url.hash, '#form');
+      assert.equal(url.searchParams.get('subject'), 'Anne & Bob — L’œuvre <3>');
+      assert.equal(url.searchParams.get('caption'), 'Anne & Bob\nL’œuvre <3>\n2026\nOil & ink\n30 × 40 cm');
+      controller.destroy();
+    } finally { stop(); w.close(); }
   });
 }

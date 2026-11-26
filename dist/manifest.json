@@ -88,13 +88,13 @@
     {
       "source": "extension-fancybox.js",
       "output": "dist/extension-fancybox.min.js",
-      "sourceSHA256": "0fedfd98f3c83fce85ea00f33d1457b305e248e618732f9967d0f9857154cc4e",
-      "outputSHA256": "94eaae27513d6b121941375d05385e0aa6020f27e9c6e0ee14c60f6c661b19c2",
+      "sourceSHA256": "fb143a489bbf35bac1c0ce04627798522db74418ba7b6623c2c1f3ab02af6896",
+      "outputSHA256": "cb98d4e837b906a963842bd2862ce51b23102a1102a94c02b47feb93ac8944ef",
       "before": {
-        "raw": 23217
+        "raw": 23734
       },
       "after": {
-        "raw": 12132
+        "raw": 12398
       }
     },
     {
@@ -136,13 +136,13 @@
     {
       "source": "extension-route-planner.js",
       "output": "dist/extension-route-planner.min.js",
-      "sourceSHA256": "dcf4d47d345ce947f7219837858c68b4410260c578ca109cc499b0d378eec896",
-      "outputSHA256": "68ca6cc16905d5aba691fb7517cc1153e2bd668f2fd67b8b755577a8ff709382",
+      "sourceSHA256": "63455a8dc057f87670c1fc81624d421caf28575fa64e073d94fb6e38e226de1a",
+      "outputSHA256": "685aab2953ba487cb899420d24fd285a1e3bd51ac377c96920b6978c129346ca",
       "before": {
-        "raw": 29261
+        "raw": 29383
       },
       "after": {
-        "raw": 16552
+        "raw": 16625
       }
     },
     {
@@ -160,25 +160,25 @@
     {
       "source": "extension-selection-editor.js",
       "output": "dist/extension-selection-editor.min.js",
-      "sourceSHA256": "7061f836c274cd7cfd5b5efd99bad989c299cc6483e17ed4a91efe7f929a9c15",
-      "outputSHA256": "0b982dcf49224974c94aec035291a3dfa6c33ef38ac868702606adfad7269d28",
+      "sourceSHA256": "34c45d888201955cf9da7f192470e7c9243798af1b05b6804087e53dc41a1b29",
+      "outputSHA256": "976ab7be13160b4dffe7d24f7aaefc3dea536ef432a7747c2d0c2b5fe900df8a",
       "before": {
-        "raw": 12730
+        "raw": 13407
       },
       "after": {
-        "raw": 7725
+        "raw": 8096
       }
     },
     {
       "source": "extension-selection-editor.css",
       "output": "dist/extension-selection-editor.min.css",
-      "sourceSHA256": "318472b835f1b5394c956d4f125626dacfcdad942f7fb201d87a7081b2f6563c",
-      "outputSHA256": "1629c9f314eac5acfa8d73365e54064f3488fe354234f362abb6da7dac427e5a",
+      "sourceSHA256": "0a3d17b75977eacc76bf143d9906f3fbb3794f8175a001b13f215836953ef1bb",
+      "outputSHA256": "d3254622fd03d06ba7967b19cd854d0f85b0d008899b51c40b0694b3f42bfcbb",
       "before": {
-        "raw": 3615
+        "raw": 3928
       },
       "after": {
-        "raw": 3199
+        "raw": 3472
       }
     },
     {

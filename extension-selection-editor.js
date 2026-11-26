@@ -29,6 +29,17 @@
     var close = button('__close', '×', function() { dialog.close(); }); close.setAttribute('aria-label', 'Fermer');
     dialog.setAttribute('aria-label', cfg.title || 'Composer le parcours');
     dialog.addEventListener('close', function() { closed = true; dialog.remove(); active = null; });
+    var outsideStart = false;
+    function outside(event) {
+      var rect = dialog.getBoundingClientRect();
+      return event.target === dialog && (event.clientX < rect.left ||
+        event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom);
+    }
+    dialog.addEventListener('pointerdown', function(event) { outsideStart = outside(event); });
+    dialog.addEventListener('click', function(event) {
+      if (outsideStart && outside(event)) dialog.close();
+      outsideStart = false;
+    });
     // Keep the surrounding native block editor from intercepting our controls.
     ['click', 'dblclick', 'pointerdown', 'keydown'].forEach(function(event) {
       dialog.addEventListener(event, function(e) { e.stopPropagation(); });
@@ -40,6 +51,7 @@
     var list = node('div', '__selection'); list.setAttribute('aria-label', 'Étapes du parcours');
     var more = button('__more', 'Afficher plus', function() { limit += 24; renderCatalog(); });
     var output = node('textarea', '__output'); output.readOnly = true; output.hidden = true;
+    output.spellcheck = false; output.wrap = 'off';
     output.setAttribute('aria-label', 'Code à coller dans le Code Block');
     var instruction = node('p', '__instruction'); instruction.hidden = true;
     var copy = button('__copy', 'Copier le Code Block', async function() {
@@ -51,8 +63,10 @@
       });
       if (cfg.targetLabel) exported.setAttribute('data-cb-label', cfg.targetLabel);
       data.className = 'cb-selection'; data.hidden = true;
-      data.textContent = '\n' + api.serialize(selected, cfg) + '\n';
-      exported.append(data); output.value = exported.outerHTML;
+      data.textContent = '\n' + api.serialize(selected, cfg).split('\n').map(function(line) {
+        return '    ' + line;
+      }).join('\n') + '\n  ';
+      exported.append('\n  ', data, '\n'); output.value = exported.outerHTML;
       output.hidden = false; instruction.hidden = false;
       instruction.textContent = 'Collez ce code dans le Code Block de ce parcours, puis enregistrez la page.';
       try { await navigator.clipboard.writeText(output.value); copy.textContent = 'Code copié'; status.textContent = ''; }

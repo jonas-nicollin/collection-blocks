@@ -27,7 +27,13 @@
 .cb-editor .cb-editor__drag { font-family: var(--ui-font-font-family, sans-serif); touch-action: none; cursor: grab; }
 .cb-editor__stop--dragging { background: #eeecff; border-color: #777; }
 .cb-editor .cb-editor__copy { margin-top: 1rem; background: #222; color: #fff; }
-.cb-editor__output { width: 100%; min-height: 10rem; margin-top: .5rem; }
+.cb-editor textarea.cb-editor__output {
+  display: block; width: 100%; min-height: 15rem; margin-top: .75rem;
+  padding: 1rem; border: 1px solid #ccc; border-radius: .3rem;
+  background: #f6f6f6; color: #222; resize: vertical; overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .8rem; line-height: 1.5; white-space: pre; tab-size: 2;
+}
 .cb-editor__instruction, .cb-editor__status { font-size: .85rem; }
 .cb-editor__toolbar { position: fixed; right: 1rem; bottom: 1rem; z-index: 2147483000; display: flex; flex-wrap: wrap; gap: .5rem; }
 .cb-editor__trigger { background: #222; color: #fff; border: 1px solid #222; cursor: pointer; font: inherit; letter-spacing: normal; padding: 1rem 1.5rem; min-height: 3rem; box-shadow: 0 2px 12px #0002; }

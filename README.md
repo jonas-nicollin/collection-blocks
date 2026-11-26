@@ -929,6 +929,13 @@ alternateLabel. `classPrefixes`, `button: { enabled, label, href }`,
 Fancybox settings: theme, hash, preload, dragToClose, closeButton, infinite,
 thumbsType, showThumbsOnStart, toolbar.
 
+`button.prefill: { subjectParam: 'subject', captionParam: 'artwork' }` optionally
+adds the artist/title and plain-text caption to the enquiry URL, with preserved
+line breaks and URL encoding. Parameter names and the destination form binding
+are site-owned. No form is submitted, and configurations without `prefill` keep
+their original link. Legacy `classPrefixes` values are styling aliases, not
+evidence that a card was rendered by a native Summary Block.
+
 Hooks: `getMedia(card)` returns normalized `{ src, thumb, alt }` entries;
 `getCaption(card)` returns trusted site-authored HTML; `onOpen(instance, card)`
 can subscribe to Fancybox events. The controller exposes `open(card)` and
@@ -1735,8 +1742,12 @@ indicate a full route. `showNextStop: false` removes next-stop navigation; when
 The closed summary includes an aria-hidden, noninteractive faded mode preview.
 Google's walking/cycling caution and returned route warnings stay visible while
 a route is drawn, including when the panel is closed.
-Warnings remain inside the planner: below its actions when open and inside its
-summary when closed. Step numbers keep a 1.6em circle centered in a 44px square;
+Warnings remain inside the planner by default: below its actions when open and
+inside its summary when closed. Optional `warningsTarget` selects a host inside
+the Locator root, e.g. `.lb-map-wrap`, to keep the caution beside the route while
+allowing the panel to collapse completely. A missing host retains the default.
+The site must keep that warning visible whenever its route is visible.
+Step numbers keep a 1.6em circle centered in a 44px square;
 move controls are always visible below 768px and on touch devices. Sharing uses
 a plain icon control, without a background or border.
 

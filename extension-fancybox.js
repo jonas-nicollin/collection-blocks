@@ -193,9 +193,22 @@
     }
 
     if (cfg.button && cfg.button.enabled && cfg.button.href && cfg.button.label) {
+      var href = cfg.button.href, prefill = cfg.button.prefill;
+      if (prefill) {
+        try {
+          var url = new URL(href, location.href);
+          if (prefill.subjectParam) {
+            url.searchParams.set(prefill.subjectParam, [category, title].filter(Boolean).join(' — '));
+          }
+          if (prefill.captionParam) {
+            url.searchParams.set(prefill.captionParam, [category, title].concat(lines).filter(Boolean).join('\n'));
+          }
+          href = url.href;
+        } catch (_) {}
+      }
       parts.push(
         '<div class="' + classes(cfg, '__enquire', generic + '-enquire ' + specific + '-enquire') + '">' +
-          '<a class="' + classes(cfg, '__enquire-link', generic + '-enquire-link ' + specific + '-enquire-link') + '" href="' + escapeHTML(cfg.button.href) + '">' +
+          '<a class="' + classes(cfg, '__enquire-link', generic + '-enquire-link ' + specific + '-enquire-link') + '" href="' + escapeHTML(href) + '">' +
             escapeHTML(cfg.button.label) +
           '</a>' +
         '</div>'
@@ -595,7 +608,7 @@
       scopesFor(cfg.targets).forEach(function (scope) { mount(scope, cfg); });
     });
   }
-  window.CollectionBlocksFancybox = { version: '1.2.0', mount: mount, refresh: refresh };
+  window.CollectionBlocksFancybox = { version: '1.3.0', mount: mount, refresh: refresh };
   var scheduled = false;
   function schedule() {
     if (scheduled) return;

@@ -8,7 +8,7 @@
       up: 'Monter', down: 'Descendre', maps: 'Ouvrir dans Google Maps',
       segments: 'Ouvrir par étapes dans Google Maps', part: 'Étapes',
       share: 'Copier le lien du parcours', copied: 'Lien copié', between: 'Temps estimé entre les lieux',
-      caution: 'Tracé à pied ou à vélo en bêta : certains trottoirs et chemins peuvent manquer.',
+      caution: 'Tracé à pied ou à vélo en bêta: certains trottoirs et chemins peuvent manquer.',
       next: 'Rejoindre la prochaine étape', empty: 'Ajoutez des lieux à votre parcours.',
       limit: 'Le parcours est complet.', saved: 'Parcours mis à jour.',
       added: 'Ajouté au parcours', move: 'Déplacer (flèches haut et bas)',
@@ -333,10 +333,11 @@
       peek.append(hint);
     });
     modeControls.append(duration);
-    summary.append(peek, warnings);
+    summary.append(peek);
     summary.setAttribute('aria-label', labels.title);
-    // Keep required route cautions inside the planner and visible when collapsed.
-    function placeWarnings() { (panel.open ? panel : summary).append(warnings); }
+    var warningsHost = options.warningsTarget && root.querySelector(options.warningsTarget);
+    // Route cautions remain visible with the route, optionally beside the map.
+    function placeWarnings() { (warningsHost || (panel.open ? panel : summary)).append(warnings); }
     panel.addEventListener('toggle', placeWarnings);
     var modeNote = node('p', '__mode-note', labels.transitNote);
     status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
@@ -515,6 +516,7 @@
       window.removeEventListener('popstate', onHistory);
       if (preview) preview.destroy();
       panel.removeEventListener('toggle', placeWarnings);
+      warnings.remove();
       panel.remove();
       root.querySelectorAll('.cb-route-planner__add').forEach(function(el) { el.remove(); });
       root.querySelectorAll('.cb-route-planner__media').forEach(function(el) {
