@@ -272,3 +272,9 @@
   margin-block: .5rem;
 }
 :where(.cb-route-planner__warnings).lb-route-planner__warnings:empty { display: none; }
+
+.cb-route-planner__segments[hidden] { display: none; }
+.cb-route-planner__segments { flex-basis: 100%; }
+.cb-route-planner__segments-title { cursor: pointer; }
+.cb-route-planner__segment-links { display: flex; flex-wrap: wrap; gap: .5rem 1rem; padding-block: .75rem; }
+.cb-route-planner__segment { text-decoration: underline; text-underline-offset: .2em; }

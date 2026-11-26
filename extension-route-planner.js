@@ -6,6 +6,7 @@
   var words = {
     fr: { title: 'Créer votre parcours', add: 'Ajouter au parcours', remove: 'Retirer du parcours',
       up: 'Monter', down: 'Descendre', maps: 'Ouvrir dans Google Maps',
+      segments: 'Ouvrir par étapes dans Google Maps', part: 'Étapes',
       share: 'Copier le lien du parcours', copied: 'Lien copié', between: 'Temps estimé entre les lieux',
       caution: 'Tracé à pied ou à vélo en bêta : certains trottoirs et chemins peuvent manquer.',
       next: 'Rejoindre la prochaine étape', empty: 'Ajoutez des lieux à votre parcours.',
@@ -19,6 +20,7 @@
       unavailable: 'La sélection ne peut pas être enregistrée sur cet appareil.' },
     en: { title: 'Create your route', add: 'Add to route', remove: 'Remove from route',
       up: 'Move up', down: 'Move down', maps: 'Open in Google Maps',
+      segments: 'Open in Google Maps in sections', part: 'Stops',
       share: 'Copy route link', copied: 'Link copied', between: 'Estimated travel time between places',
       caution: 'Walking and cycling routes are in beta: some sidewalks and paths may be missing.',
       next: 'Navigate to the next stop', empty: 'Add places to your route.',
@@ -43,7 +45,8 @@
     mode = validMode(mode);
     // Google transit directions do not accept intermediate waypoints.
     if (mode === 'transit' && !next) return '';
-    var stops = items.filter(coordinates).slice(0, 4);
+    var stops = items.filter(coordinates);
+    if (!next && stops.length > 4) return '';
     if (!stops.length) return '';
     if (next) stops = stops.slice(0, 1);
     var point = function(item) { return item.navigationQuery ||
@@ -64,7 +67,7 @@
     return url.href;
   }
   function createModel(options, storage) {
-    var max = Math.min(4, Math.max(1, Math.floor(Number(options.maxStops) || 4)));
+    var max = Math.min(25, Math.max(1, Math.floor(Number(options.maxStops) || 4)));
     var key = 'cb-route:v1:' + options.storageKey;
     var ids = [], items = [], persistent = !!storage;
     try {
@@ -258,6 +261,35 @@
         ? params.get(routeParam).split('|').filter(Boolean).slice(0, model.max) : null;
     }
     var pendingRoute = readRouteURL(), urlDirty = true;
+    var additionalItems = [], additionalSignature = '', additionalTicket = 0;
+    var additionalLoading = false, additionalError = false, disposed = false;
+    function resolveAdditional(items) {
+      if (typeof options.resolveItems !== 'function') return;
+      var tokens = pendingRoute !== null ? pendingRoute : model.ids();
+      var unknown = tokens.filter(function(token) {
+        return !items.some(function(item) { return item.id === token || item.venueKey === token; });
+      });
+      var signature = JSON.stringify(unknown);
+      if (signature === additionalSignature) return;
+      additionalSignature = signature; additionalError = false;
+      var ticket = ++additionalTicket;
+      additionalLoading = unknown.length > 0;
+      additionalItems = [];
+      if (!additionalLoading) return;
+      Promise.resolve().then(function() { return options.resolveItems(unknown); }).then(function(extra) {
+        if (ticket !== additionalTicket) return;
+        additionalItems = (Array.isArray(extra) ? extra : []).filter(function(item) {
+          return unknown.includes(item.id) && coordinates(item);
+        });
+      }).catch(function(error) {
+        additionalError = true;
+        status.textContent = labels.routeError;
+        console.warn('[Route Planner] Additional places unavailable:', error);
+      }).finally(function() {
+        if (ticket !== additionalTicket) return;
+        additionalLoading = false; refresh();
+      });
+    }
     function writeRouteURL() {
       if (!routeParam || pendingRoute !== null || !instance.isComplete()) return;
       var url = new URL(window.location.href);
@@ -268,7 +300,9 @@
       if (modeParam) url.searchParams.set(modeParam, mode);
       if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url.href);
     }
-    var panel = node('details', ''), summary = node('summary', '__summary');
+    var panel = node('details', '');
+    panel.open = pendingRoute !== null && pendingRoute.length > 0;
+    var summary = node('summary', '__summary');
     var summaryLabel = node('span', '__title');
     function glyph(name, part) {
       var el = node('span', part || '__icon', name); el.setAttribute('aria-hidden', 'true');
@@ -278,6 +312,9 @@
     var list = node('ol', '__list'), empty = node('p', '__empty', labels.empty);
     var actions = node('div', '__actions'), maps = node('a', '__maps');
     maps.append(glyph('navigation'), node('span', '__action-label', labels.maps));
+    var segments = node('details', '__segments');
+    segments.append(node('summary', '__segments-title', labels.segments));
+    var segmentLinks = node('div', '__segment-links'); segments.append(segmentLinks);
     var next = node('a', '__next', labels.next), status = node('p', '__status');
     var previewStatus = node('p', '__preview'), warnings = node('span', '__warnings');
     var modeControls = node('div', '__modes'), duration = node('span', '__duration');
@@ -311,7 +348,7 @@
     var shareField = node('input', '__share-url'); shareField.readOnly = true;
     shareField.setAttribute('aria-label', labels.share); shareField.hidden = true;
     var shareTimer;
-    actions.append(maps);
+    actions.append(maps, segments);
     if (options.showNextStop !== false) actions.append(next);
     if (routeParam && options.share !== false) actions.append(share, shareField);
     panel.append(summary, modeControls, empty, list, previewStatus, actions, status);
@@ -335,13 +372,17 @@
       control.append(glyph(icon)); return control;
     }
     function refresh() {
+      if (disposed) return;
       placeWarnings();
       var items = instance.getItems();
+      if (instance.isComplete()) resolveAdditional(items);
+      items = items.concat(additionalItems);
+      var complete = instance.isComplete() && !additionalLoading && !additionalError;
       var byId = new Map(items.map(function(item) { return [item.id, item]; }));
-      model.setItems(items, instance.isComplete());
-      if (pendingRoute !== null && instance.isComplete()) {
+      model.setItems(items, complete);
+      if (pendingRoute !== null && complete) {
         model.replace(pendingRoute.map(function(token) {
-          var item = items.find(function(item) { return (item.venueKey || item.id) === token; });
+          var item = items.find(function(item) { return item.id === token || item.venueKey === token; });
           return item && item.id;
         }).filter(Boolean));
         pendingRoute = null;
@@ -363,7 +404,19 @@
         row.append(controls); list.append(row);
       });
       empty.hidden = selected.length > 0; actions.hidden = !selected.length;
-      maps.hidden = mode === 'transit';
+      maps.hidden = mode === 'transit' || selected.length > 4;
+      segments.hidden = mode === 'transit' || selected.length <= 4;
+      segmentLinks.replaceChildren();
+      if (!segments.hidden) {
+        // Each following section shares its first place with the previous section.
+        // This makes the walking route continuous, with <= 3 intermediate stops.
+        for (var start = 0; start < selected.length - 1; start += 3) {
+          var end = Math.min(start + 4, selected.length);
+          var link = node('a', '__segment', labels.part + ' ' + (start + 1) + '–' + end);
+          link.href = directions(selected.slice(start, end), false, mode);
+          link.target = '_blank'; link.rel = 'noopener'; segmentLinks.append(link);
+        }
+      }
       next.hidden = mode !== 'transit' && selected.length < 2;
       modeNote.hidden = mode !== 'transit';
       modeControls.querySelectorAll('[data-route-mode]').forEach(function(control) {
@@ -396,8 +449,8 @@
         control.title = label;
         control.disabled = chosen && iconCards || !chosen && ids.length >= model.max;
       });
-      if (urlDirty && instance.isComplete()) { writeRouteURL(); urlDirty = false; }
-      if (preview && instance.isComplete()) preview.update(selected, mode);
+      if (urlDirty && complete) { writeRouteURL(); urlDirty = false; }
+      if (preview && complete) preview.update(selected, mode);
     }
     function onClick(event) {
       var modeControl = event.target.closest('[data-route-mode]');
@@ -455,6 +508,7 @@
     if (listMedia) listMedia.addEventListener('change', refresh);
     if (routeParam) window.addEventListener('popstate', onHistory);
     var controller = { refresh: refresh, destroy: function() {
+      disposed = true; additionalTicket++;
       root.removeEventListener('click', onClick);
       share.removeEventListener('click', copyRoute); clearTimeout(shareTimer);
       if (listMedia) listMedia.removeEventListener('change', refresh);

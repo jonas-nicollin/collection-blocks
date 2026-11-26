@@ -132,7 +132,7 @@ for (const minified of [false, true]) {
       await pause(50);
       assert(!d.body.classList.contains('tag-not-page-metadata'));
       w.TOC_BLOCK_CONFIGS = [{ key: 'contents', contentSelector: '.content', selectors: 'h2',
-        targetContainerSelector: '.entry', sticky: true, legacyClasses: false }];
+        targetContainerSelector: '.entry', sticky: true }];
       load('toc-block.js');
       await waitFor(() => d.querySelectorAll('.cb-toc__link.tocb-toc__link').length === 2);
       assert.equal(d.querySelectorAll('.automatic-toc').length, 0);
@@ -165,5 +165,71 @@ for (const minified of [false, true]) {
         !d.body.classList.contains('has-tocb-blocks'));
       assert(d.body.classList.contains('keep-user-class'));
     } finally { disconnectObservers(); dom.window.close(); }
+  });
+}
+
+for (const minified of [false, true]) {
+  test(`${minified ? 'distribution' : 'source'}: ID selection updates, mixed rendering and complete route export`, async () => {
+    const dom = new JSDOM('<body><div id="target"><script type="application/json" class="refs"></script></div>' +
+      '<div id="locator"><div class="lb-sidebar"><div class="lb-grid"></div></div></div></body>', {
+      url: 'https://example.com/membres/carte?parcours=one|external:two',
+      runScripts: 'outside-only', pretendToBeVisual: true
+    });
+    const w = dom.window, d = w.document, disconnect = manageObservers(w);
+    const load = name => w.eval(readFileSync(path.join(root, minified ?
+      'dist/' + name.replace('.js', '.min.js') : name), 'utf8'));
+    try {
+      w.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+      load('collection-blocks.js'); load('extension-selection.js');
+      let title = 'Current exhibition title';
+      const sources = { members: { path: '/membre' }, programme: { path: '/programme' } };
+      w.CollectionBlocks.data.getState = async source => ({ complete: true, items: source === '/membre'
+        ? [{ id: 'm', title: 'Member', fullUrl: '/member-new-slug', workflowState: 1 }]
+        : [{ id: 'e', title, fullUrl: '/exhibition-new-slug', workflowState: 1, categories: ['Exposition'] }] });
+      const refs = [{ source: 'programme', id: 'e' }, { source: 'members', id: 'm' },
+        { source: 'programme', id: 'e' }, { source: 'programme', id: 'deleted' }];
+      let result = await w.CollectionBlocksSelection.resolve(refs, { sources });
+      assert.deepEqual(Array.from(result.items, x => x.id), ['e','m']);
+      assert.equal(result.missing.length, 1);
+      title = 'Renamed without changing the selection';
+      result = await w.CollectionBlocksSelection.resolve(refs, { sources });
+      assert.equal(result.items[0].title, title);
+      assert.throws(() => w.CollectionBlocksSelection.validate({version:1,items:[{source:'https://foreign',id:'e'}]},sources));
+      d.querySelector('.refs').textContent = JSON.stringify({version:1,items:refs});
+      w.RELATED_BLOCK_CONFIGS = [{ key:'ordered',target:'#target',
+        selection:{ references:{selector:'.refs',sources} },
+        display:{showTitle:true,groups:[{role:'body',children:['title']}]},
+        cardVariants:[{filter:{selectionSource:'members'},classes:{card:'member'}}],
+        performance:{lazyInit:false} }];
+      let rendered;
+      d.addEventListener('cb:related-render', e => { rendered = e.detail.items; });
+      load('related-block.js');
+      await waitFor(() => d.querySelectorAll('.rb-card').length === 2);
+      assert.equal(d.querySelector('.rb-card').textContent, title);
+      assert.equal(d.querySelector('.member').dataset.itemId, 'm');
+      assert.equal(rendered[1].selectionSource, 'members');
+      load('extension-route-planner.js');
+      const route = w.CollectionBlocksRoutePlanner;
+      const stops = Array.from({length:8},(_,i)=>({id:String(i),title:'Place '+i,lat:46+i/1000,lng:6}));
+      const model=route.createModel({maxStops:25,storageKey:'test'},null);
+      model.setItems(stops,true); model.replace(stops.map(x=>x.id)); assert.equal(model.selected().length,8);
+      assert.equal(route.directions(stops,false,'walking'),''); // Never silently truncate.
+      assert.equal(new URL(route.directions(stops.slice(0,4),false,'walking')).searchParams.get('waypoints').split('|').length,3);
+      let items=[{...stops[0],id:'one'}];
+      const cfg={ key:'route',display:{cardClickable:false},routePlanner:{maxStops:25,
+        urlState:{param:'parcours'},resolveItems:async()=>[{...stops[1],id:'external:two'}]}};
+      const controller=route.mount({root:d.querySelector('#locator'),config:cfg,getItems:()=>items,isComplete:()=>true});
+      await waitFor(()=>d.querySelectorAll('.cb-route-planner__stop').length===2);
+      assert(d.querySelector('.cb-route-planner').open);
+      w.history.pushState({},'', '?parcours='+stops.map(x=>x.id).join('|'));
+      items=stops; w.dispatchEvent(new w.PopStateEvent('popstate'));
+      await waitFor(()=>d.querySelectorAll('.cb-route-planner__stop').length===8);
+      const links=Array.from(d.querySelectorAll('.cb-route-planner__segment'));
+      assert.equal(links.length,3);
+      const destinations=links.map(a=>new URL(a.href).searchParams.get('destination'));
+      assert.equal(destinations.at(-1),'46.007,6');
+      assert(links.every(a=>new URL(a.href).searchParams.get('waypoints').split('|').length<=3));
+      controller.destroy();
+    } finally { disconnect(); dom.window.close(); }
   });
 }

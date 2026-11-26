@@ -1790,8 +1790,12 @@ can vary with the local compression library and are not page-speed measurements.
 squarespace-components. Configure `window.TOC_BLOCK_CONFIGS` before loading the
 runtime; the first matching configuration wins. All existing selection,
 placement, sticky-offset, backlink and section-boundary settings are supported.
-`window.tableOfContentSettings` remains a fallback and `window.AutomaticTOC`
-remains an alias for `window.CollectionBlocksTOC` (`refresh()` / `destroy()`).
+`window.CollectionBlocksTOC` exposes `refresh()` / `destroy()`.
+From v0.19.0, obsolete Automatic TOC classes, variables and API aliases are removed.
+Migrate old site rules before upgrading: `--automatic-toc-*` becomes `--toc-*`;
+use `has-tocb-blocks` for presence and the canonical classes below.
+The optional `style: "underline-wipe"` preserves the former underline presentation
+without requiring site CSS. Older release pins are unaffected.
 Do not load both old and new scripts.
 
 The root receives `cb-block tocb-block cb-toc tocb-toc`; children pair
@@ -1801,10 +1805,8 @@ root `--sticky`, `--back-link`, `--back-only`, `--back-stacked`, `--overflowing`
 link `--active`; back-icon `--chevron`. `key` optionally supplies `data-cb-key`.
 Custom prefixes add `<prefix>--tocb-toc[__part]`.
 
-Legacy classes and custom-prefix aliases remain enabled by default to preserve
-existing site CSS; set `legacyClasses: false` for a new installation. Existing
-`--automatic-toc-*` variables and the shared `--toc-height` geometry contract are
-retained. The new stylesheet targets the paired canonical classes. Heading IDs
+The shared `--toc-height` geometry contract is retained. The stylesheet targets
+only the paired canonical classes. Heading IDs
 survive teardown so existing anchor links remain valid. Editing mode suspends
 navigation, and dynamic headings are reconciled without duplicate menus.
 
@@ -1817,3 +1819,51 @@ paragraph may therefore exceed the budget; it is never split or duplicated.
 `step` controls subsequent disclosure as before. Short content has no control.
 `disableInEditMode: true` restores the full content in the Squarespace editor.
 No content is fetched, removed from the page or replaced with a plain-text copy.
+
+
+## Ordered selections and editorial editor (v0.19.0)
+
+Load `extension-selection.js` before Related Block to opt into
+`selection.references: { selector, sources, maxItems: 25 }`. `sources` is a
+configuration-owned map of keys to `{ path }` collection references. The selected
+DOM element contains JSON: `{ "version": 1, "items": [{ "source": "programme",
+"id": "squarespace-item-id" }] }`. Unknown sources, malformed references and
+oversized documents fail closed. Duplicate references collapse in first-seen order.
+The existing data cache resolves current published content; missing/deleted items
+are skipped and reported as `data-selection-missing`. No match, sort, fallback
+fill or title/slug substitution is applied to explicit selections. An absent JSON
+node retains the existing Related matching behavior. An explicit empty list stays
+empty. Collection Data refresh cadence and cache TTL still apply.
+
+Related reuses its existing renderer for every source. A card variant may match
+`filter.selectionSource`. Cards expose `data-item-id` and optional
+`data-selection-source`. `cb:related-render` bubbles from the block after rendering
+with `{ key, items }` (resolved raw items), allowing a site adapter to use the same
+ordered selection for a map link. Rendering remains bounded by the explicit list;
+source catalogs are fetched as data, never rendered wholesale.
+
+`extension-selection-editor.js/css` is optional. Configure
+`CB_SELECTION_EDITOR_CONFIGS` with `target`, `targetClass`, `selector`, `sources`,
+`maxItems` and catalog `types` (`key`, `label`, `source`, optional `category` or
+`excludeCategory`). Only Squarespace edit mode exposes the trigger. The editor
+reads the page selection, offers search, type filters, pointer/keyboard ordering,
+and copies a target + JSON Code Block. Save that block using Squarespace's normal
+editor. It does not call private CMS write APIs, alter content records or provide
+automatic save. Unsaved modal changes are discarded when closed. Catalog DOM is
+paginated in batches of 24; no full-collection rendering. Interface classes are
+`cb-editor`, `cb-editor__*`, `cb-editor__stop--dragging`. Load the editor lazily in
+edit mode to avoid visitor overhead. No server, account or separate data store is
+required; editor visibility is not an authorization boundary for public data.
+
+Route Planner retains a default of four stops; `maxStops` can opt into up to 25.
+For five or more stops it exposes explicit Google Maps sections, each containing
+at most three intermediates. Adjacent sections share their boundary stop; all
+places remain in the Locator route. `directions()` returns an empty string for an
+oversized unsplit list, rather than silently truncating it. Google URL support
+varies by platform; native Maps navigation cannot be guaranteed by a browser test.
+Optional `resolveItems(tokens)` resolves additional URL references into normalized
+Locator places (`id`, `title`, `lat`, `lng`, `navigationQuery`, optional `placeId`).
+Only requested, valid-coordinate IDs are accepted. Site adapters own their source
+allowlist and must deduplicate physical places. No arbitrary fetch URL is accepted
+from route parameters. New presentation classes pair `cb-route-planner__segments`,
+`__segments-title`, `__segment-links`, `__segment` with `lb-*` aliases.

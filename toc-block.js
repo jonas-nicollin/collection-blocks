@@ -1,8 +1,8 @@
 /**
- * TOC Block — 1.0.0 (2026-11-24)
- * Configure window.TOC_BLOCK_CONFIGS (legacy tableOfContentSettings supported) before loading this file.
+ * TOC Block — 2.0.0 (2026-11-26)
+ * Configure window.TOC_BLOCK_CONFIGS before loading this file.
  * One TOC per page; the first matching configuration wins.
- * Generic component classes; legacyClasses:false disables compatibility aliases.
+ * Common cb-* classes and tocb-* aliases; style: "underline-wipe" is optional.
  * layout: auto/contained/full-width/custom; insertAfterSelector is optional.
  * scrollOffset: auto or a minimum CSS/numeric offset; scrollGap defaults to .75rem.
  * headerSelector defaults to #header; scrollHandler may integrate a scroll engine.
@@ -12,17 +12,17 @@
  * backLink.mobileMode: "compact" (default) or "stacked".
  * Generic options: contentSelector, selectors, targetContainerSelector,
  * observeChanges (default true), anchorKeyAttribute (optional), ariaLabel.
- * API: window.CollectionBlocksTOC.refresh() / destroy(). AutomaticTOC remains an alias.
+ * API: window.CollectionBlocksTOC.refresh() / destroy().
  */
 (function () {
   "use strict";
   if (typeof window === "undefined") return;
-  if (window.CollectionBlocksTOC || window.AutomaticTOC) {
-    (window.CollectionBlocksTOC || window.AutomaticTOC).refresh();
+  if (window.CollectionBlocksTOC) {
+    (window.CollectionBlocksTOC).refresh();
     return;
   }
 
-  const TOC = ".tocb-block, .automatic-toc, .blog-item-table-of-contents";
+  const TOC = ".tocb-block";
   let instance = null;
   let frame = 0;
   let stopped = false;
@@ -31,7 +31,7 @@
 
   function matchingConfig() {
     if (!document.body || document.querySelector(".sqs-edit-mode-active, .squarespace-edit-mode-active")) return null;
-    const raw = window.TOC_BLOCK_CONFIGS || window.tableOfContentSettings;
+    const raw = window.TOC_BLOCK_CONFIGS;
     return (Array.isArray(raw) ? raw : [raw]).find(cfg =>
       cfg && cfg.enabled !== false &&
       (cfg.requiredBodyClasses || []).every(cls => document.body.classList.contains(cls))
@@ -76,15 +76,12 @@
     const requestedPrefix = typeof config.customClassPrefix === "string" ? config.customClassPrefix.trim() : "";
     const prefix = /^[A-Za-z_][A-Za-z0-9_-]*$/.test(requestedPrefix) ? requestedPrefix : "";
     if (requestedPrefix && !prefix) console.warn("[TOC Block] Ignoring invalid customClassPrefix; use a single CSS identifier.");
-    function element(tag, part, legacy = "") {
+    function element(tag, part) {
       const node = document.createElement(tag);
-      const name = "automatic-toc" + (part ? "__" + part : "");
       const common = 'cb-toc' + (part ? '__' + part : '');
       const alias = 'tocb-toc' + (part ? '__' + part : '');
       node.className = [common, alias, !part ? 'cb-block tocb-block' : '',
-        prefix ? prefix + '--' + alias : '',
-        config.legacyClasses === false ? '' : [name, legacy,
-          prefix ? prefix + '--' + name : ''].join(' ')].filter(Boolean).join(' ');
+        prefix ? prefix + '--' + alias : ''].filter(Boolean).join(' ');
       return node;
     }
     function state(node, legacy, active) {
@@ -95,12 +92,10 @@
         .forEach(name => {
           if (node.classList.contains(name) !== active) node.classList.toggle(name, active);
         });
-      if (config.legacyClasses !== false && node.classList.contains(legacy) !== active) {
-        node.classList.toggle(legacy, active);
-      }
     }
-    const nav = element("nav", "", "blog-item-table-of-contents");
-    nav.dataset.tocbVersion = "1.0.0";
+    const nav = element("nav", "");
+    nav.dataset.tocbVersion = "2.0.0";
+    if (config.style === "underline-wipe") nav.dataset.tocStyle = config.style;
     if (config.key) nav.dataset.cbKey = config.key;
     nav.setAttribute("aria-label", config.ariaLabel || "Table of contents");
     state(nav, "is-sticky", !!config.sticky);
@@ -109,27 +104,27 @@
     nav.dataset.tocLayout = layout === "auto"
       ? (target.matches(".entry") ? "contained" : target.matches(".blog-item-wrapper") ? "full-width" : "custom")
       : layout;
-    const inner = element("div", "inner", "table-of-contents-inner");
+    const inner = element("div", "inner");
     const viewport = element("div", "viewport");
-    const list = element("div", "list", "table-of-contents-list");
+    const list = element("div", "list");
     viewport.appendChild(list);
     inner.appendChild(viewport);
     nav.appendChild(inner);
 
     let back = null;
     if (config.backLink?.enabled && config.backLink.url) {
-      back = element("a", "back", "table-of-contents-back-link");
+      back = element("a", "back");
       back.href = config.backLink.url;
       const labelText = config.backLink.label || "Back";
       back.setAttribute("aria-label", config.backLink.ariaLabel || labelText);
       back.title = labelText;
-      const icon = element("span", "back-icon", "back-icon");
+      const icon = element("span", "back-icon");
       icon.setAttribute("aria-hidden", "true");
       // Draw the default chevron in CSS: no icon font is required.
       const chevron = !config.backLink.icon || config.backLink.icon === "chevron_backward";
       state(icon, "is-chevron", chevron);
       if (!chevron) icon.textContent = config.backLink.icon;
-      const label = element("span", "back-label", "back-label");
+      const label = element("span", "back-label");
       label.textContent = labelText;
       back.append(icon, label);
       inner.prepend(back);
@@ -154,11 +149,9 @@
     }
     placeNav(true);
 
-    const sharedNames = ["--toc-height", "--automatic-toc-height", "--automatic-toc-bottom", "--automatic-toc-scroll-offset", "--automatic-toc-header-bottom"];
+    const sharedNames = ["--toc-height", "--toc-bottom", "--toc-scroll-offset", "--toc-header-bottom"];
     const sharedStyle = document.documentElement.style;
     const previousVariables = new Map(sharedNames.map(name => [name, [sharedStyle.getPropertyValue(name), sharedStyle.getPropertyPriority(name)]]));
-    const hadBodyClass = document.body.classList.contains("has-table-of-contents");
-    const hadModernBodyClass = document.body.classList.contains("has-automatic-toc");
     const probe = element("span", "offset-probe");
     probe.setAttribute("aria-hidden", "true");
     probe.style.cssText = "position:absolute;visibility:hidden;pointer-events:none;width:0;height:0;";
@@ -204,7 +197,7 @@
         const style = getComputedStyle(header);
         if (style.position === "fixed" || style.position === "sticky") headerBottom = Math.max(0, header.getBoundingClientRect().bottom);
       }
-      publish("--automatic-toc-header-bottom", headerBottom);
+      publish("--toc-header-bottom", headerBottom);
       const height = nav.hidden ? 0 : nav.getBoundingClientRect().height;
       const style = getComputedStyle(nav);
       // Predict the pinned position even when the TOC is still below the fold.
@@ -215,15 +208,14 @@
       safeOffset = obstruction ? obstruction + cssPixels(config.scrollGap ?? ".75rem") : 0;
       effectiveOffset = Math.max(0, cssPixels(config.scrollOffset), safeOffset);
       publish("--toc-height", height);
-      publish("--automatic-toc-height", height);
-      publish("--automatic-toc-bottom", bottom);
-      publish("--automatic-toc-scroll-offset", effectiveOffset);
+      publish("--toc-bottom", bottom);
+      publish("--toc-scroll-offset", effectiveOffset);
     }
 
     function updateLayout() {
       const side = back ? back.getBoundingClientRect().width : 0;
       const sideValue = Math.ceil(side) + "px";
-      if (inner.style.getPropertyValue("--automatic-toc-side-space") !== sideValue) inner.style.setProperty("--automatic-toc-side-space", sideValue);
+      if (inner.style.getPropertyValue("--toc-side-space") !== sideValue) inner.style.setProperty("--toc-side-space", sideValue);
       const style = getComputedStyle(inner);
       const available = inner.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
       const listStyle = getComputedStyle(list);
@@ -370,7 +362,7 @@
         const key = identity(heading, text, counts);
         const id = ensureId(heading, text, index, key);
         const old = oldByHeading.get(heading);
-        const link = old?.link || element("a", "link", "table-of-contents-item");
+        const link = old?.link || element("a", "link");
         const label = old?.label || element("span", "label");
         if (!old) link.appendChild(label);
         const href = "#" + encodeURIComponent(id);
@@ -403,8 +395,6 @@
       state(nav, "is-back-only", !!back && hideSections);
       const hidden = !back && hideSections;
       if (nav.hidden !== hidden) nav.hidden = hidden;
-      if (!hadBodyClass && config.legacyClasses !== false) document.body.classList.toggle("has-table-of-contents", !hidden);
-      if (!hadModernBodyClass) document.body.classList.toggle("has-automatic-toc", !hidden);
       updateActive();
       if (!hashHandled && location.hash) {
         let hash;
@@ -471,9 +461,7 @@
         content.removeEventListener("transitionend", scheduleActive);
         document.removeEventListener("blogBannerReady", schedule);
         nav.remove();
-        if (!hadBodyClass) document.body.classList.remove("has-table-of-contents");
-        if (!hadModernBodyClass) document.body.classList.remove("has-automatic-toc");
-        previousVariables.forEach(([value, priority], name) => {
+            previousVariables.forEach(([value, priority], name) => {
           if (value) sharedStyle.setProperty(name, value, priority);
           else sharedStyle.removeProperty(name);
         });
@@ -496,8 +484,8 @@
     }
   }
 
-  window.CollectionBlocksTOC = window.AutomaticTOC = {
-    version: "1.0.0",
+  window.CollectionBlocksTOC = {
+    version: "2.0.0",
     refresh,
     destroy() {
       stopped = true;
@@ -509,7 +497,6 @@
       document.removeEventListener("DOMContentLoaded", start);
       document.removeEventListener("mercury:load", schedule);
       window.removeEventListener("pageshow", schedule);
-      delete window.AutomaticTOC;
       delete window.CollectionBlocksTOC;
     }
   };

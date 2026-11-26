@@ -529,6 +529,7 @@
         }).filter(Boolean);
         return {
             id: item.id || "",
+            selectionSource: item.selectionSource || "",
             title: cleanText(item.title || ""),
             urlId: item.urlId || "",
             fullUrl: item.fullUrl || "",
@@ -581,6 +582,7 @@
         const excludeExactTags = Array.isArray(filter.excludeTags) ? filter.excludeTags : Array.isArray(filter.excludeExactTags) ? filter.excludeExactTags : [];
         const tagValues = Array.isArray(filter.tagValues) ? filter.tagValues : [];
         const tagValuesAny = Array.isArray(filter.tagValuesAny) ? filter.tagValuesAny : [];
+        if (filter.selectionSource && item.selectionSource !== filter.selectionSource) return false;
         if (categories.length && !itemHasAnyCategory(item, categories)) return false;
         if (excludeCategories.length && itemHasAnyCategory(item, excludeCategories)) return false;
         if (exactTags.length && !exactTags.every(tag => itemHasTag(item, tag))) return false;
@@ -1744,6 +1746,7 @@
         }
         if (linkEnabled) card.href = itemLink;
         if (item.id) card.dataset.itemId = String(item.id);
+        if (item.selectionSource) card.dataset.selectionSource = item.selectionSource;
         if (Array.isArray(item.media) && item.media.length) {
             card.dataset.cbMedia = JSON.stringify(item.media.map(media => ({
                 assetUrl: media?.assetUrl || null,
@@ -1931,6 +1934,9 @@
         }
 
         renderPage();
+        section.dispatchEvent(new CustomEvent('cb:related-render', { bubbles: true,
+            detail: { key: CFG.key, items: items.map(item => item.rawItem || item) }
+        }));
         section.classList.remove("cb-block--loading", "rb-block--loading");
         section.classList.add("cb-block--ready", "rb-block--ready");
         applyStateClasses(section);
@@ -2190,6 +2196,28 @@ function getNextPagesValue(currentPages, maxPages) {
             }
             const shell = buildBlockShell(CFG);
             insertInto(target, shell, CFG.insertion?.mode);
+            // Explicit references are opt-in. They use the same card renderer, never
+            // the matching/sorting fallback, so a missing item cannot be substituted.
+            const refsConfig = CFG.selection?.references;
+            const refsElement = refsConfig?.selector && document.querySelector(refsConfig.selector);
+            if (refsElement) {
+                try {
+                    const api = window.CollectionBlocksSelection;
+                    if (!api) throw new Error("Selection extension unavailable");
+                    const result = await api.resolve(api.read(refsElement, refsConfig), refsConfig);
+                    shell.dataset.selectionMissing = String(result.missing.length);
+                    if (result.missing.length) console.warn("[RB] Missing selection items", result.missing);
+                    replaceBlockContent(shell, result.items.map(item => mapItemForRender(item, CFG)), CFG, null);
+                    syncBodyRelatedBlockClasses();
+                    return true;
+                } catch (error) {
+                    console.warn("[RB] Selection unavailable", error);
+                    replaceBlockWithEmptyState(shell, { ...CFG, emptyState: {
+                        message: refsConfig.errorLabel || "Selection unavailable. Please try again later."
+                    } });
+                    return true;
+                }
+            }
             let items;
             let sourceState;
             try {

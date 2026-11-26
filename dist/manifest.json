@@ -124,25 +124,61 @@
     {
       "source": "extension-route-planner.css",
       "output": "dist/extension-route-planner.min.css",
-      "sourceSHA256": "6c1c6f466ef2353ca4860bff90c56035f1821ec158a3453e4aec46065b8a4d06",
-      "outputSHA256": "dfee6e182dc4bd173bcf333ae61913fae60b6fbff022b8436366a807e0c4a7e8",
+      "sourceSHA256": "9ac9d9e13c267ebe418019980957bbd551cf94d2112e7df7457bbd16893aabea",
+      "outputSHA256": "a7120954b4e4d5a1346d1889b04fc250d79a52ab108a768ba05732db51a05be6",
       "before": {
-        "raw": 8200
+        "raw": 8558
       },
       "after": {
-        "raw": 7212
+        "raw": 7531
       }
     },
     {
       "source": "extension-route-planner.js",
       "output": "dist/extension-route-planner.min.js",
-      "sourceSHA256": "64c5652d4a8ca250180e0daadba799728dcefd87a2b47d2cc5ce9cd591e574ce",
-      "outputSHA256": "86c9ecb3626f1f50c7b07f307b66f81d4c92daeb6ea61d889b51efe259af8834",
+      "sourceSHA256": "dcf4d47d345ce947f7219837858c68b4410260c578ca109cc499b0d378eec896",
+      "outputSHA256": "68ca6cc16905d5aba691fb7517cc1153e2bd668f2fd67b8b755577a8ff709382",
       "before": {
-        "raw": 26394
+        "raw": 29261
       },
       "after": {
-        "raw": 15322
+        "raw": 16552
+      }
+    },
+    {
+      "source": "extension-selection.js",
+      "output": "dist/extension-selection.min.js",
+      "sourceSHA256": "2c19c596e6def00895b6b57d57fc09ef22c7fc777011dbdbb77dd2569bf3a804",
+      "outputSHA256": "a65f908fb3031117f7e3a8f36db927dfb2a765ce46e58817b210f7207a011e9a",
+      "before": {
+        "raw": 2847
+      },
+      "after": {
+        "raw": 1772
+      }
+    },
+    {
+      "source": "extension-selection-editor.js",
+      "output": "dist/extension-selection-editor.min.js",
+      "sourceSHA256": "ed927488766cb51429b4a7c6212284d3074e9373027c84f1856a5c5a5f5e374b",
+      "outputSHA256": "68492eb8cf6b64e4fbb64a30a4cf9f794f6533c9a7ba57987b9acfa7ef6b2135",
+      "before": {
+        "raw": 11637
+      },
+      "after": {
+        "raw": 7229
+      }
+    },
+    {
+      "source": "extension-selection-editor.css",
+      "output": "dist/extension-selection-editor.min.css",
+      "sourceSHA256": "0c911fed37a632135deac4251b21115a96b80f8e58972b91da26599dc87aa2d3",
+      "outputSHA256": "ee8d67ad29a140f21e49c79ab8ea14b0e3196a7d75e2cf61804908a75d3ba9b1",
+      "before": {
+        "raw": 3012
+      },
+      "after": {
+        "raw": 2663
       }
     },
     {
@@ -256,37 +292,37 @@
     {
       "source": "related-block.js",
       "output": "dist/related-block.min.js",
-      "sourceSHA256": "a674003ccec39bcd97af33bb93570008414765347997a6afb76380f2191cbf59",
-      "outputSHA256": "aaa6e50b08f75b60afce865c2f184396fc485869b3ef233af5bfdca691f9cdd3",
+      "sourceSHA256": "164bad7455383a1da7dce1a7cf597f6c5b24ce41a3584a83efd7b01261a3a2a6",
+      "outputSHA256": "3ddb779c90120feff6ee3a7275e6f32d71000478a08558a4f5e3e151c4e55113",
       "before": {
-        "raw": 125511
+        "raw": 127344
       },
       "after": {
-        "raw": 52285
+        "raw": 53134
       }
     },
     {
       "source": "toc-block.css",
       "output": "dist/toc-block.min.css",
-      "sourceSHA256": "71dd578681b6b2fc63e957f282e34b59ac7ef30e2033849d62503873dfea9a28",
-      "outputSHA256": "e670da7443b911c5b65864eebd9ae3fd6cb546a70909c542c382ccb304e4fa46",
+      "sourceSHA256": "807a4c2358b993bb9c639838bbf1cfeb24c4448c3f52630015de6a6c82bd6fc3",
+      "outputSHA256": "2b24b266009543f7c943e554699775e2b6770997098f90c7895439f0f1a210df",
       "before": {
-        "raw": 8800
+        "raw": 10621
       },
       "after": {
-        "raw": 7791
+        "raw": 9272
       }
     },
     {
       "source": "toc-block.js",
       "output": "dist/toc-block.min.js",
-      "sourceSHA256": "a44303b5f415821516044c2e09a9954a2e0f45e3e0d349eb216d51ef86c7efa4",
-      "outputSHA256": "2ff186e474072d42c08fae616a89fe51086bba33c9e2e68de2444daa7004e333",
+      "sourceSHA256": "b0f266130bd059e9d81d25b8e9be0af8d165ddb54b08f6c261aba0f5ec2b372f",
+      "outputSHA256": "45b2237b53353f436177388429abbfb0c44a7df34e5652009899bd92b9a23099",
       "before": {
-        "raw": 25206
+        "raw": 23813
       },
       "after": {
-        "raw": 12541
+        "raw": 11588
       }
     }
   ]

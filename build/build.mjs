@@ -10,6 +10,7 @@ const assets = [
   'collection-blocks.js', 'extension-collapse.js', 'extension-explorer.css',
   'extension-explorer.js', 'extension-fancybox.js', 'extension-map.js',
   'extension-masonry.js', 'extension-route-planner.css', 'extension-route-planner.js',
+  'extension-selection.js', 'extension-selection-editor.js', 'extension-selection-editor.css',
   'extension-scroller.css', 'extension-scroller.js', 'extension-slider.js',
   'gallery-block.css', 'gallery-block.js', 'location-block.js', 'locator-block.js',
   'metadata-block.js', 'query-block.js', 'related-block.js', 'toc-block.css', 'toc-block.js'
