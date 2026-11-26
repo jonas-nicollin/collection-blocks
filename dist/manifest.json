@@ -160,13 +160,13 @@
     {
       "source": "extension-selection-editor.js",
       "output": "dist/extension-selection-editor.min.js",
-      "sourceSHA256": "ed927488766cb51429b4a7c6212284d3074e9373027c84f1856a5c5a5f5e374b",
-      "outputSHA256": "68492eb8cf6b64e4fbb64a30a4cf9f794f6533c9a7ba57987b9acfa7ef6b2135",
+      "sourceSHA256": "ddd4644d23438c833b240c54f8c7925a8888d709ba04440979858155d60d7d3e",
+      "outputSHA256": "a1ab31712eef33aed5990737be4f40ebdb125eaf0d88dabcc32b16754ac70cc7",
       "before": {
-        "raw": 11637
+        "raw": 11618
       },
       "after": {
-        "raw": 7229
+        "raw": 7209
       }
     },
     {

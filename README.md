@@ -1832,7 +1832,9 @@ oversized documents fail closed. Duplicate references collapse in first-seen ord
 The existing data cache resolves current published content; missing/deleted items
 are skipped and reported as `data-selection-missing`. No match, sort, fallback
 fill or title/slug substitution is applied to explicit selections. An absent JSON
-node retains the existing Related matching behavior. An explicit empty list stays
+node retains the existing Related matching behavior. In a Squarespace Code Block,
+use `<div class="cb-selection" hidden>JSON</div>` so editing mode preserves the
+data instead of disabling a script element. The editor exports this inert markup. An explicit empty list stays
 empty. Collection Data refresh cadence and cache TTL still apply.
 
 Related reuses its existing renderer for every source. A card variant may match

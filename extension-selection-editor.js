@@ -24,7 +24,7 @@
     var dialog = node('dialog', ''), selected, catalog = [], index = new Map();
     var filter = '', limit = 24, drag = null, closed = false;
     var titleCounts = new Map();
-    var refsElement = target.querySelector(cfg.selector || 'script[type="application/json"]');
+    var refsElement = target.querySelector(cfg.selector || '.cb-selection');
     var status = node('p', '__status'); status.setAttribute('role', 'status');
     var close = button('__close', '×', function() { dialog.close(); }); close.setAttribute('aria-label', 'Fermer');
     dialog.setAttribute('aria-label', cfg.title || 'Composer le parcours');
@@ -43,8 +43,8 @@
     output.setAttribute('aria-label', 'Code à coller dans le Code Block');
     var instruction = node('p', '__instruction'); instruction.hidden = true;
     var copy = button('__copy', 'Copier le Code Block', async function() {
-      output.value = '<div class="' + cfg.targetClass + '">\n<script type="application/json" class="cb-selection">\n' +
-        api.serialize(selected, cfg) + '\n<\/script>\n</div>';
+      output.value = '<div class="' + cfg.targetClass + '">\n<div class="cb-selection" hidden>\n' +
+        api.serialize(selected, cfg).replace(/&/g, '&amp;') + '\n</div>\n</div>';
       output.hidden = false; instruction.hidden = false;
       instruction.textContent = 'Collez ce code dans le Code Block de ce parcours, puis enregistrez la page.';
       try { await navigator.clipboard.writeText(output.value); status.textContent = 'Code copié.'; }
