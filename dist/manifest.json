@@ -160,25 +160,25 @@
     {
       "source": "extension-selection-editor.js",
       "output": "dist/extension-selection-editor.min.js",
-      "sourceSHA256": "ddd4644d23438c833b240c54f8c7925a8888d709ba04440979858155d60d7d3e",
-      "outputSHA256": "a1ab31712eef33aed5990737be4f40ebdb125eaf0d88dabcc32b16754ac70cc7",
+      "sourceSHA256": "5ddd97d66c31116c638981f3147562269898c1bbc2cf8eeef37cc62189873b78",
+      "outputSHA256": "61fe22b11df3c44982f55a94e74de8a8539dd9d6b82a51e2103a33cf9825dd41",
       "before": {
-        "raw": 11618
+        "raw": 12018
       },
       "after": {
-        "raw": 7209
+        "raw": 7319
       }
     },
     {
       "source": "extension-selection-editor.css",
       "output": "dist/extension-selection-editor.min.css",
-      "sourceSHA256": "0c911fed37a632135deac4251b21115a96b80f8e58972b91da26599dc87aa2d3",
-      "outputSHA256": "ee8d67ad29a140f21e49c79ab8ea14b0e3196a7d75e2cf61804908a75d3ba9b1",
+      "sourceSHA256": "30ee705e39faf247e143329a5f8b66c9f6e5371950474511200062f840faeccf",
+      "outputSHA256": "da1f378dbb577c6d5d0c46a20836bdcfdfbac2214cfefa46ffec29f5bec30868",
       "before": {
-        "raw": 3012
+        "raw": 3200
       },
       "after": {
-        "raw": 2663
+        "raw": 2827
       }
     },
     {

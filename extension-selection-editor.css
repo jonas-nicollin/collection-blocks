@@ -27,7 +27,8 @@
 .cb-editor .cb-editor__copy { margin-top: 1rem; background: #222; color: #fff; }
 .cb-editor__output { width: 100%; min-height: 10rem; margin-top: .5rem; }
 .cb-editor__instruction, .cb-editor__status { font-size: .85rem; }
-.cb-editor__trigger { cursor: pointer; font: inherit; padding: .75rem 1rem; margin-bottom: 1rem; }
+.cb-editor__toolbar { position: fixed; right: 1rem; bottom: 1rem; z-index: 2147483000; display: flex; flex-wrap: wrap; gap: .5rem; }
+.cb-editor__trigger { background: #fff; color: #222; border: 1px solid #aaa; cursor: pointer; font: inherit; padding: .75rem 1rem; margin-bottom: 1rem; }
 .cb-editor [hidden] { display: none !important; }
 @media (max-width: 768px) {
   .cb-editor { width: 96vw; padding-inline: .75rem; }

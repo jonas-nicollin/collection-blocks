@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   if (window.CollectionBlocksSelectionEditor) return;
-  var active, triggers = new Map();
+  var active, toolbar, triggers = new Map();
   function node(tag, part, text) {
     var el = document.createElement(tag); el.className = 'cb-editor' + part;
     if (text !== undefined) el.textContent = text;
@@ -175,16 +175,24 @@
   function refresh() {
     var enabled = editing();
     triggers.forEach(function(b, target) { if (!enabled || !target.isConnected) { b.remove(); triggers.delete(target); } });
-    if (!enabled) { if (active) active.close(); return; }
+    if (!enabled) {
+      if (active) active.close();
+      if (toolbar) { toolbar.remove(); toolbar = null; }
+      return;
+    }
     (window.CB_SELECTION_EDITOR_CONFIGS || []).forEach(function(cfg) {
       document.querySelectorAll(cfg.target).forEach(function(target) {
         if (triggers.has(target)) return;
         var b = button('__trigger', cfg.openLabel || 'Modifier le parcours', function(e) {
           e.preventDefault(); e.stopPropagation(); open(target, cfg);
         });
-        target.prepend(b); triggers.set(target, b);
+        // Native Squarespace block overlays intercept pointer events inside Code Blocks.
+        // Keep the launcher outside those editable surfaces.
+        if (!toolbar) { toolbar = node('div', '__toolbar'); document.body.append(toolbar); }
+        toolbar.append(b); triggers.set(target, b);
       });
     });
+    if (toolbar && !triggers.size) { toolbar.remove(); toolbar = null; }
   }
   window.CollectionBlocksSelectionEditor = { open: open, refresh: refresh };
   var scheduled = false;
