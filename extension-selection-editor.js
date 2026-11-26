@@ -43,13 +43,22 @@
     output.setAttribute('aria-label', 'Code à coller dans le Code Block');
     var instruction = node('p', '__instruction'); instruction.hidden = true;
     var copy = button('__copy', 'Copier le Code Block', async function() {
-      output.value = '<div class="' + cfg.targetClass + '">\n<div class="cb-selection" hidden>\n' +
-        api.serialize(selected, cfg).replace(/&/g, '&amp;') + '\n</div>\n</div>';
+      var exported = document.createElement('div'), data = document.createElement('div');
+      exported.className = cfg.targetClass || target.className;
+      // Keep the native edit-mode badge and target identity when replacing the block.
+      ['id', 'data-cb-label', 'data-qb-label', 'data-rb-label', 'data-lb-label'].forEach(function(name) {
+        if (target.hasAttribute(name)) exported.setAttribute(name, target.getAttribute(name));
+      });
+      if (cfg.targetLabel) exported.setAttribute('data-cb-label', cfg.targetLabel);
+      data.className = 'cb-selection'; data.hidden = true;
+      data.textContent = '\n' + api.serialize(selected, cfg) + '\n';
+      exported.append(data); output.value = exported.outerHTML;
       output.hidden = false; instruction.hidden = false;
       instruction.textContent = 'Collez ce code dans le Code Block de ce parcours, puis enregistrez la page.';
-      try { await navigator.clipboard.writeText(output.value); status.textContent = 'Code copié.'; }
+      try { await navigator.clipboard.writeText(output.value); copy.textContent = 'Code copié'; status.textContent = ''; }
       catch (_) { output.focus(); output.select(); status.textContent = 'Sélectionnez et copiez le code ci-dessous.'; }
     });
+    copy.setAttribute('aria-live', 'polite');
     left.append(node('h2', '__title', 'Choisir les étapes'), search, filters, results, more);
     right.append(node('h2', '__title', 'Votre sélection'), list, copy, instruction, output);
     layout.append(left, right); dialog.append(close, layout, status); document.body.append(dialog);
@@ -75,7 +84,8 @@
     }
     function caption(item) {
       var box = node('div', '__caption'), type = kind(item);
-      box.append(node('span', '__kind', type ? type.label : 'Contenu'), node('span', '__name', clean(item.title)));
+      var name = node('span', '__name', clean(item.title)); name.title = clean(item.title);
+      box.append(node('span', '__kind', type ? type.label : 'Contenu'), name);
       var venue = item.venue && item.venue.title;
       if (venue && venue !== item.title) box.append(node('span', '__place', clean(venue)));
       // Dates only disambiguate repeated titles, never every catalog row.
@@ -107,7 +117,7 @@
       filters.querySelectorAll('button').forEach(function(b) { b.setAttribute('aria-pressed', String(b.dataset.type === filter)); });
     }
     function renderSelection() {
-      list.replaceChildren(); copy.disabled = false;
+      list.replaceChildren(); copy.disabled = false; copy.textContent = 'Copier le Code Block';
       selected.forEach(function(ref, i) {
         var item = index.get(key(ref));
         var row = node('div', '__stop'); row.dataset.key = key(ref);

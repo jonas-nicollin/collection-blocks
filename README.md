@@ -1818,6 +1818,9 @@ items/paragraphs within that budget, always showing at least one. The first
 paragraph may therefore exceed the budget; it is never split or duplicated.
 `step` controls subsequent disclosure as before. Short content has no control.
 `disableInEditMode: true` restores the full content in the Squarespace editor.
+`mediaQuery` can limit paragraph disclosure to a breakpoint, for example
+`'(max-width: 767px)'`. Outside it, content is restored and controls are removed;
+returning to the breakpoint reapplies the initial whole-paragraph budget.
 No content is fetched, removed from the page or replaced with a plain-text copy.
 
 
@@ -1856,6 +1859,11 @@ paginated in batches of 24; no full-collection rendering. Interface classes are
 `cb-editor`, `cb-editor__*`, `cb-editor__stop--dragging`. Load the editor lazily in
 edit mode to avoid visitor overhead. No server, account or separate data store is
 required; editor visibility is not an authorization boundary for public data.
+Exports preserve the target's ID and native `data-cb-label` / block-label badges.
+`targetLabel` optionally supplies a `data-cb-label`; include `cb-target rb-target`
+in `targetClass` for a Related target. Copy success appears on the copy button
+itself and resets when the selection or its order changes. Readable editor
+sources always remain at the repository root alongside their `dist/` outputs.
 
 Route Planner retains a default of four stops; `maxStops` can opt into up to 25.
 For five or more stops it exposes explicit Google Maps sections, each containing

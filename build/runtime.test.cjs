@@ -7,6 +7,45 @@ const { JSDOM } = require('jsdom');
 const root = path.join(__dirname, '..');
 const manifest = require('../dist/manifest.json');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+for (const minified of [false, true]) {
+  test(`${minified ? 'distribution' : 'source'}: editor preserves target badge and confirms current export`, async () => {
+    const dom = new JSDOM('<body class="sqs-edit-mode-active"><div id="route" ' +
+      'class="cb-target rb-target route" data-rb-label="Parcours &amp; choix">' +
+      '<div class="cb-selection" hidden>{"version":1,"items":[{"source":"members","id":"one"}]}</div></div>',
+      { url: 'https://example.com/route', runScripts: 'outside-only', pretendToBeVisual: true });
+    const w = dom.window, d = w.document, stop = manageObservers(w);
+    let copied = '';
+    w.HTMLDialogElement.prototype.showModal = function() { this.open = true; };
+    w.HTMLDialogElement.prototype.close = function() { this.open = false; this.dispatchEvent(new w.Event('close')); };
+    Object.defineProperty(w.navigator, 'clipboard', { value: { writeText: async text => { copied = text; } } });
+    w.CollectionBlocks = { data: { getState: async () => ({ complete: true,
+      items: [{ id: 'one', title: 'A long member title' }, { id: 'two', title: 'Second member' }] }) } };
+    w.CB_SELECTION_EDITOR_CONFIGS = [{ target: '.route', targetClass: 'cb-target rb-target route',
+      targetLabel: 'Son parcours – Sélection', sources: { members: { path: '/members' } } }];
+    const load = name => w.eval(readFileSync(path.join(root, minified ?
+      'dist/' + name.replace('.js', '.min.js') : name), 'utf8'));
+    try {
+      load('extension-selection.js'); load('extension-selection-editor.js');
+      d.querySelector('.cb-editor__trigger').click();
+      await waitFor(() => d.querySelectorAll('.cb-editor__stop').length === 1);
+      d.querySelector('.cb-editor__copy').click();
+      await waitFor(() => d.querySelector('.cb-editor__copy').textContent === 'Code copié');
+      const exported = new JSDOM(copied).window.document.querySelector('#route');
+      assert.equal(exported.dataset.cbLabel, 'Son parcours – Sélection');
+      assert.equal(exported.dataset.rbLabel, 'Parcours & choix');
+      assert(exported.classList.contains('rb-target'));
+      assert.deepEqual(JSON.parse(exported.querySelector('.cb-selection').textContent).items,
+        [{ source: 'members', id: 'one' }]);
+      d.querySelector('[aria-label="Ajouter : Second member"]').click();
+      assert.equal(d.querySelector('.cb-editor__copy').textContent, 'Copier le Code Block');
+      assert(d.querySelector('.cb-editor__output').hidden);
+      d.querySelector('.cb-editor__close').click();
+      d.body.classList.remove('sqs-edit-mode-active');
+      await waitFor(() => !d.querySelector('.cb-editor__trigger'));
+    } finally { stop(); w.close(); }
+  });
+}
 // JSDOM does not disconnect MutationObservers when closing its Window. Explicit
 // fixture teardown prevents queued lifecycle work from accessing a closed URL.
 function manageObservers(window) {
@@ -145,9 +184,18 @@ for (const minified of [false, true]) {
       assert.equal(d.querySelectorAll('.tocb-toc__link').length, 1);
       w.CB_COLLAPSE_CONFIGS = [{ targets: '#reading', listSelector: ':scope',
         itemSelector: ':scope > p', characterLimit: 800, step: 1000,
+        mediaQuery: '(max-width: 767px)',
         disableInEditMode: true, scrollToSectionOnCollapse: false,
         labels: { showMore: 'Lire la suite', showLess: 'Réduire' } }];
+      const mediaListeners = new Set();
+      const media = { matches: false,
+        addEventListener: (_type, fn) => mediaListeners.add(fn),
+        removeEventListener: (_type, fn) => mediaListeners.delete(fn) };
+      w.matchMedia = () => media;
       load('extension-collapse.js');
+      w.CollectionBlocksCollapse.refresh();
+      assert(!d.querySelector('.cb-collapse__more'));
+      media.matches = true; mediaListeners.forEach(fn => fn());
       await waitFor(() => d.querySelector('.cb-collapse__more'));
       const paragraphs = Array.from(d.querySelectorAll('#reading p'));
       assert.deepEqual(paragraphs.map(p => p.hidden), [false, false, true]);
@@ -155,6 +203,11 @@ for (const minified of [false, true]) {
       assert(paragraphs.every(p => !p.hidden));
       d.querySelector('.cb-collapse__less').click();
       assert(paragraphs[2].hidden);
+      media.matches = false; mediaListeners.forEach(fn => fn());
+      assert(paragraphs.every(p => !p.hidden));
+      assert(!d.querySelector('.cb-collapse__controls'));
+      media.matches = true; mediaListeners.forEach(fn => fn());
+      assert.deepEqual(paragraphs.map(p => p.hidden), [false, false, true]);
       d.body.classList.add('sqs-edit-mode-active');
       await waitFor(() => !d.querySelector('.cb-collapse__more'));
       assert(paragraphs.every(p => !p.hidden));

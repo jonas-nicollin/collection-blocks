@@ -78,6 +78,7 @@
         Array.from(new Set([common, extra])).join(' ');
     }
     var originalScopeClasses = new Map(), destroyed = false;
+    var media = cfg.mediaQuery ? window.matchMedia(cfg.mediaQuery) : null;
     function toggle(node, names, active) {
       names.split(/\s+/).forEach(function (name) {
         if (node === scope && !originalScopeClasses.has(name)) {
@@ -141,6 +142,12 @@
     }
     function refresh() {
       if (destroyed) return;
+      if (media && !media.matches) {
+        originals.forEach(function (_value, item) { restore(item); });
+        removeControls();
+        visibleCount = threshold; initialBudget = true;
+        return;
+      }
       list = cfg.listSelector === ':scope' ? scope : scope.querySelector(cfg.listSelector);
       var previous = items;
       items = list ? Array.from(scope.querySelectorAll(cfg.itemSelector)).filter(function (item) {
@@ -200,6 +207,7 @@
       destroy: function () {
         if (destroyed) return;
         destroyed = true;
+        if (media) media.removeEventListener('change', refresh);
         originals.forEach(function (_value, item) { restore(item); });
         removeControls();
         if (generatedList && generatedList.id === generatedId) generatedList.removeAttribute('id');
@@ -207,6 +215,7 @@
       }
     };
     controllers.set(scope, controller);
+    if (media) media.addEventListener('change', refresh);
     refresh();
     return controller;
   }
@@ -226,7 +235,7 @@
       });
     });
   }
-  window.CollectionBlocksCollapse = { version: '1.3.0', mount: mount, refresh: refresh };
+  window.CollectionBlocksCollapse = { version: '1.4.0', mount: mount, refresh: refresh };
   var scheduled = false;
   function schedule() {
     if (scheduled) return;

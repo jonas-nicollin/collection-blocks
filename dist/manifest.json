@@ -52,13 +52,13 @@
     {
       "source": "extension-collapse.js",
       "output": "dist/extension-collapse.min.js",
-      "sourceSHA256": "8f6ae83478008b286dc8b0f0ed2089e5835ad69728eb0b852fa1010b157f7f39",
-      "outputSHA256": "6294406478fe39a305d52579457bc6c3208fb88becf6f544ca869056f57d5094",
+      "sourceSHA256": "d3874de56b9097f81d460a225b532682324051e458450869009bbdee743a0eef",
+      "outputSHA256": "211aedafe22c53785bfc58de11c9e39e4b824836124b0f3321a451c2b4eab37a",
       "before": {
-        "raw": 11232
+        "raw": 11644
       },
       "after": {
-        "raw": 5815
+        "raw": 6007
       }
     },
     {
@@ -160,25 +160,25 @@
     {
       "source": "extension-selection-editor.js",
       "output": "dist/extension-selection-editor.min.js",
-      "sourceSHA256": "5ddd97d66c31116c638981f3147562269898c1bbc2cf8eeef37cc62189873b78",
-      "outputSHA256": "61fe22b11df3c44982f55a94e74de8a8539dd9d6b82a51e2103a33cf9825dd41",
+      "sourceSHA256": "7061f836c274cd7cfd5b5efd99bad989c299cc6483e17ed4a91efe7f929a9c15",
+      "outputSHA256": "0b982dcf49224974c94aec035291a3dfa6c33ef38ac868702606adfad7269d28",
       "before": {
-        "raw": 12018
+        "raw": 12730
       },
       "after": {
-        "raw": 7319
+        "raw": 7725
       }
     },
     {
       "source": "extension-selection-editor.css",
       "output": "dist/extension-selection-editor.min.css",
-      "sourceSHA256": "30ee705e39faf247e143329a5f8b66c9f6e5371950474511200062f840faeccf",
-      "outputSHA256": "da1f378dbb577c6d5d0c46a20836bdcfdfbac2214cfefa46ffec29f5bec30868",
+      "sourceSHA256": "318472b835f1b5394c956d4f125626dacfcdad942f7fb201d87a7081b2f6563c",
+      "outputSHA256": "1629c9f314eac5acfa8d73365e54064f3488fe354234f362abb6da7dac427e5a",
       "before": {
-        "raw": 3200
+        "raw": 3615
       },
       "after": {
-        "raw": 2827
+        "raw": 3199
       }
     },
     {
