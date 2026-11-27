@@ -1888,3 +1888,26 @@ Only requested, valid-coordinate IDs are accepted. Site adapters own their sourc
 allowlist and must deduplicate physical places. No arbitrary fetch URL is accepted
 from route parameters. New presentation classes pair `cb-route-planner__segments`,
 `__segments-title`, `__segment-links`, `__segment` with `lb-*` aliases.
+
+### Query selections and editor placement (v0.19.4)
+
+Query Block also accepts `selection.references: { selector: '.cb-selection',
+sources: { programme: { path: '/programme' } }, maxItems: 25 }`.
+Load `extension-selection.js` before Query. When a reference document is present,
+its explicit order replaces the configured pre-filter and sort; cards still use
+Query's ordinary rendering, variants, pagination and hooks. Without a document,
+the configured query is unchanged. An empty document deliberately shows no cards.
+Missing or unpublished items are skipped and counted in `data-cb-selection-missing`.
+
+The editor's optional `triggerPlacement: 'target'` anchors each launcher to its
+own target while portalling it outside Squarespace's editing overlays. Only
+visible targets show launchers; the default toolbar remains available. Give each
+configuration a distinct `openLabel` and `title`; `catalogLabel` is optional.
+
+Fancybox roots now carry `cb-fancybox--source-<origin-id>` plus the corresponding
+block alias, for both supported library versions. The closest Collection Block
+ID identifies the origin; a scoped native target ID is used otherwise.
+`legacyClasses: false` disables historical caption aliases (`custom-fancybox-*`,
+`summary-artworks-*`, `collection-items-*`, `cap-*`). Migrate site selectors to
+`cb-fancybox` / `cb-fancybox__<part>` before opting in. Existing configurations
+retain their aliases. Enquiry URL prefilling is unchanged.

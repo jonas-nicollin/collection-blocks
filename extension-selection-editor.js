@@ -27,7 +27,7 @@
     var refsElement = target.querySelector(cfg.selector || '.cb-selection');
     var status = node('p', '__status'); status.setAttribute('role', 'status');
     var close = button('__close', '×', function() { dialog.close(); }); close.setAttribute('aria-label', 'Fermer');
-    dialog.setAttribute('aria-label', cfg.title || 'Composer le parcours');
+    dialog.setAttribute('aria-label', cfg.title || 'Composer une sélection');
     dialog.addEventListener('close', function() { closed = true; dialog.remove(); active = null; });
     var outsideStart = false;
     function outside(event) {
@@ -48,7 +48,7 @@
     var search = node('input', '__search'); search.type = 'search';
     search.placeholder = 'Rechercher un titre ou un lieu…'; search.setAttribute('aria-label', 'Rechercher un contenu');
     var filters = node('div', '__filters'), results = node('div', '__catalog');
-    var list = node('div', '__selection'); list.setAttribute('aria-label', 'Étapes du parcours');
+    var list = node('div', '__selection'); list.setAttribute('aria-label', 'Contenus sélectionnés');
     var more = button('__more', 'Afficher plus', function() { limit += 24; renderCatalog(); });
     var output = node('textarea', '__output'); output.readOnly = true; output.hidden = true;
     output.spellcheck = false; output.wrap = 'off';
@@ -68,12 +68,12 @@
       }).join('\n') + '\n  ';
       exported.append('\n  ', data, '\n'); output.value = exported.outerHTML;
       output.hidden = false; instruction.hidden = false;
-      instruction.textContent = 'Collez ce code dans le Code Block de ce parcours, puis enregistrez la page.';
+      instruction.textContent = 'Collez ce code dans le Code Block correspondant, puis enregistrez la page.';
       try { await navigator.clipboard.writeText(output.value); copy.textContent = 'Code copié'; status.textContent = ''; }
       catch (_) { output.focus(); output.select(); status.textContent = 'Sélectionnez et copiez le code ci-dessous.'; }
     });
     copy.setAttribute('aria-live', 'polite');
-    left.append(node('h2', '__title', 'Choisir les étapes'), search, filters, results, more);
+    left.append(node('h2', '__title', cfg.catalogLabel || 'Choisir les contenus'), search, filters, results, more);
     right.append(node('h2', '__title', 'Votre sélection'), list, copy, instruction, output);
     layout.append(left, right); dialog.append(close, layout, status); document.body.append(dialog);
     active = dialog; dialog.showModal(); status.textContent = 'Chargement…'; copy.disabled = true;
@@ -120,7 +120,7 @@
         var chosen = selected.some(function(ref) { return key(ref) === key(reference(item)); });
         var row = node('div', '__row');
         var add = button('__add', chosen ? '✓' : '+', function() {
-          if (selected.length >= (cfg.maxItems || 25)) { status.textContent = 'Le parcours est complet.'; return; }
+          if (selected.length >= (cfg.maxItems || 25)) { status.textContent = 'La sélection est complète.'; return; }
           selected.push(reference(item)); render();
         });
         add.disabled = chosen; add.setAttribute('aria-label', 'Ajouter : ' + clean(item.title));
@@ -152,7 +152,7 @@
         else row.append(node('span', '__missing', 'Contenu introuvable : ' + ref.id));
         row.append(remove); list.append(row);
       });
-      if (!selected.length) list.append(node('p', '__empty', 'Choisissez une première étape.'));
+      if (!selected.length) list.append(node('p', '__empty', 'Choisissez un premier contenu.'));
       output.hidden = true; instruction.hidden = true;
     }
     function render() { renderCatalog(); renderSelection(); }
@@ -212,12 +212,38 @@
         });
         // Native Squarespace block overlays intercept pointer events inside Code Blocks.
         // Keep the launcher outside those editable surfaces.
-        if (!toolbar) { toolbar = node('div', '__toolbar'); document.body.append(toolbar); }
-        toolbar.append(b); triggers.set(target, b);
+        if (cfg.triggerPlacement === 'target') {
+          b.classList.add('cb-editor__trigger--target');
+          b.setAttribute('aria-controls', target.id);
+          document.body.append(b);
+        } else {
+          if (!toolbar) { toolbar = node('div', '__toolbar'); document.body.append(toolbar); }
+          toolbar.append(b);
+        }
+        triggers.set(target, b);
       });
     });
     if (toolbar && !triggers.size) { toolbar.remove(); toolbar = null; }
+    positionTriggers();
   }
+  function positionTriggers() {
+    triggers.forEach(function(b, target) {
+      if (!b.classList.contains('cb-editor__trigger--target')) return;
+      var rect = target.getBoundingClientRect();
+      b.hidden = rect.bottom <= b.offsetHeight + 16 || rect.top >= window.innerHeight || rect.width <= 0;
+      b.style.top = Math.max(8, rect.top + 8) + 'px';
+      b.style.left = Math.max(8, Math.min(rect.right - b.offsetWidth - 8,
+        window.innerWidth - b.offsetWidth - 8)) + 'px';
+    });
+  }
+  var positioning = false;
+  function schedulePosition() {
+    if (positioning || !triggers.size) return;
+    positioning = true;
+    requestAnimationFrame(function() { positioning = false; positionTriggers(); });
+  }
+  window.addEventListener('scroll', schedulePosition, { passive: true, capture: true });
+  window.addEventListener('resize', schedulePosition);
   window.CollectionBlocksSelectionEditor = { open: open, refresh: refresh };
   var scheduled = false;
   new MutationObserver(function() {

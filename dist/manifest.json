@@ -88,13 +88,13 @@
     {
       "source": "extension-fancybox.js",
       "output": "dist/extension-fancybox.min.js",
-      "sourceSHA256": "fb143a489bbf35bac1c0ce04627798522db74418ba7b6623c2c1f3ab02af6896",
-      "outputSHA256": "cb98d4e837b906a963842bd2862ce51b23102a1102a94c02b47feb93ac8944ef",
+      "sourceSHA256": "4df6e13a9a3e9dab3edda91189b66f408c5fd3bdef4472a44647bc6443d50455",
+      "outputSHA256": "b76139709b6cec43d6f069bea6f1250c3cb6f62c1d5de98a8504b168bdc82b77",
       "before": {
-        "raw": 23734
+        "raw": 24184
       },
       "after": {
-        "raw": 12398
+        "raw": 12693
       }
     },
     {
@@ -160,25 +160,25 @@
     {
       "source": "extension-selection-editor.js",
       "output": "dist/extension-selection-editor.min.js",
-      "sourceSHA256": "34c45d888201955cf9da7f192470e7c9243798af1b05b6804087e53dc41a1b29",
-      "outputSHA256": "976ab7be13160b4dffe7d24f7aaefc3dea536ef432a7747c2d0c2b5fe900df8a",
+      "sourceSHA256": "3866db67528424964e34c805b2ad85a98cd0cf242af76fd5dbc5091f147272ed",
+      "outputSHA256": "f5c1f0d6b2cd694cf3313948682e7c0683bc67916e7a6569e1851e3a96054ebd",
       "before": {
-        "raw": 13407
+        "raw": 14553
       },
       "after": {
-        "raw": 8096
+        "raw": 8794
       }
     },
     {
       "source": "extension-selection-editor.css",
       "output": "dist/extension-selection-editor.min.css",
-      "sourceSHA256": "0a3d17b75977eacc76bf143d9906f3fbb3794f8175a001b13f215836953ef1bb",
-      "outputSHA256": "d3254622fd03d06ba7967b19cd854d0f85b0d008899b51c40b0694b3f42bfcbb",
+      "sourceSHA256": "d1697da1c944d7235bbbe1c2e9affe54cbf88dfa2725f7320d900bca848ed29c",
+      "outputSHA256": "7cbb8e692b938b0712975df6761eed97915a90f3f4316f7dd87050197c644201",
       "before": {
-        "raw": 3928
+        "raw": 4174
       },
       "after": {
-        "raw": 3472
+        "raw": 3612
       }
     },
     {
@@ -280,13 +280,13 @@
     {
       "source": "query-block.js",
       "output": "dist/query-block.min.js",
-      "sourceSHA256": "a1b35d8f455e4ee88f609ffd13d8b03cfaeda95f57a20d1cb5bb5ba4f546cefd",
-      "outputSHA256": "21b3ee44083ff8ba85f17113e9eea50e0113f1040375dd670f13123727659965",
+      "sourceSHA256": "fa064a288d9d909a73653e5668683009706e670a21517d097b9e1466643d82bf",
+      "outputSHA256": "aef8486f54382d6caf5f2199daecfc6f87eb18ae58bd6c5344d0c4950d3b73ad",
       "before": {
-        "raw": 173009
+        "raw": 174056
       },
       "after": {
-        "raw": 83796
+        "raw": 84249
       }
     },
     {

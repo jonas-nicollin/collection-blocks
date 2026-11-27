@@ -340,3 +340,85 @@ for (const minified of [false, true]) {
     } finally { stop(); w.close(); }
   });
 }
+
+for (const minified of [false, true]) {
+  test(`${minified ? 'distribution' : 'source'}: Query resolves explicit references without changing ordinary queries`, async () => {
+    const dom = new JSDOM('<div id="picked"><div class="cb-selection" hidden>' +
+      JSON.stringify({version:1,items:[{source:'p',id:'b'},{source:'p',id:'missing'},{source:'p',id:'a'}]}) +
+      '</div></div><div id="ordinary"></div><div id="empty"><div class="cb-selection" hidden>' +
+      '{"version":1,"items":[]}</div></div>',
+      {url:'https://example.com/',runScripts:'outside-only',pretendToBeVisual:true});
+    const w=dom.window,d=w.document,stop=manageObservers(w);
+    const load=name=>w.eval(readFileSync(path.join(root,minified?'dist/'+name.replace('.js','.min.js'):name),'utf8'));
+    try {
+      w.matchMedia=()=>({matches:false,addEventListener(){},removeEventListener(){}});
+      w.ResizeObserver=class {observe(){} disconnect(){}};
+      load('collection-blocks.js');
+      w.CollectionBlocks.data.getState=async()=>({complete:true,items:[
+        {id:'a',title:'Alpha',fullUrl:'/a',workflowState:1},
+        {id:'b',title:'Beta',fullUrl:'/b',workflowState:1}]});
+      load('extension-selection.js');
+      const refs={references:{sources:{p:{path:'/items'}}}};
+      w.QUERY_BLOCK_CONFIGS=['picked','ordinary','empty'].map(key=>({key,target:'#'+key,
+        sourceCollection:{path:'/items'},selection:refs,sort:{type:'title',direction:'asc'},
+        performance:{lazyInit:false,maxPages:'all'},filters:false,pagination:{mode:'none'},
+        display:{groups:[{role:'body',children:['title']}]}}));
+      load('query-block.js');
+      await waitFor(()=>d.querySelectorAll('#picked .qb-card').length===2 && d.querySelectorAll('#ordinary .qb-card').length===2);
+      assert.deepEqual([...d.querySelectorAll('#picked .qb-card')].map(x=>x.getAttribute('href')),['/b','/a']);
+      assert.deepEqual([...d.querySelectorAll('#ordinary .qb-card')].map(x=>x.getAttribute('href')),['/a','/b']);
+      assert.equal(d.querySelector('#picked').dataset.cbSelectionMissing,'1');
+      assert.equal(d.querySelectorAll('#empty .qb-card').length,0);
+      assert(d.querySelector('#picked .cb-selection'),'reference document survives rendering for editor');
+    } finally {stop();w.close();}
+  });
+  test(`${minified ? 'distribution' : 'source'}: Fancybox origin and canonical-only classes`,()=>{
+    const dom=new JSDOM('<section id="rb-example" class="cb-block rb-block"><a class="rb-card"><img src="https://example.com/a.jpg"><span class="title">Work</span></a></section>',
+      {url:'https://example.com/',runScripts:'outside-only',pretendToBeVisual:true});
+    const w=dom.window,d=w.document,stop=manageObservers(w);let options,slides;
+    w.Fancybox={show:(s,o)=>{slides=s;options=o;return {};}};
+    try {
+      const load=name=>w.eval(readFileSync(path.join(root,minified?'dist/'+name.replace('.js','.min.js'):name),'utf8'));
+      load('collection-blocks.js');load('extension-fancybox.js');
+      const cfg={itemSelector:'.rb-card',legacyClasses:false,selectors:{image:'img',title:'.title'},classPrefixes:{specific:'summary-artworks'}};
+      let c=w.CollectionBlocksFancybox.mount(d.querySelector('section'),cfg); c.open(d.querySelector('a'));
+      assert(options.mainClass.includes('cb-fancybox--source-rb-example'));
+      assert(options.mainClass.includes('rb-fancybox--source-rb-example'));
+      assert(!options.mainClass.includes('summary-artworks'));
+      assert(!slides[0].caption.includes('summary-artworks'));
+      assert(!slides[0].caption.includes('custom-fancybox'));
+      c.destroy();c=w.CollectionBlocksFancybox.mount(d.querySelector('section'),{...cfg,libraryVersion:5});c.open(d.querySelector('a'));
+      assert(options.mainClass.includes('cb-fancybox--source-rb-example'));
+    } finally {stop();w.close();}
+  });
+}
+
+for (const minified of [false, true]) {
+  test(`${minified ? 'distribution' : 'source'}: target launchers open only their own selection`, async () => {
+    const dom = new JSDOM('<body class="sqs-edit-mode-active">' + ['one','two'].map(id =>
+      `<div id="${id}" class="cb-target"><div class="cb-selection" hidden>${JSON.stringify({version:1,items:[{source:'p',id}]})}</div></div>`).join(''),
+      {url:'https://example.com/',runScripts:'outside-only',pretendToBeVisual:true});
+    const w=dom.window,d=w.document,stop=manageObservers(w);
+    w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};
+    w.HTMLDialogElement.prototype.close=function(){this.dispatchEvent(new w.Event('close'));};
+    w.CollectionBlocks={data:{getState:async()=>({complete:true,items:[{id:'one',title:'First'},{id:'two',title:'Second'}]})}};
+    w.CB_SELECTION_EDITOR_CONFIGS=['one','two'].map(id=>({target:'#'+id,triggerPlacement:'target',title:id,sources:{p:{path:'/items'}}}));
+    ['one','two'].forEach((id,i)=>{d.getElementById(id).getBoundingClientRect=()=>({top:100+i*200,bottom:280+i*200,right:500,width:400});});
+    try {
+      const load=name=>w.eval(readFileSync(path.join(root,minified?'dist/'+name.replace('.js','.min.js'):name),'utf8'));
+      load('extension-selection.js');load('extension-selection-editor.js');
+      const triggers=[...d.querySelectorAll('.cb-editor__trigger--target')];
+      assert.equal(triggers.length,2); assert(!d.querySelector('.cb-editor__toolbar'));
+      assert.notEqual(triggers[0].style.top,triggers[1].style.top);
+      for(let i=0;i<2;i++){
+        triggers[i].click(); await waitFor(()=>d.querySelectorAll('.cb-editor__stop').length===1);
+        assert.equal(d.querySelector('dialog').getAttribute('aria-label'),['one','two'][i]);
+        assert.equal(d.querySelector('.cb-editor__stop .cb-editor__name').textContent,['First','Second'][i]);
+        triggers[1-i].click(); assert.equal(d.querySelectorAll('dialog').length,1);
+        d.querySelector('.cb-editor__close').click();
+      }
+      d.body.classList.remove('sqs-edit-mode-active');w.CollectionBlocksSelectionEditor.refresh();
+      assert.equal(d.querySelectorAll('.cb-editor__trigger').length,0);
+    } finally {stop();w.close();}
+  });
+}

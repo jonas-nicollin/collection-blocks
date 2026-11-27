@@ -4034,6 +4034,18 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
   if (!target) return;
 
   if (target.dataset.sqbInitialized === 'true') return;
+  // Explicit editorial references are optional. Read before constructing the
+  // block; a missing document retains the ordinary configured query.
+  var referenceConfig = cfg.selection && cfg.selection.references;
+  var referenceElement = referenceConfig && target.querySelector(
+    referenceConfig.selector || '.cb-selection');
+  var referenceItems = null;
+  if (referenceElement) {
+    var referenceAPI = window.CollectionBlocksSelection;
+    if (!referenceAPI) throw new Error('Selection extension unavailable');
+    referenceItems = referenceAPI.read(referenceElement, referenceConfig);
+    cfg.sort = null;
+  }
   target.dataset.sqbInitialized = 'true';
 
     var perf = cfg.performance || {};
@@ -4183,6 +4195,14 @@ requestAnimationFrame(function() {
 
     async function loadSources(maxPagesValue, options) {
       options = options || {};
+      if (referenceItems !== null) {
+        var selection = await referenceAPI.resolve(referenceItems, referenceConfig);
+        allRemoteLoaded = rawItemsComplete = filterIndexComplete = true;
+        target.dataset.cbSelectionMissing = String(selection.missing.length);
+        return selection.items.map(function(item) {
+          return mapItem(item, referenceConfig.sources[item.selectionSource].path);
+        });
+      }
       var results = await fetchConfigSources(cfg, maxPagesValue);
 
       var merged = [];

@@ -6,6 +6,7 @@
   function classes(cfg, suffix, legacy) {
     var api = window.CollectionBlocks && window.CollectionBlocks.extensions;
     var common = 'cb-fancybox' + suffix;
+    if (cfg.legacyClasses === false) legacy = '';
     return api ? api.classes(null, common, legacy, cfg.blockPrefix) :
       [common, legacy].filter(Boolean).join(' ');
   }
@@ -427,7 +428,7 @@
 
     var generic = (cfg.classPrefixes && cfg.classPrefixes.generic) || 'custom-fancybox';
     var specific = (cfg.classPrefixes && cfg.classPrefixes.specific) || 'collection-items';
-    var caption = slide.captionEl.querySelector('.' + specific + '-caption') || slide.captionEl;
+    var caption = slide.captionEl.querySelector('.cb-fancybox__caption') || slide.captionEl;
     var existing = caption.querySelector('[data-cb-artwork-views]');
 
     if (existing) {
@@ -467,18 +468,21 @@
   }
 
   function fancyboxOptions(startIndex, cfg) {
+    var generic = (cfg.classPrefixes && cfg.classPrefixes.generic) || 'custom-fancybox';
+    var specific = (cfg.classPrefixes && cfg.classPrefixes.specific) || 'collection-items';
+    var mainClass = classes(cfg, '', generic + '-container ' + specific + '-container');
+    if (cfg.originKey) mainClass += ' ' + classes(cfg, '--source-' + cfg.originKey);
     // Native collection galleries may retain an installed Fancybox 5 viewer.
     // Advanced adapter features continue to use version 6 by default.
     if(cfg.libraryVersion === 5){
-      return Object.assign({},cfg.libraryOptions || {},{startIndex:startIndex});
+      return Object.assign({},cfg.libraryOptions || {},{startIndex:startIndex,
+        mainClass: [mainClass, (cfg.libraryOptions || {}).mainClass].filter(Boolean).join(' ')});
     }
     var options = Object.assign({}, DEFAULT_FANCYBOX, cfg.fancybox || {});
-    var generic = (cfg.classPrefixes && cfg.classPrefixes.generic) || 'custom-fancybox';
-    var specific = (cfg.classPrefixes && cfg.classPrefixes.specific) || 'collection-items';
 
     return {
       theme: options.theme,
-      mainClass: classes(cfg, '', generic + '-container ' + specific + '-container'),
+      mainClass: mainClass,
       Hash: !!options.hash,
       compact: false,
       dragToClose: !!options.dragToClose,
@@ -559,6 +563,9 @@
       if (!window.Fancybox) return null;
       var openConfig = Object.assign({}, cfg, { blockPrefix: extensions
         ? extensions.prefix(card, cfg.blockPrefix) : cfg.blockPrefix });
+      var origin = card.closest('.cb-block[id]') || scope;
+      openConfig.originKey = String(origin.id || origin.getAttribute('data-cb-key') || '')
+        .replace(/[^a-zA-Z0-9_-]/g, '-');
       var collection = collectFancyboxSlides(scope, openConfig);
       var index = collection.starts.get(card);
       if (!collection.slides.length || index === undefined) return null;
@@ -608,7 +615,7 @@
       scopesFor(cfg.targets).forEach(function (scope) { mount(scope, cfg); });
     });
   }
-  window.CollectionBlocksFancybox = { version: '1.3.0', mount: mount, refresh: refresh };
+  window.CollectionBlocksFancybox = { version: '1.4.0', mount: mount, refresh: refresh };
   var scheduled = false;
   function schedule() {
     if (scheduled) return;

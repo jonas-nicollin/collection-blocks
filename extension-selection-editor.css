@@ -44,3 +44,11 @@
   .cb-editor__layout { grid-template-columns: 1fr; gap: 1rem; }
   .cb-editor__catalog, .cb-editor__selection { max-height: 35vh; }
 }
+
+/* Portalled outside Squarespace overlays, visually anchored to its own target. */
+.cb-editor__trigger--target {
+  position: fixed;
+  z-index: 2147483000;
+  max-width: calc(100vw - 1rem);
+}
+.cb-editor__trigger--target[hidden] { display: none; }
