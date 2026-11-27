@@ -20,6 +20,7 @@
         [name, alias].filter(Boolean).join(' ');
     }
     var original = { hidden: content.hidden, id: content.id };
+    var originalPreviewClass = content.classList.contains('cb-collapse__content--collapsed');
     var expanded = cfg.expanded === true, destroyed = false;
     var media = cfg.mediaQuery ? window.matchMedia(cfg.mediaQuery) : null;
     var button = document.createElement('button');
@@ -27,13 +28,14 @@
     button.className = classes('cb-collapse__toggle');
     if (!content.id) content.id = 'cb-collapse-panel-' + (++nextId);
     button.setAttribute('aria-controls', content.id);
-    content.insertAdjacentElement('beforebegin', button);
+    content.insertAdjacentElement(cfg.preview ? 'afterend' : 'beforebegin', button);
     function apply() {
       if (destroyed) return;
       var enabled = !media || media.matches;
       var open = !enabled || expanded;
       button.hidden = !enabled;
-      content.hidden = !open;
+      if (cfg.preview) content.classList.toggle('cb-collapse__content--collapsed', !open);
+      else content.hidden = !open;
       button.setAttribute('aria-expanded', String(open));
       var labels = cfg.labels || {};
       var label = open ? labels.showLess || 'Hide details' : labels.showMore || 'Show details';
@@ -42,7 +44,13 @@
         scope: scope, expanded: open, enabled: enabled, visibleCount: open ? 1 : 0, total: 1
       });
     }
-    function toggle() { expanded = !expanded; apply(); }
+    function toggle() {
+      var top = button.getBoundingClientRect().top, closing = expanded;
+      expanded = !expanded; apply();
+      if (closing && cfg.preservePosition) requestAnimationFrame(function() {
+        window.scrollBy(0, button.getBoundingClientRect().top - top);
+      });
+    }
     button.addEventListener('click', toggle);
     if (media) media.addEventListener('change', apply);
     var controller = {
@@ -58,6 +66,7 @@
         if (media) media.removeEventListener('change', apply);
         button.remove();
         content.hidden = original.hidden;
+        content.classList.toggle('cb-collapse__content--collapsed', originalPreviewClass);
         if (!original.id) content.removeAttribute('id');
         controllers.delete(scope);
       }
@@ -66,7 +75,35 @@
     apply();
     return controller;
   }
+  function mountText(scope, cfg) {
+    if (controllers.has(scope)) return controllers.get(scope);
+    var host = !cfg.contentSelector || cfg.contentSelector === ':scope'
+      ? scope : scope.querySelector(cfg.contentSelector);
+    if (!host) return null;
+    var children = Array.from(host.children), start = children.findIndex(function(el) {
+      return el.matches(cfg.startSelector || 'p');
+    });
+    if (start < 0) return null;
+    var paragraphs = [];
+    for (var i = start; i < children.length && children[i].matches(cfg.itemSelector || 'p'); i++) {
+      paragraphs.push(children[i]);
+    }
+    if (paragraphs.map(function(el) { return el.textContent.trim(); }).join(' ').length <
+        positive(cfg.minCharacters, 550)) return null;
+    var region = document.createElement('div');
+    region.className = 'cb-collapse__content' + (cfg.contentClass ? ' ' + cfg.contentClass : '');
+    host.insertBefore(region, paragraphs[0]); paragraphs.forEach(function(el) { region.append(el); });
+    var controller = mountPanel(scope, Object.assign({}, cfg, {
+      contentSelector: '.cb-collapse__content', preview: true
+    }));
+    var destroy = controller.destroy;
+    controller.destroy = function() {
+      destroy(); region.replaceWith.apply(region, Array.from(region.childNodes));
+    };
+    return controller;
+  }
   function mount(scope, cfg) {
+    if (scope && cfg && cfg.mode === 'text') return mountText(scope, cfg);
     if (scope && cfg && cfg.mode === 'panel') return mountPanel(scope, cfg);
     if (!scope || !cfg || !cfg.listSelector || !cfg.itemSelector) return null;
     if (controllers.has(scope)) return controllers.get(scope);
@@ -235,7 +272,7 @@
       });
     });
   }
-  window.CollectionBlocksCollapse = { version: '1.4.0', mount: mount, refresh: refresh };
+  window.CollectionBlocksCollapse = { version: '1.5.0', mount: mount, refresh: refresh };
   var scheduled = false;
   function schedule() {
     if (scheduled) return;

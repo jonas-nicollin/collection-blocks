@@ -16,13 +16,13 @@
     {
       "source": "banner-block.js",
       "output": "dist/banner-block.min.js",
-      "sourceSHA256": "936f6f183fe153f8e6c4bd43f1355a40c038c710caa8d37fba9b8df2ae3c68fa",
-      "outputSHA256": "78cfbc95a981107c7e8a10a7773d9efa8d4aa4d3262b46000b2cb54e684eb49c",
+      "sourceSHA256": "70bb2e8e70a0566d1b6aa736eb203df0b272d06b0c08dd490d4e3ddfa882dfe3",
+      "outputSHA256": "f36d2b408b455edbdc2e0f09f7c7a46343232854e33ef86ffc71f316ff6bcd84",
       "before": {
-        "raw": 22845
+        "raw": 23100
       },
       "after": {
-        "raw": 12788
+        "raw": 12956
       }
     },
     {
@@ -52,13 +52,13 @@
     {
       "source": "extension-collapse.js",
       "output": "dist/extension-collapse.min.js",
-      "sourceSHA256": "d3874de56b9097f81d460a225b532682324051e458450869009bbdee743a0eef",
-      "outputSHA256": "211aedafe22c53785bfc58de11c9e39e4b824836124b0f3321a451c2b4eab37a",
+      "sourceSHA256": "2071344e815574c9437942743a0930ad77a8d6dfd580e80b67773dca3ea81a68",
+      "outputSHA256": "33bb3a805d0333bbcf7a88c38469654f7920c0d8446f97ca4e63bf5e2ff1d4f8",
       "before": {
-        "raw": 11644
+        "raw": 13590
       },
       "after": {
-        "raw": 6007
+        "raw": 7197
       }
     },
     {
@@ -136,13 +136,13 @@
     {
       "source": "extension-route-planner.js",
       "output": "dist/extension-route-planner.min.js",
-      "sourceSHA256": "63455a8dc057f87670c1fc81624d421caf28575fa64e073d94fb6e38e226de1a",
-      "outputSHA256": "685aab2953ba487cb899420d24fd285a1e3bd51ac377c96920b6978c129346ca",
+      "sourceSHA256": "6e22d7919078ec5a45005414de4a0044f30cf65b32ff6a0dde8979660274aa21",
+      "outputSHA256": "ebf2480f3beb577b77e8195e6328d55b48d3109e59c1fb8891f46ccb59c3813c",
       "before": {
-        "raw": 29383
+        "raw": 29529
       },
       "after": {
-        "raw": 16625
+        "raw": 16714
       }
     },
     {
@@ -160,25 +160,25 @@
     {
       "source": "extension-selection-editor.js",
       "output": "dist/extension-selection-editor.min.js",
-      "sourceSHA256": "3866db67528424964e34c805b2ad85a98cd0cf242af76fd5dbc5091f147272ed",
-      "outputSHA256": "f5c1f0d6b2cd694cf3313948682e7c0683bc67916e7a6569e1851e3a96054ebd",
+      "sourceSHA256": "eb98d522f0965b05a0b7ee4431a0e18f5dbafb52a1c972ed9750ab044142f425",
+      "outputSHA256": "9187176809264816771899512f51e718477095b4039d67d047117e81e2f28884",
       "before": {
-        "raw": 14553
+        "raw": 18876
       },
       "after": {
-        "raw": 8794
+        "raw": 11212
       }
     },
     {
       "source": "extension-selection-editor.css",
       "output": "dist/extension-selection-editor.min.css",
-      "sourceSHA256": "d1697da1c944d7235bbbe1c2e9affe54cbf88dfa2725f7320d900bca848ed29c",
-      "outputSHA256": "7cbb8e692b938b0712975df6761eed97915a90f3f4316f7dd87050197c644201",
+      "sourceSHA256": "068b5f27e282a83632a8b86d076dd8c79c93eeb002c025297e84fe9679cf9028",
+      "outputSHA256": "b223c8f435fc24574869ba778091d41f75c5985001810248de499936dc93f47d",
       "before": {
-        "raw": 4174
+        "raw": 6172
       },
       "after": {
-        "raw": 3612
+        "raw": 5401
       }
     },
     {
@@ -256,13 +256,13 @@
     {
       "source": "locator-block.js",
       "output": "dist/locator-block.min.js",
-      "sourceSHA256": "48789092625d3f1bfd5f201d2395dbc624c1906ad624bbb15ca489c838c11905",
-      "outputSHA256": "09eb69e6e03447d735222e6c728b2ec5f282d21fac46d8f875f1988e027beb79",
+      "sourceSHA256": "1b894a8c04f377cfc90a72dde8df448460d7782f8f92e732467cb2cb7e6330da",
+      "outputSHA256": "dce62ea3ddf9c86423ea7820feb8beb4d234a3b9ad0d5798a119b1e0f0e9b4d0",
       "before": {
-        "raw": 74352
+        "raw": 76203
       },
       "after": {
-        "raw": 45712
+        "raw": 46858
       }
     },
     {
@@ -280,13 +280,13 @@
     {
       "source": "query-block.js",
       "output": "dist/query-block.min.js",
-      "sourceSHA256": "fa064a288d9d909a73653e5668683009706e670a21517d097b9e1466643d82bf",
-      "outputSHA256": "aef8486f54382d6caf5f2199daecfc6f87eb18ae58bd6c5344d0c4950d3b73ad",
+      "sourceSHA256": "a6106fcac219e15e4a8eb453ce734158e1bd759a51cc0c62dfd8ad40cfff7302",
+      "outputSHA256": "8b8017bd229f6c976b7c7cd9cf029642d40d1e6209921b8537779fbd6174175d",
       "before": {
-        "raw": 174056
+        "raw": 174303
       },
       "after": {
-        "raw": 84249
+        "raw": 84409
       }
     },
     {

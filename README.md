@@ -1911,3 +1911,52 @@ ID identifies the origin; a scoped native target ID is used otherwise.
 `summary-artworks-*`, `collection-items-*`, `cap-*`). Migrate site selectors to
 `cb-fancybox` / `cb-fancybox__<part>` before opting in. Existing configurations
 retain their aliases. Enquiry URL prefilling is unchanged.
+
+### Shared editor and route focus (v0.20.0)
+
+Use `triggerPlacement: 'dock'` to group a page's editor configurations behind one
+bottom-right launcher. Each entry retains its target ID and its own `openLabel`
+and `title`; target/toolbar placements remain supported for existing consumers.
+The catalog appends 24 rows near the end of its own scroll container. Search and
+type filters reset this window. Item labels show collection categories, omitting
+the label when none exists; filter labels remain independently configured.
+Opening the modal locks page scrolling (including same-origin preview ancestors)
+and closing it restores prior overflow styles. The selection and catalog scroll
+independently; exports stay inside a bounded region.
+
+`icons: 'material-symbols'` opts into the site's existing Material Symbols font.
+Load only `add,check,close,content_copy,drag_indicator,edit` as needed in Header
+Code Injection and set `--ui-font-font-family`. No font is fetched by the module.
+New editor classes: `cb-editor__dock`, `__launcher`, `__menu`, `__icon`, `__label`,
+`__context`, `__export`, `__pane--selection`. These belong to the standalone
+editor, not to a QB/RB/LB rendering engine.
+
+Query `selection.references.preserveOrder: false` keeps the configured sort
+(including random) within the explicit selection. The default preserves editor
+order. `performance.priorityImages: 0` makes all Query images lazy; `1` reserves
+priority for the first card. Existing consumers retain the default of three.
+Media descriptors may explicitly override priority. Site configuration should
+give a positive budget only to blocks intended for the initial viewport.
+
+Locator `map.routeFocus: { opacity: 0.3 }` opts into dimming non-route markers
+once two places are selected. Route Planner passes its selection through the
+instance's `setRouteSelection(items)` method. Matching uses IDs, venue keys or
+coordinates (tolerance 0.00001 degrees), so programme stops can identify their
+member venue. Markers remain visible/clickable; marker hover and card hover/focus
+restore opacity. Selected places and the active marker stay prominent.
+Root state classes pair `cb-block--route-focused` and `lb-block--route-focused`.
+No route focus is enabled for an existing installation unless configured.
+
+Collapse `mode: 'text'` groups consecutive children matching `itemSelector`
+(default `p`) starting at `startSelector` (default `p`) inside `contentSelector`
+(default scope). `minCharacters` defaults to 550. It reuses the panel controller,
+with a preview state `cb-collapse__content--collapsed` and an adjacent
+`cb-collapse__toggle`; site CSS owns preview height/fade. `contentClass` permits
+site styling and `preservePosition: true` holds the button position on collapse.
+Destroy/edit-mode cleanup restores the original paragraphs in place.
+
+Banner's optional `thumbnailRequest` accepts an already-started promise of the
+current Squarespace item JSON. It shares the normal identity, URL and focal-point
+validation, and avoids repeating the metadata request. An existing matching
+image preload is reused. Default thumbnail loading is unchanged; early geometry
+and any pilot opt-in belong to the site integration.

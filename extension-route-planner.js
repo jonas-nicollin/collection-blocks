@@ -389,6 +389,7 @@
         pendingRoute = null;
       }
       var selected = model.selected(), ids = model.ids();
+      if (instance.setRouteSelection) instance.setRouteSelection(selected);
       summaryLabel.textContent = labels.title;
       list.replaceChildren();
       selected.forEach(function(item, index) {
@@ -515,6 +516,7 @@
       if (listMedia) listMedia.removeEventListener('change', refresh);
       window.removeEventListener('popstate', onHistory);
       if (preview) preview.destroy();
+      if (instance.setRouteSelection) instance.setRouteSelection([]);
       panel.removeEventListener('toggle', placeWarnings);
       warnings.remove();
       panel.remove();

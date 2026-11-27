@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   if (window.CollectionBlocksSelectionEditor) return;
-  var active, toolbar, triggers = new Map();
+  var active, toolbar, dock, dockMenu, dockToggle, triggers = new Map();
   function node(tag, part, text) {
     var el = document.createElement(tag); el.className = 'cb-editor' + part;
     if (text !== undefined) el.textContent = text;
@@ -11,6 +11,40 @@
   function button(part, text, action) {
     var el = node('button', part, text); el.type = 'button';
     if (action) el.addEventListener('click', action); return el;
+  }
+  function label(control, text, icon, cfg) {
+    control.replaceChildren();
+    if (cfg.icons === 'material-symbols' && icon) {
+      var glyph = node('span', '__icon', icon); glyph.setAttribute('aria-hidden', 'true');
+      control.append(glyph);
+    }
+    if (text) control.append(node('span', '__label', text));
+  }
+  function lockScroll() {
+    var elements = new Set(), view = window;
+    // The site may live inside Squarespace's scrolling preview frame.
+    while (view) {
+      try {
+        elements.add(view.document.documentElement); elements.add(view.document.body);
+        var frame = view.frameElement;
+        if (!frame) break;
+        for (var parent = frame.parentElement; parent; parent = parent.parentElement) {
+          if (parent.scrollHeight > parent.clientHeight &&
+              /auto|scroll/.test(view.parent.getComputedStyle(parent).overflowY)) elements.add(parent);
+        }
+        view = view.parent;
+      } catch (_) { break; }
+    }
+    var originals = [];
+    elements.forEach(function(el) {
+      if (!el) return;
+      originals.push([el, el.style.getPropertyValue('overflow'), el.style.getPropertyPriority('overflow')]);
+      el.style.setProperty('overflow', 'hidden', 'important');
+    });
+    return function() { originals.forEach(function(entry) {
+      if (entry[1]) entry[0].style.setProperty('overflow', entry[1], entry[2]);
+      else entry[0].style.removeProperty('overflow');
+    }); };
   }
   function normalize(text) { return String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
   function clean(text) {
@@ -22,13 +56,18 @@
     var api = window.CollectionBlocksSelection;
     if (!api) return;
     var dialog = node('dialog', ''), selected, catalog = [], index = new Map();
-    var filter = '', limit = 24, drag = null, closed = false;
+    var filter = '', limit = 24, drag = null, closed = false, matches = [];
+    var restoreScroll = function() {}, returnFocus = document.activeElement;
     var titleCounts = new Map();
     var refsElement = target.querySelector(cfg.selector || '.cb-selection');
     var status = node('p', '__status'); status.setAttribute('role', 'status');
     var close = button('__close', '×', function() { dialog.close(); }); close.setAttribute('aria-label', 'Fermer');
+    if (cfg.icons === 'material-symbols') label(close, '', 'close', cfg);
     dialog.setAttribute('aria-label', cfg.title || 'Composer une sélection');
-    dialog.addEventListener('close', function() { closed = true; dialog.remove(); active = null; });
+    dialog.addEventListener('close', function() {
+      closed = true; restoreScroll(); dialog.remove(); active = null;
+      if (returnFocus && returnFocus.isConnected) returnFocus.focus({ preventScroll: true });
+    });
     var outsideStart = false;
     function outside(event) {
       var rect = dialog.getBoundingClientRect();
@@ -49,7 +88,7 @@
     search.placeholder = 'Rechercher un titre ou un lieu…'; search.setAttribute('aria-label', 'Rechercher un contenu');
     var filters = node('div', '__filters'), results = node('div', '__catalog');
     var list = node('div', '__selection'); list.setAttribute('aria-label', 'Contenus sélectionnés');
-    var more = button('__more', 'Afficher plus', function() { limit += 24; renderCatalog(); });
+    results.setAttribute('aria-label', 'Catalogue des contenus'); results.tabIndex = 0;
     var output = node('textarea', '__output'); output.readOnly = true; output.hidden = true;
     output.spellcheck = false; output.wrap = 'off';
     output.setAttribute('aria-label', 'Code à coller dans le Code Block');
@@ -69,17 +108,22 @@
       exported.append('\n  ', data, '\n'); output.value = exported.outerHTML;
       output.hidden = false; instruction.hidden = false;
       instruction.textContent = 'Collez ce code dans le Code Block correspondant, puis enregistrez la page.';
-      try { await navigator.clipboard.writeText(output.value); copy.textContent = 'Code copié'; status.textContent = ''; }
+      try { await navigator.clipboard.writeText(output.value); label(copy, 'Code copié', 'check', cfg); status.textContent = ''; }
       catch (_) { output.focus(); output.select(); status.textContent = 'Sélectionnez et copiez le code ci-dessous.'; }
     });
     copy.setAttribute('aria-live', 'polite');
-    left.append(node('h2', '__title', cfg.catalogLabel || 'Choisir les contenus'), search, filters, results, more);
-    right.append(node('h2', '__title', 'Votre sélection'), list, copy, instruction, output);
-    layout.append(left, right); dialog.append(close, layout, status); document.body.append(dialog);
-    active = dialog; dialog.showModal(); status.textContent = 'Chargement…'; copy.disabled = true;
+    var exportArea = node('div', '__export'); exportArea.append(copy, instruction, output);
+    left.append(node('h2', '__title', cfg.catalogLabel || 'Choisir les contenus'), search, filters, results);
+    right.classList.add('cb-editor__pane--selection');
+    right.append(node('h2', '__title', 'Votre sélection'), list, exportArea);
+    layout.append(left, right);
+    dialog.append(node('p', '__context', cfg.title || cfg.openLabel || 'Composer une sélection'), close, layout, status);
+    document.body.append(dialog);
+    active = dialog; dialog.showModal(); restoreScroll = lockScroll();
+    status.textContent = 'Chargement…'; copy.disabled = true;
     var kinds = cfg.types || [{ key: '', label: 'Tous' }];
     kinds.forEach(function(type) {
-      var b = button('__filter', type.label, function() { filter = type.key; limit = 24; renderCatalog(); });
+      var b = button('__filter', type.label, function() { filter = type.key; limit = 24; results.scrollTop = 0; renderCatalog(); });
       b.dataset.type = type.key; b.setAttribute('aria-pressed', String(!type.key)); filters.append(b);
     });
     function kind(item) {
@@ -97,9 +141,11 @@
       return img;
     }
     function caption(item) {
-      var box = node('div', '__caption'), type = kind(item);
+      var box = node('div', '__caption');
       var name = node('span', '__name', clean(item.title)); name.title = clean(item.title);
-      box.append(node('span', '__kind', type ? type.label : 'Contenu'), name);
+      var categories = (item.categories || []).map(clean).filter(Boolean);
+      if (categories.length) box.append(node('span', '__kind', categories.join(' · ')));
+      box.append(name);
       var venue = item.venue && item.venue.title;
       if (venue && venue !== item.title) box.append(node('span', '__place', clean(venue)));
       // Dates only disambiguate repeated titles, never every catalog row.
@@ -111,31 +157,42 @@
     }
     function renderCatalog() {
       var q = normalize(search.value);
-      var items = catalog.filter(function(item) {
+      matches = catalog.filter(function(item) {
         return (!filter || kind(item)?.key === filter) && normalize(clean(item.title) + ' ' +
           (item.venue?.title || item.location?.addressTitle || '')).includes(q);
       });
       results.replaceChildren();
-      items.slice(0, limit).forEach(function(item) {
+      appendCatalog(0);
+      if (!matches.length) results.append(node('p', '__empty', 'Aucun contenu trouvé.'));
+      filters.querySelectorAll('button').forEach(function(b) { b.setAttribute('aria-pressed', String(b.dataset.type === filter)); });
+    }
+    function appendCatalog(start) {
+      matches.slice(start, limit).forEach(function(item) {
         var chosen = selected.some(function(ref) { return key(ref) === key(reference(item)); });
         var row = node('div', '__row');
         var add = button('__add', chosen ? '✓' : '+', function() {
           if (selected.length >= (cfg.maxItems || 25)) { status.textContent = 'La sélection est complète.'; return; }
           selected.push(reference(item)); render();
         });
+        if (cfg.icons === 'material-symbols') label(add, '', chosen ? 'check' : 'add', cfg);
         add.disabled = chosen; add.setAttribute('aria-label', 'Ajouter : ' + clean(item.title));
         row.append(thumbnail(item), caption(item), add); results.append(row);
       });
-      if (!items.length) results.append(node('p', '__empty', 'Aucun contenu trouvé.'));
-      more.hidden = items.length <= limit;
-      filters.querySelectorAll('button').forEach(function(b) { b.setAttribute('aria-pressed', String(b.dataset.type === filter)); });
+      requestAnimationFrame(loadNext);
     }
+    function loadNext() {
+      if (closed || !results.clientHeight || limit >= matches.length ||
+          results.scrollHeight - results.scrollTop - results.clientHeight > 200) return;
+      var start = limit; limit += 24; appendCatalog(start);
+    }
+    results.addEventListener('scroll', loadNext, { passive: true });
     function renderSelection() {
-      list.replaceChildren(); copy.disabled = false; copy.textContent = 'Copier le Code Block';
+      list.replaceChildren(); copy.disabled = false; label(copy, 'Copier le Code Block', 'content_copy', cfg);
       selected.forEach(function(ref, i) {
         var item = index.get(key(ref));
         var row = node('div', '__stop'); row.dataset.key = key(ref);
         var handle = button('__drag', 'drag_indicator');
+        if (cfg.icons === 'material-symbols') label(handle, '', 'drag_indicator', cfg);
         handle.setAttribute('aria-label', 'Déplacer : ' + clean(item ? item.title : ref.id));
         handle.title = 'Glisser ou utiliser les flèches haut et bas';
         handle.addEventListener('keydown', function(e) {
@@ -146,6 +203,7 @@
           list.children[next].querySelector('button').focus(); status.textContent = 'Ordre modifié.';
         });
         var remove = button('__remove', '×', function() { selected.splice(i, 1); render(); });
+        if (cfg.icons === 'material-symbols') label(remove, '', 'close', cfg);
         remove.setAttribute('aria-label', 'Retirer : ' + clean(item ? item.title : ref.id));
         row.append(handle);
         if (item) row.append(thumbnail(item), caption(item));
@@ -156,7 +214,7 @@
       output.hidden = true; instruction.hidden = true;
     }
     function render() { renderCatalog(); renderSelection(); }
-    search.addEventListener('input', function() { limit = 24; renderCatalog(); });
+    search.addEventListener('input', function() { limit = 24; results.scrollTop = 0; renderCatalog(); });
     list.addEventListener('pointerdown', function(e) {
       if (e.button !== 0 || !e.target.closest('.cb-editor__drag')) return;
       e.preventDefault(); var row = e.target.closest('.cb-editor__stop');
@@ -202,17 +260,34 @@
     if (!enabled) {
       if (active) active.close();
       if (toolbar) { toolbar.remove(); toolbar = null; }
+      if (dock) { dock.remove(); dock = dockMenu = dockToggle = null; }
       return;
     }
     (window.CB_SELECTION_EDITOR_CONFIGS || []).forEach(function(cfg) {
       document.querySelectorAll(cfg.target).forEach(function(target) {
         if (triggers.has(target)) return;
         var b = button('__trigger', cfg.openLabel || 'Modifier le parcours', function(e) {
-          e.preventDefault(); e.stopPropagation(); open(target, cfg);
+          e.preventDefault(); e.stopPropagation();
+          if (dockMenu) { dockMenu.hidden = true; dockToggle.setAttribute('aria-expanded', 'false'); }
+          open(target, cfg);
         });
         // Native Squarespace block overlays intercept pointer events inside Code Blocks.
         // Keep the launcher outside those editable surfaces.
-        if (cfg.triggerPlacement === 'target') {
+        if (cfg.triggerPlacement === 'dock') {
+          if (!dock) {
+            dock = node('div', '__dock'); dockMenu = node('div', '__menu');
+            dockMenu.id = 'cb-editor-block-menu'; dockMenu.hidden = true;
+            dockToggle = button('__launcher', '', function() {
+              dockMenu.hidden = !dockMenu.hidden;
+              dockToggle.setAttribute('aria-expanded', String(!dockMenu.hidden));
+            });
+            dockToggle.setAttribute('aria-controls', dockMenu.id);
+            dockToggle.setAttribute('aria-expanded', 'false');
+            label(dockToggle, 'Modifier les sélections', 'edit', cfg);
+            dock.append(dockMenu, dockToggle); document.body.append(dock);
+          }
+          b.setAttribute('aria-controls', target.id); dockMenu.append(b);
+        } else if (cfg.triggerPlacement === 'target') {
           b.classList.add('cb-editor__trigger--target');
           b.setAttribute('aria-controls', target.id);
           document.body.append(b);
@@ -224,6 +299,7 @@
       });
     });
     if (toolbar && !triggers.size) { toolbar.remove(); toolbar = null; }
+    if (dock && !dockMenu.children.length) { dock.remove(); dock = dockMenu = dockToggle = null; }
     positionTriggers();
   }
   function positionTriggers() {
@@ -244,6 +320,16 @@
   }
   window.addEventListener('scroll', schedulePosition, { passive: true, capture: true });
   window.addEventListener('resize', schedulePosition);
+  document.addEventListener('click', function(event) {
+    if (dock && !dock.contains(event.target)) {
+      dockMenu.hidden = true; dockToggle.setAttribute('aria-expanded', 'false');
+    }
+  });
+  document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape' && dockMenu && !dockMenu.hidden) {
+      dockMenu.hidden = true; dockToggle.setAttribute('aria-expanded', 'false'); dockToggle.focus();
+    }
+  });
   window.CollectionBlocksSelectionEditor = { open: open, refresh: refresh };
   var scheduled = false;
   new MutationObserver(function() {

@@ -817,6 +817,23 @@ function buildSkeleton(){var s='';for(var i=0;i<4;i++)s+='<div class="'+escHtml(
 /* ── Instance ── */
 function createInstance(root,allItems,fetchMoreItems,sourceComplete){
   var map,markers={},clusterer=null,activeId=null,activePopup=null,activeZone='',activeSearch='';
+  var routePlaces=[],routeSignature='',highlighted=new Set();
+  function routeMember(item){
+    return routePlaces.some(function(place){
+      return place.id===item.id || (place.venueKey&&place.venueKey===item.venueKey) ||
+        (Number.isFinite(+place.lat)&&Number.isFinite(+place.lng)&&
+        Math.abs(place.lat-item.lat)<0.00001&&Math.abs(place.lng-item.lng)<0.00001);
+    });
+  }
+  function setRouteSelection(items){
+    var signature=JSON.stringify((items||[]).map(function(item){return [item.id,item.venueKey,item.lat,item.lng];}));
+    if(signature===routeSignature)return;
+    routeSignature=signature;routePlaces=(items||[]).slice();
+    var enabled=cfg.map.routeFocus&&routePlaces.length>=2;
+    root.classList.toggle('cb-block--route-focused',!!enabled);
+    root.classList.toggle('lb-block--route-focused',!!enabled);
+    Object.keys(markers).forEach(function(id){updateMarker(id,id===activeId||highlighted.has(id));});
+  }
   var urlState=cfg.urlState && cfg.urlState.enabled!==false ? cfg.urlState : null;
   var filterParam=urlState && (urlState.filter || 'categorie');
   var searchParam=urlState && (urlState.search || 'recherche');
@@ -1252,7 +1269,10 @@ function createInstance(root,allItems,fetchMoreItems,sourceComplete){
   }
   function showPopup(item){if(!cfg.map.popup||!item)return;closePopup();defineCustomPopup();activePopup=new CustomPopup(new google.maps.LatLng(item.markerLat||item.lat,item.markerLng||item.lng),item);activePopup.setMap(map);}
   function closePopup(){if(activePopup){activePopup.setMap(null);activePopup=null;}}
-  function createMarker(item){var icon=markerIcon(item.numero,false);var useCluster=cfg.map.clustering&&window.markerClusterer;var o={position:markerPosition(item),map:useCluster?null:map,title:item.title};if(icon!==null)o.icon=icon;var m=new google.maps.Marker(o);m.addListener('click',function(){var sheetActive=isMobileSheetActive();activate(item.id,!sheetActive,{scrollCard:!sheetActive});showPopup(item);});markers[item.id]={marker:m,item:item};return m;}
+  function createMarker(item){var icon=markerIcon(item.numero,false);var useCluster=cfg.map.clustering&&window.markerClusterer;var o={position:markerPosition(item),map:useCluster?null:map,title:item.title};if(icon!==null)o.icon=icon;var m=new google.maps.Marker(o);m.addListener('click',function(){var sheetActive=isMobileSheetActive();activate(item.id,!sheetActive,{scrollCard:!sheetActive});showPopup(item);});markers[item.id]={marker:m,item:item};
+    m.addListener('mouseover',function(){highlighted.add(item.id);updateMarker(item.id,true);});
+    m.addListener('mouseout',function(){highlighted.delete(item.id);updateMarker(item.id,item.id===activeId);});
+    updateMarker(item.id,item.id===activeId);return m;}
   function addAllMarkers(){var ml=allItems.map(function(i){return createMarker(i);});if(cfg.map.clustering&&window.markerClusterer)clusterer=new markerClusterer.MarkerClusterer({map:map,markers:ml,algorithm:new markerClusterer.GridAlgorithm({maxDistance:40})});}
   function addMissingMarkers(items){
     var ml=[];
@@ -1270,7 +1290,16 @@ function createInstance(root,allItems,fetchMoreItems,sourceComplete){
       }
     });
   }
-  function updateMarker(id,a){if(!markers[id])return;var icon=markerIcon(markers[id].item.numero,a);if(icon!==null)markers[id].marker.setIcon(icon);markers[id].marker.setZIndex(a?999:0);}
+  function updateMarker(id,a){
+    if(!markers[id])return;
+    var entry=markers[id],chosen=routeMember(entry.item),focus=cfg.map.routeFocus;
+    var muted=focus&&routePlaces.length>=2&&!chosen&&!a;
+    var opacity=focus&&Number.isFinite(focus.opacity)?Math.max(.1,Math.min(1,focus.opacity)):.3;
+    var icon=markerIcon(entry.item.numero,a);
+    if(icon!==null)entry.marker.setIcon(icon);
+    if(entry.marker.setOpacity)entry.marker.setOpacity(muted?opacity:1);
+    entry.marker.setZIndex(a?999:chosen?100:0);
+  }
   function activate(id,pan,opts){
     opts=opts||{};
     if(activeId===id)return;
@@ -1289,9 +1318,14 @@ function createInstance(root,allItems,fetchMoreItems,sourceComplete){
   }
   function bindCards(){root.querySelectorAll('.lb-card:not(.lb-card--skeleton)').forEach(function(card){
     var id=card.dataset.itemId;
+    if(card.dataset.lbInteractions)return;card.dataset.lbInteractions='true';
     /* Hover : allume le marker correspondant */
-    card.addEventListener('mouseenter',function(){if(!markers[id])return;updateMarker(id,true);if(activeId&&activeId!==id)updateMarker(activeId,false);});
-    card.addEventListener('mouseleave',function(){if(id!==activeId)updateMarker(id,false);});
+    function highlight(){highlighted.add(id);updateMarker(id,true);}
+    function unhighlight(){if(card.matches(':hover')||card.contains(document.activeElement))return;highlighted.delete(id);updateMarker(id,id===activeId);}
+    card.addEventListener('mouseenter',highlight);
+    card.addEventListener('mouseleave',unhighlight);
+    card.addEventListener('focusin',highlight);
+    card.addEventListener('focusout',function(){requestAnimationFrame(unhighlight);});
     if(!cfg.display.cardClickable){
       /* Mode par défaut : clic → active carte + popup (navigation via card-link) */
       card.addEventListener('click',function(e){
@@ -1387,7 +1421,7 @@ function createInstance(root,allItems,fetchMoreItems,sourceComplete){
   removeClasses(root, CLS_BLOCK_LOADING);
   root.removeAttribute('data-cb-classes');
   root.innerHTML='<div class="'+escHtml(CLS_INNER+lc)+'"><div class="'+escHtml(CLS_SIDEBAR)+'">'+buildControls(zones,allItems.length,activeZone,activeSearch)+'<div class="'+escHtml(listClass())+'"></div></div><div class="'+escHtml(CLS_MAP_WRAP)+'"><div class="'+escHtml(CLS_MAP)+'"></div></div></div>';
-  var instance={root:root,config:cfg,setItems:setItems,
+  var instance={root:root,config:cfg,setItems:setItems,setRouteSelection:setRouteSelection,
     getItems:function(){return allItems.slice();},
     getMap:function(){return map;},
     isComplete:function(){return !!sourceComplete;}};

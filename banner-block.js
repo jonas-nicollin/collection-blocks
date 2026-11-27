@@ -107,7 +107,7 @@
         if (override?.querySelector('img')) {
           bannerBlock = override;
         } else {
-          thumbnail = await loadThumbnail(requestPath);
+          thumbnail = await loadThumbnail(requestPath, config.thumbnailRequest);
           if (thumbnail) {
             bannerBlock = null;
             if (config.hideMatchingContentImage) {
@@ -247,14 +247,14 @@
     return all[0];
   }
 
-  function loadThumbnail(path) {
+  function loadThumbnail(path, providedRequest) {
     if (thumbnailRequests.has(path)) return thumbnailRequests.get(path);
-    const request = fetch(path.replace(/\/$/, '') + '?format=json', {
+    const request = (providedRequest ? Promise.resolve(providedRequest) : fetch(path.replace(/\/$/, '') + '?format=json', {
       credentials: 'same-origin'
     }).then(response => {
       if (!response.ok) throw new Error('Post JSON unavailable');
       return response.json();
-    }).then(json => {
+    })).then(json => {
       const item = json?.item;
       if (!item?.assetUrl) return null;
       const itemPath = new URL(item.fullUrl || path, location.href).pathname;
@@ -402,6 +402,8 @@
   function preloadBannerImage(src, srcset, sizes) {
     if (didPreloadFirstBanner || !src) return;
     didPreloadFirstBanner = true;
+    if (Array.from(document.querySelectorAll('link[rel="preload"][as="image"]'))
+      .some(link => link.href === new URL(src, location.href).href)) return;
 
     const link = document.createElement("link");
     link.rel = "preload";

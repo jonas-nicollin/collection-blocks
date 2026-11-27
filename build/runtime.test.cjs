@@ -345,6 +345,8 @@ for (const minified of [false, true]) {
   test(`${minified ? 'distribution' : 'source'}: Query resolves explicit references without changing ordinary queries`, async () => {
     const dom = new JSDOM('<div id="picked"><div class="cb-selection" hidden>' +
       JSON.stringify({version:1,items:[{source:'p',id:'b'},{source:'p',id:'missing'},{source:'p',id:'a'}]}) +
+      '</div></div><div id="sorted"><div class="cb-selection" hidden>' +
+      JSON.stringify({version:1,items:[{source:'p',id:'b'},{source:'p',id:'a'}]}) +
       '</div></div><div id="ordinary"></div><div id="empty"><div class="cb-selection" hidden>' +
       '{"version":1,"items":[]}</div></div>',
       {url:'https://example.com/',runScripts:'outside-only',pretendToBeVisual:true});
@@ -355,18 +357,22 @@ for (const minified of [false, true]) {
       w.ResizeObserver=class {observe(){} disconnect(){}};
       load('collection-blocks.js');
       w.CollectionBlocks.data.getState=async()=>({complete:true,items:[
-        {id:'a',title:'Alpha',fullUrl:'/a',workflowState:1},
-        {id:'b',title:'Beta',fullUrl:'/b',workflowState:1}]});
+        {id:'a',title:'Alpha',fullUrl:'/a',assetUrl:'https://example.com/a.jpg',workflowState:1},
+        {id:'b',title:'Beta',fullUrl:'/b',assetUrl:'https://example.com/b.jpg',workflowState:1}]});
       load('extension-selection.js');
       const refs={references:{sources:{p:{path:'/items'}}}};
-      w.QUERY_BLOCK_CONFIGS=['picked','ordinary','empty'].map(key=>({key,target:'#'+key,
-        sourceCollection:{path:'/items'},selection:refs,sort:{type:'title',direction:'asc'},
-        performance:{lazyInit:false,maxPages:'all'},filters:false,pagination:{mode:'none'},
-        display:{groups:[{role:'body',children:['title']}]}}));
+      w.QUERY_BLOCK_CONFIGS=['picked','sorted','ordinary','empty'].map(key=>({key,target:'#'+key,
+        sourceCollection:{path:'/items'},selection:key==='sorted' ?
+          {references:{...refs.references,preserveOrder:false}} : refs,sort:{type:'title',direction:'asc'},
+        performance:{lazyInit:false,maxPages:'all',priorityImages:key==='picked'?1:0},filters:false,pagination:{mode:'none'},
+        display:{groups:[{role:'body',children:['image','title']}]}}));
       load('query-block.js');
       await waitFor(()=>d.querySelectorAll('#picked .qb-card').length===2 && d.querySelectorAll('#ordinary .qb-card').length===2);
       assert.deepEqual([...d.querySelectorAll('#picked .qb-card')].map(x=>x.getAttribute('href')),['/b','/a']);
       assert.deepEqual([...d.querySelectorAll('#ordinary .qb-card')].map(x=>x.getAttribute('href')),['/a','/b']);
+      assert.deepEqual([...d.querySelectorAll('#sorted .qb-card')].map(x=>x.getAttribute('href')),['/a','/b']);
+      assert.deepEqual([...d.querySelectorAll('#picked img')].map(x=>x.fetchPriority),['high','low']);
+      assert([...d.querySelectorAll('#sorted img,#ordinary img')].every(x=>x.fetchPriority==='low'));
       assert.equal(d.querySelector('#picked').dataset.cbSelectionMissing,'1');
       assert.equal(d.querySelectorAll('#empty .qb-card').length,0);
       assert(d.querySelector('#picked .cb-selection'),'reference document survives rendering for editor');
@@ -420,5 +426,106 @@ for (const minified of [false, true]) {
       d.body.classList.remove('sqs-edit-mode-active');w.CollectionBlocksSelectionEditor.refresh();
       assert.equal(d.querySelectorAll('.cb-editor__trigger').length,0);
     } finally {stop();w.close();}
+  });
+}
+for (const minified of [false, true]) {
+  test(`${minified ? 'distribution' : 'source'}: dock, categories, continuous catalog and scroll restoration`, async () => {
+    const dom = new JSDOM('<body class="sqs-edit-mode-active" style="overflow:scroll">' +
+      Array.from({length:6},(_,i)=>`<div id="block${i}"><div class="cb-selection" hidden>{"version":1,"items":[]}</div></div>`).join(''),
+      {url:'https://example.com/',runScripts:'outside-only',pretendToBeVisual:true});
+    const w=dom.window,d=w.document,stop=manageObservers(w);
+    w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};
+    w.HTMLDialogElement.prototype.close=function(){this.open=false;this.dispatchEvent(new w.Event('close'));};
+    const items=Array.from({length:63},(_,i)=>({id:String(i),title:'Item '+String(i).padStart(2,'0'),categories:i===1?[]:['Studio Visit']}));
+    w.CollectionBlocks={data:{getState:async()=>({complete:true,items})}};
+    w.CB_SELECTION_EDITOR_CONFIGS=Array.from({length:6},(_,i)=>({target:'#block'+i,triggerPlacement:'dock',
+      title:'Selection '+i,icons:'material-symbols',types:[{key:'',label:'Articles'}],sources:{p:{path:'/items'}}}));
+    const load=name=>w.eval(readFileSync(path.join(root,minified?'dist/'+name.replace('.js','.min.js'):name),'utf8'));
+    try {
+      load('extension-selection.js');load('extension-selection-editor.js');
+      assert.equal(d.querySelectorAll('.cb-editor__launcher').length,1);
+      assert.equal(d.querySelectorAll('.cb-editor__menu .cb-editor__trigger').length,6);
+      const launcher=d.querySelector('.cb-editor__launcher');launcher.click();
+      assert(!d.querySelector('.cb-editor__menu').hidden);
+      d.querySelectorAll('.cb-editor__trigger')[4].click();
+      await waitFor(()=>d.querySelectorAll('.cb-editor__row').length===24);
+      assert(d.querySelector('.cb-editor__menu').hidden);
+      assert.equal(d.querySelector('dialog').getAttribute('aria-label'),'Selection 4');
+      assert.equal(d.body.style.overflow,'hidden');
+      assert.equal(d.documentElement.style.overflow,'hidden');
+      assert.equal(d.querySelector('.cb-editor__kind').textContent,'Studio Visit');
+      assert(!d.querySelectorAll('.cb-editor__row')[1].querySelector('.cb-editor__kind'));
+      assert(!d.querySelector('.cb-editor__more'));
+      const catalog=d.querySelector('.cb-editor__catalog');
+      Object.defineProperty(catalog,'clientHeight',{value:200});
+      Object.defineProperty(catalog,'scrollHeight',{value:1000});catalog.scrollTop=700;
+      catalog.dispatchEvent(new w.Event('scroll'));
+      assert.equal(d.querySelectorAll('.cb-editor__row').length,48);
+      catalog.scrollTop=0;
+      const search=d.querySelector('.cb-editor__search');search.value='Item 62';search.dispatchEvent(new w.Event('input'));
+      assert.equal(d.querySelectorAll('.cb-editor__row').length,1);
+      d.querySelector('.cb-editor__add').click();
+      assert.equal(d.querySelector('.cb-editor__stop .cb-editor__name').textContent,'Item 62');
+      d.querySelector('.cb-editor__close').click();
+      assert.equal(d.body.style.overflow,'scroll');assert.equal(d.documentElement.style.overflow,'');
+    } finally {stop();w.close();}
+  });
+  test(`${minified ? 'distribution' : 'source'}: native text uses shared collapse and restores edit markup`, async()=>{
+    const dom=new JSDOM('<body><section id="text"><h2>Keep heading</h2><p class="intro">Keep intro</p><p>'+ 'Text '.repeat(120) +
+      '</p><p>Second paragraph</p><h3>Keep footer</h3></section></body>',{url:'https://example.com/',runScripts:'outside-only',pretendToBeVisual:true});
+    const w=dom.window,d=w.document,stop=manageObservers(w),original=d.querySelector('section').innerHTML;
+    try {
+      w.CB_COLLAPSE_CONFIGS=[{targets:'#text',mode:'text',startSelector:'p:not(.intro)',disableInEditMode:true}];
+      w.eval(readFileSync(path.join(root,minified?'dist/extension-collapse.min.js':'extension-collapse.js'),'utf8'));
+      w.CollectionBlocksCollapse.refresh();
+      assert.equal(d.querySelectorAll('.cb-collapse__content p').length,2);
+      assert(d.querySelector('.cb-collapse__content--collapsed'));
+      d.querySelector('.cb-collapse__toggle').click();assert(!d.querySelector('.cb-collapse__content--collapsed'));
+      d.body.classList.add('sqs-edit-mode-active');w.CollectionBlocksCollapse.refresh();
+      assert.equal(d.querySelector('section').innerHTML,original);
+      d.body.classList.remove('sqs-edit-mode-active');w.CollectionBlocksCollapse.refresh();
+      assert.equal(d.querySelectorAll('.cb-collapse__toggle').length,1);
+    }finally{stop();w.close();}
+  });
+}
+for (const minified of [false,true]) {
+  test(`${minified?'distribution':'source'}: Locator route focus preserves markers and restores hover/focus`,async()=>{
+    const dom=new JSDOM('<div id="map"></div>',{url:'https://example.com/',runScripts:'outside-only',pretendToBeVisual:true});
+    const w=dom.window,d=w.document,stop=manageObservers(w),markers=[];
+    const load=name=>w.eval(readFileSync(path.join(root,minified?'dist/'+name.replace('.js','.min.js'):name),'utf8'));
+    try {
+      w.matchMedia=()=>({matches:false,addEventListener(){},removeEventListener(){}});
+      w.ResizeObserver=class{observe(){}disconnect(){}};
+      w.google={maps:{Map:class{addListener(){}fitBounds(){}},LatLngBounds:class{extend(){}},
+        Marker:class {constructor(o){Object.assign(this,o);this.events={};markers.push(this);}addListener(n,f){this.events[n]=f;}setOpacity(v){this.opacity=v;}setZIndex(v){this.zIndex=v;}setVisible(v){this.visible=v;}setPosition(){}},
+        ControlPosition:{}}};
+      load('collection-blocks.js');
+      w.CollectionBlocks.data.getState=async()=>({complete:true,items:['a','b','c'].map((id,i)=>({id,title:id,fullUrl:'/'+id,location:{mapLat:46+i/100,mapLng:6},venue:{key:id}}))});
+      w.LOCATOR_BLOCK_CONFIGS=[{target:'#map',apiKey:'test',sourceCollection:{path:'/places'},map:{markerStyle:'google',routeFocus:{opacity:.25},popup:false},performance:{lazyInit:false},display:{pageSize:0,cardLink:true}}];
+      load('locator-block.js');await waitFor(()=>w.LocatorBlock.getInstances().length===1);
+      const instance=w.LocatorBlock.getInstances()[0],items=instance.getItems();
+      instance.setRouteSelection(items.slice(0,1));assert(markers.every(m=>m.opacity===1));
+      instance.setRouteSelection(items.slice(0,2));assert.deepEqual(markers.map(m=>m.opacity),[1,1,.25]);
+      assert(markers.every(m=>m.visible!==false));
+      markers[2].events.mouseover();assert.equal(markers[2].opacity,1);markers[2].events.mouseout();assert.equal(markers[2].opacity,.25);
+      const card=d.querySelector('[data-item-id="c"]');card.dispatchEvent(new w.FocusEvent('focusin',{bubbles:true}));assert.equal(markers[2].opacity,1);
+      card.dispatchEvent(new w.FocusEvent('focusout',{bubbles:true}));await pause(30);assert.equal(markers[2].opacity,.25);
+      instance.setRouteSelection([{id:'external',venueKey:'a',lat:items[0].lat,lng:items[0].lng},items[1]]);assert.equal(markers[0].opacity,1);
+      instance.setRouteSelection([]);assert(markers.every(m=>m.opacity===1));assert(!d.querySelector('.cb-block--route-focused'));
+    }finally{stop();w.close();}
+  });
+}
+for (const minified of [false,true]) {
+  test(`${minified?'distribution':'source'}: Banner consumes early thumbnail request without fetching twice`,async()=>{
+    const dom=new JSDOM('<body class="view-item"><main class="blog-item-wrapper"><h1>Portrait</h1><div class="blog-item-content-wrapper"></div></main></body>',{url:'https://example.com/parcours/person',runScripts:'outside-only',pretendToBeVisual:true});
+    const w=dom.window,d=w.document,stop=manageObservers(w);let fetches=0;
+    try {
+      w.fetch=()=>{fetches++;throw Error('Unexpected second request');};
+      w.BANNER_BLOCK_CONFIGS=[{bodyClassConditions:['view-item'],imageSource:'thumbnail',destinationSelector:'.blog-item-wrapper',insertionMethod:'prepend',thumbnailRequest:Promise.resolve({item:{title:'Person',fullUrl:'/parcours/person',assetUrl:'https://example.com/portrait.jpg',originalSize:'1200x1800',mediaFocalPoint:{x:.3,y:.4}}})}];
+      w.eval(readFileSync(path.join(root,minified?'dist/banner-block.min.js':'banner-block.js'),'utf8'));
+      await waitFor(()=>d.querySelector('.cb-banner__image'));
+      const img=d.querySelector('.cb-banner__image');assert.equal(fetches,0);assert.equal(img.width,1200);assert.equal(img.height,1800);assert.equal(img.style.objectPosition,'30% 40%');assert.equal(img.getAttribute('fetchpriority'),'high');
+      w.BannerBlock.refresh();assert.equal(d.querySelectorAll('.cb-banner').length,1);
+    }finally{stop();w.close();}
   });
 }

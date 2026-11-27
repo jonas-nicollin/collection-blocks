@@ -758,7 +758,11 @@ var IMAGE_SIZE_PRESETS = {
   wide: '100vw'
 };
 var DEFAULT_IMAGE_SIZES = IMAGE_SIZE_PRESETS.standard;
-var QB_RENDER_IMAGE_INDEX = 0;
+function imagePriority(cfg, index, descriptor) {
+  if (descriptor && descriptor.priority !== undefined) return descriptor.priority === true;
+  var count = cfg && cfg.performance && cfg.performance.priorityImages;
+  return index < (Number.isFinite(count) ? Math.max(0, count) : 3);
+}
   var QB_HLS_PROMISE = null;
   var QB_VIDEO_OBSERVER = null;
 
@@ -892,8 +896,7 @@ var QB_RENDER_IMAGE_INDEX = 0;
   function buildImg(assetUrl, focalPoint, alt, options) {
   if (typeof options === 'boolean') options = { priority: options };
   options = options || {};
-  var imgIndex = QB_RENDER_IMAGE_INDEX++;
-var isPriority = options.priority === true || imgIndex < 3;
+  var isPriority = options.priority === true;
   var utils = getCollectionUtils();
   var base = String(assetUrl || '').split('?')[0];
   var widths = Array.isArray(options.widths) && options.widths.length
@@ -967,7 +970,7 @@ var isPriority = options.priority === true || imgIndex < 3;
     if (!videoMedia) {
       return item.assetUrl ? buildImg(item.assetUrl, item.focalPoint, item.title, {
         imageDimensions: item.imageDimensions,
-        priority: descriptor.priority === true || cardIndex < 3,
+        priority: imagePriority(cfg, cardIndex, descriptor),
         sizes: descriptor.sizes || descriptor.imageSizes || display.imageSizes,
         widths: descriptor.widths || descriptor.srcsetWidths || display.srcsetWidths,
         imagePreset: descriptor.imagePreset || display.imagePreset,
@@ -987,7 +990,7 @@ var isPriority = options.priority === true || imgIndex < 3;
         src: posterUrl,
         alt: '',
         decoding: 'async',
-        loading: cardIndex < 3 ? 'eager' : 'lazy',
+        loading: imagePriority(cfg, cardIndex, descriptor) ? 'eager' : 'lazy',
         'aria-hidden': 'true',
       });
       poster.style.objectPosition = videoMedia.focalPoint || item.focalPoint || '50% 50%';
@@ -1115,7 +1118,7 @@ var isPriority = options.priority === true || imgIndex < 3;
       var descriptor = def && typeof def === 'object' ? def : {};
       return item.assetUrl ? buildImg(item.assetUrl, item.focalPoint, item.title, {
         imageDimensions: item.imageDimensions,
-        priority: descriptor.priority === true || cardIndex < 3,
+        priority: imagePriority(cfg, cardIndex, descriptor),
         sizes: descriptor.sizes || descriptor.imageSizes || display.imageSizes,
         widths: descriptor.widths || descriptor.srcsetWidths || display.srcsetWidths,
         imagePreset: descriptor.imagePreset || display.imagePreset,
@@ -1497,7 +1500,7 @@ var isPriority = options.priority === true || imgIndex < 3;
 
     if (item.assetUrl) card.appendChild(buildImg(item.assetUrl, item.focalPoint, item.title, {
       imageDimensions: item.imageDimensions,
-      priority: index < 3,
+      priority: imagePriority(cfg, index),
       sizes: disp.imageSizes,
       widths: disp.srcsetWidths,
       imagePreset: disp.imagePreset,
@@ -4044,7 +4047,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     var referenceAPI = window.CollectionBlocksSelection;
     if (!referenceAPI) throw new Error('Selection extension unavailable');
     referenceItems = referenceAPI.read(referenceElement, referenceConfig);
-    cfg.sort = null;
+    if (referenceConfig.preserveOrder !== false) cfg.sort = null;
   }
   target.dataset.sqbInitialized = 'true';
 
@@ -4760,8 +4763,6 @@ if (canAppendIncrementally) {
   var newItems = shown.slice(prevCardCount);
   appendPlainItemsProgressive(newItems, cfgForRender, grid, prevCardCount, perf.domBatchSize || 8);
 } else {
-  QB_RENDER_IMAGE_INDEX = 0;
-
   if (!currentGroupBy && currentLayout !== 'list') {
     appendPlainItemsProgressive(shown, cfgForRender, grid, 0, perf.domBatchSize || 8);
   } else {
